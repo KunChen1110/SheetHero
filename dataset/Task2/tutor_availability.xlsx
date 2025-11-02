@@ -1,0 +1,16 @@
+Name,Email,Available Days,Preferred Times,Max Students
+John Smith,john.smith@university.edu,"Monday, Wednesday, Friday","10:00-12:00, 14:00-16:00",15
+Dr. Sarah Johnson,sarah.johnson@university.edu,"Tuesday, Thursday","09:00-11:00, 15:00-17:00",12
+Michael Brown,michael.brown@university.edu,"Monday, Wednesday","11:00-13:00",10
+Prof. Emily Davis,emily.davis@university.edu,"Tuesday, Thursday, Friday","10:00-12:00, 14:00-16:00",18
+Robert Wilson,robert.wilson@university.edu,"Monday, Wednesday","13:00-15:00",12
+Dr. Lisa Miller,lisa.miller@university.edu,"Tuesday, Thursday","09:30-11:30, 14:30-16:30",14
+David Taylor,david.taylor@university.edu,"Wednesday, Friday","10:30-12:30",8
+Prof. Jennifer Anderson,jennifer.anderson@university.edu,"Monday, Tuesday, Thursday","11:00-13:00, 15:00-17:00",16
+Christopher Lee,christopher.lee@university.edu,"Tuesday, Friday","09:00-11:00",10
+Maria Garcia,maria.garcia@university.edu,"Monday, Wednesday, Friday","10:00-12:00, 14:00-16:00",15
+Dr. James Martinez,james.martinez@university.edu,"Thursday only","14:00-16:00",6
+Patricia Robinson,patricia.robinson@university.edu,"Monday, Wednesday","11:00-13:00",12
+Daniel Clark,daniel.clark@university.edu,"Tuesday, Thursday","10:00-12:00",10
+Prof. Susan Walker,susan.walker@university.edu,"Wednesday, Friday","09:30-11:30",14
+Mark Hall,mark.hall@university.edu,"Monday, Thursday","13:00-15:00",12
