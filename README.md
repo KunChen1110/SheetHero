@@ -15,4 +15,3 @@ TO-DO
 TO-DO
 
 - [Changelog](docs/Changelog.md)
-- [Research](docs/Research.md)
