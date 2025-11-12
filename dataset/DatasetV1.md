@@ -1,5 +1,10 @@
 # Dataset
 
+## Dataset Overview
+This dataset tests whether the agent can reason with spreadsheets and generate outputs in different real-world tasks. Each user case includes several input spreadsheets and one or more output spreadsheets. The tasks cover fields including business analysis, algorithm problem, and machine learning. To make the data diverse and realistic, the spreadsheets are collected from public sources like Kaggle, Statista, and GitHub.
+
+
+
 ## Test 1
 
 ### Budget calculating
@@ -112,11 +117,12 @@ Output a form in the following format :
 
 
 ### Answer
-
+None
 
 ### Output file
-
+[output5](Task5/output5.xlsx)
 ### Feedback
+Is market_share * shipment a good estimation ?
 
 
 ## Test6
@@ -134,11 +140,11 @@ Output an excel with format
 
 
 ### Answer
-
-
+None
 ### Output
-
+[output6](Task6/output6.xlsx)
 ### Feedback
+I found missing values — how would you like me to handle them? Can I treat them as NULL?
 
 
 ## Test7
@@ -147,6 +153,16 @@ Output an excel with format
 ### SpreadSheet
 [spreadsheet13](Task7/ice_cream.csv)
 
+### Prompt
+Assume a linear relationship between ice-cream sales and the factors — temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights to an Excel file.
+
+### Answer
+None
+
+### Output
+[output7](Task7/output7.xlsx)
+### Feedback
+In this case, I treat rains as 1 and not rains as 0.
 
 
 
@@ -220,9 +236,10 @@ Given 5 excel representing the adjacent list of the directed graph , could you t
 None
 
 ### Output
-
+[output10](Task10/output10.xlsx)
 
 ### Feedback
+None
 
 
 
