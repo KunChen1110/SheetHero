@@ -349,20 +349,124 @@ Some reviews may have missing ratings. Should I exclude them or treat them as ze
 ## Test15
 ### Brazilian E-Commerce Public Dataset Analysis
 
+## Test 16
 
+### Employee Performance & Salary Correlation
 
+### Spread Sheet
 
+[spreadsheet26](Task16/Employe_Performance_dataset.csv)
 
+### Prompt
 
+Here is a dataset containing employee details such as monthly income, years of experience, and performance rating. Please calculate the Pearson correlation between performance rating and monthly income, compute the average income for each rating level, and create a scatter plot of years of experience versus monthly income. Output the results in a new Excel file.
 
+### Answer
 
+#### Output File
 
+[outputfile16](Task16/output16.xlsx)
 
+### Feedback
 
+LLM: Should the scatter plot include a trendline?
 
+---
 
+## Test 17
 
+### Store Feature Analysis
 
+### Spread Sheet
 
+[spreadsheet27](Task17/stores.csv)
+[spreadsheet28](Task17/features.csv)
 
+### Prompt
 
+Here are two tables about weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.
+
+### Answer
+
+#### Output File
+
+[outputfile17](Task17/output17.xlsx)
+
+### Feedback
+
+LLM: Should holiday and non-holiday averages also be grouped by store type?
+
+---
+
+## Test 18
+
+### University Course Enrollment Analysis
+
+### Spread Sheet
+
+[spreadsheet29](Task18/ISU Enrollment.csv)
+
+### Prompt
+
+Here is a dataset showing enrollment by college, department, and year. Please calculate the total enrollment for each department, determine year-over-year growth, identify departments with more than ten percent growth, and create a line chart showing enrollment trends for each college. Output the results in a new Excel file.
+
+### Answer
+
+#### Output File
+
+[outputfile18](Task18/output18.xlsx)
+
+### Feedback
+
+LLM: Should growth be calculated only for the most recent year?
+
+---
+
+## Test 19
+
+### Global Carbon Emissions Comparison
+
+### Spread Sheet
+
+[spreadsheet30](Task19/Carbon_%28CO2%29_Emissions_by_Country.csv)
+
+### Prompt
+
+This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, compute the percentage change from 2000 to 2022, and create a bar chart ranking continents by emissions in 2022. Output a new Excel file.
+
+### Answer
+
+#### Output File
+
+[outputfile19](Task19/output19.xlsx)
+
+### Feedback
+
+LLM: Should countries without a continent be grouped under “Unknown”?
+
+---
+
+## Test 20
+
+### Hospital Resource Utilization Analysis
+
+### Spread Sheet
+
+[spreadsheet31](Task20/staff.csv)
+[spreadsheet32](Task20/staff_schedule.csv)
+[spreadsheet33](Task20/services_weekly.csv)
+[spreadsheet34](Task20/patients.csv)
+
+### Prompt
+
+Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results to a new Excel file.
+
+### Answer
+
+#### Output File
+
+[outputfile20](Task20/output20.xlsx)
+
+### Feedback
+
+LLM: Should the highlighting apply only to the utilisation value or the entire row?
