@@ -27,3 +27,5 @@
 - Added **Ice-cream sales regression script (Test 7)**
   - Performs multiple linear regression to analyze effects of temperature, price, tourists, and rain on ice cream sales.
   - Saved results to [output7.xlsx](/dataset/Task7/output7.xlsx)
+
+- Added 5 new user cases to the dataset (Tests 16–20) (See [dataset](/dataset))
