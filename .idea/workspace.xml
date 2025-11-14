@@ -4,13 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="Added javadocs and comments">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/config/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/config/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/config/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/run_example.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/run_example.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +62,7 @@
     "project.structure.last.edited": "Project",
     "project.structure.proportion": "0.0",
     "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "com.jetbrains.python.black.configuration.BlackFormatterConfigurable",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -91,6 +86,15 @@
       <workItem from="1762994895390" duration="1568000" />
       <workItem from="1763034697677" duration="309000" />
     </task>
+    <task id="LOCAL-00001" summary="Added javadocs and comments">
+      <option name="closed" value="true" />
+      <created>1763153010517</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1763153010517</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -106,5 +110,9 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Added javadocs and comments" />
+    <option name="LAST_COMMIT_MESSAGE" value="Added javadocs and comments" />
   </component>
 </project>
