@@ -4,15 +4,43 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="" />
+    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/config/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/config/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/config/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/SheetBrain/run_example.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/SheetBrain/run_example.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitLabMergeRequestFiltersHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPENED&quot;,
+    &quot;assignee&quot;: {
+      &quot;type&quot;: &quot;org.jetbrains.plugins.gitlab.mergerequest.ui.filters.GitLabMergeRequestsFiltersValue.MergeRequestsMemberFilterValue.MergeRequestsAssigneeFilterValue&quot;,
+      &quot;username&quot;: &quot;psyxl12&quot;,
+      &quot;fullname&quot;: &quot;Xianze Lu Wu&quot;
+    }
+  }
+}</component>
+  <component name="GitLabMergeRequestsSettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;first&quot;: &quot;https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git&quot;,
+    &quot;second&quot;: &quot;92c180d9-5c6a-4690-ad1f-377eaa0702ad&quot;
+  }
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 5
 }</component>
@@ -24,9 +52,11 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.agent.executor": "Run",
+    "Python.main.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "backend__branch",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "D:/team29_project/src/backend/data_washing",
     "node.js.detected.package.eslint": "true",
@@ -34,6 +64,10 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "com.jetbrains.python.black.configuration.BlackFormatterConfigurable",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -41,14 +75,6 @@
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\team29_project\assets" />
     </key>
-  </component>
-  <component name="SharedIndexes">
-    <attachedChunks>
-      <set>
-        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.26830.84" />
-        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-IU-252.26830.84" />
-      </set>
-    </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -69,5 +95,16 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
 </project>

@@ -3,39 +3,89 @@
 # Licensed under the MIT License.
 
 """
-Standalone example runner for SheetBrain.
-
-This script demonstrates how to use SheetBrain from outside the package.
+ * Standalone demonstration script for the SheetBrain library.
+ *
+ * This file shows how to use SheetBrain programmatically within your own
+ * Python code, as an alternative to using the command-line interface.
+ * It includes practical examples of configuration and error handling.
+ *
+ * Key Features Demonstrated:
+ * - Direct library usage in Python scripts
+ * - Multiple configuration approaches (default vs. custom)
+ * - File existence checking for better error messages
+ * - Try-catch exception handling
+ *
+ * @author: Microsoft Corporation
+ * @license: MIT License
 """
 
-import sys
-import os
+import sys     # System-specific parameters (path manipulation, exit codes)
+import os      # Operating system interface (file checking, path operations)
 
+from src.backend.SheetBrain.core import SheetBrain
+
+# Add the script's directory to Python's module search path
+# This is CRITICAL: it tells Python where to find our custom modules (core, config)
+# When running a script directly, Python may not automatically know about nearby packages
+# sys.path[0] ensures our local files take priority over installed packages
 sys.path.insert(0, os.path.dirname(__file__))
 
-from core.agent import SheetBrain
-# from config.settings import Config  # Uncomment if using custom configuration  
+# Import the SheetBrain class - the main engine for Excel analysis
+# from config.settings import Config  # Uncomment if using custom configuration
 
 
 def main():
-    """Example usage of the SheetBrain library."""
+    """
+     * Main demonstration function for SheetBrain usage.
+     *
+     * This function walks through a complete example of analyzing an Excel file
+     * with a natural language question. It demonstrates:
+     *
+     * 1. **Setup Phase**: Define file path and question, verify file exists
+     * 2. **Initialization Phase**: Create SheetBrain agent with configuration
+     * 3. **Execution Phase**: Run the analysis with error handling
+     * 4. **Output Phase**: Display formatted results
+     *
+     * Configuration Options Shown:
+     * - Option 1: Minimal setup (uses default configuration)
+     * - Option 2: Custom configuration (commented out, but shows full control)
+     *
+     * Error Handling:
+     * - Pre-checks for file existence before analysis
+     * - Try-catch block to handle API errors, missing keys, or analysis failures
+     *
+     * @return: None (results printed to console)
+     * @throws: None (exceptions caught and handled internally)
+    """
 
     print("🚀 [Example] Initializing SheetBrain...")
 
-    # Example configuration
+    # === Step 1: Define Analysis Parameters ===
+    # Specify which Excel file to analyze and what question to ask
     excel_path = "example_table.xlsx"
     user_question = "What is the total landings (tonnes live weight) for Scotland in 2023, and how does it compare to the total landings for England, Wales, and N.I.?"
 
-    # Check if Excel file exists
+    # === Step 2: Validate Input ===
+    # Check if the Excel file actually exists BEFORE trying to analyze it
+    # This gives a clear, early error message instead of a confusing crash later
+    # os.path.exists() returns True if the file is found, False otherwise
     if not os.path.exists(excel_path):
         print(f"❌ Excel file not found: {excel_path}")
         print("Please make sure the example Excel file is in the correct location.")
-        return
+        return  # Exit the main() function early (but not the whole program)
 
-    # Option 1: Use default configuration
+    # === Step 3: Initialize the Agent ===
+    # Create a SheetBrain instance to perform the analysis
+
+    # Option 1: Simple initialization with default settings
+    # - Uses environment variables for API key and other config
+    # - Sets a token budget of 5000 (limits AI context size)
     agent = SheetBrain(excel_path=excel_path, total_token_budget=5000)
 
-    # Option 2: Use custom configuration (commented out)
+    # Option 2: Advanced initialization with custom configuration (commented out)
+    # - Uncomment this section for full control over agent behavior
+    # - Config object lets you set max turns, enable/disable stages, etc.
+    # - Useful when you want reproducible settings across multiple analyses
     # config = Config(
     #     max_turns=5,
     #     enable_validation=True,
@@ -45,8 +95,16 @@ def main():
 
     print("📋 [Example] Starting analysis...")
 
+    # === Step 4: Execute Analysis with Error Handling ===
+    # Wrap the analysis in a try-except block to catch and handle any problems
+    # This could include: API key errors, network issues, invalid Excel file, etc.
     try:
-        # Run the analysis
+        # Call the agent's run() method to start the analysis
+        # Parameters:
+        # - user_question: What you want to know about the data
+        # - max_turns: How many times AI can refine its answer (default: 3)
+        # - enable_validation: Whether to double-check the answer (True/False)
+        # - enable_understanding: Whether to pre-analyze the Excel structure
         result = agent.run(
             user_question=user_question,
             max_turns=3,
@@ -54,16 +112,21 @@ def main():
             enable_understanding=True
         )
 
+        # === Step 5: Display Results ===
+        # Print a formatted report showing the analysis outcome
+        # Using f-strings to embed variables in the output text
         print("\n" + "="*60)
         print("FINAL RESULT")
         print("="*60)
-        print(f"Success: {result['success']}")
-        print(f"Total Iterations: {result['total_iterations']}")
-        print(f"Final Answer: {result['answer']}")
-        print(f"Confidence Score: {result['confidence_score']:.2f}")
-        print(f"Validation Passed: {result['validation_passed']}")
-        print(f"Total Duration: {result['total_duration']:.2f}s")
+        print(f"Success: {result['success']}")  # Boolean: did it work?
+        print(f"Total Iterations: {result['total_iterations']}")  # How many attempts?
+        print(f"Final Answer: {result['answer']}")  # The AI's actual answer
+        print(f"Confidence Score: {result['confidence_score']:.2f}")  # 0.00 to 1.00
+        print(f"Validation Passed: {result['validation_passed']}")  # Did self-check pass?
+        print(f"Total Duration: {result['total_duration']:.2f}s")  # Time taken in seconds
 
+        # Display any warnings or data quality issues found during analysis
+        # This helps users understand limitations of the results
         if result['issues_found']:
             print(f"\nIssues Found:")
             for issue in result['issues_found']:
@@ -72,9 +135,20 @@ def main():
         print("="*60)
 
     except Exception as e:
+        # If ANY error occurs during analysis, print a helpful message
+        # This catches API errors, file reading errors, analysis failures, etc.
         print(f"❌ Error running analysis: {str(e)}")
         print("Make sure you have the required dependencies installed and your API key is configured.")
 
 
+# === Main Guard Pattern ===
+# This if statement checks if the script is being run directly (python run_example.py)
+# vs. being imported as a module (import run_example)
+#
+# When you run directly: Python sets __name__ to "__main__"
+# When you import: Python sets __name__ to the module name ("run_example")
+#
+# This prevents main() from running automatically when you import the file,
+# which is important when building larger applications.
 if __name__ == "__main__":
     main()
