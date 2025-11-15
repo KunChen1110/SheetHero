@@ -29,3 +29,9 @@
   - Saved results to [output7.xlsx](/dataset/Task7/output7.xlsx)
 
 - Added 5 new user cases to the dataset (Tests 16–20) (See [dataset](/dataset))
+
+## 15/11/2025
+### --- Added ---
+- Added **background research folder** under `docs/` (`docs/BGResearch/`)
+  - Collected reference papers used in the project
+  - Added reading notes and background research summaries for the papers

@@ -1,7 +1,7 @@
 # SheetAgent: Towards a Generalist Agent for Spreadsheet Reasoning and Manipulation
 
-![img1](../img/SheetAgent_1.png)
-![img2](../img/SheetAgent_2.png)
+![img1](../../assets/SheetAgent_1.png)
+![img2](../../assets/SheetAgent_2.png)
 
 ## 1. Background
 Spreadsheets are widely used in domains such as finance, research, and business operations. However, many spreadsheet tasks are complex, multi-step, and often ambiguously defined (e.g., *“Highlight all database-related books with sales greater than 40”*).  

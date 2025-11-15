@@ -1,6 +1,6 @@
 # SheetBrain: A Neuro-Symbolic Agent for Accurate Reasoning over Complex and Large Spreadsheets
 
-![img1](../img/SheetBrain_1.png)
+![img1](../../assets/SheetBrain_1.png)
 
 ## 1. Motivation
 Large language models (LLMs) such as GPT-4 excel in text-based reasoning but struggle with **complex Excel-like spreadsheets** that have multi-table layouts, merged cells, and irregular structures.  

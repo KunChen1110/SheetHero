@@ -37,8 +37,8 @@
   - Citation: 15 + 6
 - Abstract
   - Framework
-    ![SheetAgent1](./img/SheetAgent_1.png)
-    ![SheetAgent2](./img/SheetAgent_2.png)
+    ![SheetAgent1](../../assets/SheetAgent_1.png)
+    ![SheetAgent2](../../assets/SheetAgent_2.png)
   - Generating python code
   - Using SQL to avoid reading all data in file (just columns)
   - Self fixing by Retriver
@@ -54,7 +54,7 @@
   - Citation: 0
 - Abstract
   - Framework
-    ![SheetBrain1](./img/SheetBrain_1.png)
+    ![SheetBrain1](../../assets/SheetBrain_1.png)
   - High quality？ (CMU, ZJU, Cambridge, Microsoft)
   - Implements feedback mechanisms - retrieval-based fixing, validation modules, or multi-agent evaluation loops
   - Generating python code to operate on dataframe, not excel formula and with some using SQL for efficient column filtering
@@ -83,7 +83,7 @@
   - Citation: 0
 - Abstract
   - Framework
-    ![SheetMind1](./img/SheetMind_1.png)
+    ![SheetMind1](../../assets/SheetMind_1.png)
   - High quality?
   - Divide task into substasks
   - Generating structured commands with Backus-Naur Form (BNF)

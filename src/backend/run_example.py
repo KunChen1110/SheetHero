@@ -22,8 +22,6 @@
 import sys     # System-specific parameters (path manipulation, exit codes)
 import os      # Operating system interface (file checking, path operations)
 
-from src.backend.SheetBrain.core import SheetBrain
-
 # Add the script's directory to Python's module search path
 # This is CRITICAL: it tells Python where to find our custom modules (core, config)
 # When running a script directly, Python may not automatically know about nearby packages
@@ -31,6 +29,7 @@ from src.backend.SheetBrain.core import SheetBrain
 sys.path.insert(0, os.path.dirname(__file__))
 
 # Import the SheetBrain class - the main engine for Excel analysis
+from core import SheetBrain
 # from config.settings import Config  # Uncomment if using custom configuration
 
 
@@ -62,7 +61,9 @@ def main():
 
     # === Step 1: Define Analysis Parameters ===
     # Specify which Excel file to analyze and what question to ask
-    excel_path = "example_table.xlsx"
+    # Use path relative to this script's directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    excel_path = os.path.join(script_dir, "examples", "example_table.xlsx")
     user_question = "What is the total landings (tonnes live weight) for Scotland in 2023, and how does it compare to the total landings for England, Wales, and N.I.?"
 
     # === Step 2: Validate Input ===
