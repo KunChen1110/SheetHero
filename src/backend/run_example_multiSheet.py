@@ -60,20 +60,36 @@ def main():
     print("🚀 [Example] Initializing SheetBrain...")
 
     # === Step 1: Define Analysis Parameters ===
-    # Specify which Excel file to analyze and what question to ask
+    # Specify which Excel file(s) to analyze and what question to ask
     # Use path relative to this script's directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    excel_path = os.path.join(script_dir, "examples", "example_table.xlsx")
-    user_question = "What is the total landings (tonnes live weight) for Scotland in 2023, and how does it compare to the total landings for England, Wales, and N.I.?"
+    
+    # For multi-file example, specify multiple Excel files
+    # This example uses two separate files (example_table.xlsx and example2.xlsx)
+    excel_paths = [
+        os.path.join(script_dir, "examples", "classAGrades.xlsx"),
+        os.path.join(script_dir, "examples", "classBGrades.xlsx"),
+        os.path.join(script_dir, "examples", "classCGrades.xlsx"),
+    ]
+    
+    # Multi-file question: Calculate average across multiple files/classes
+    user_question = "What's the overall average mark for GRP for the three classes?"
 
     # === Step 2: Validate Input ===
-    # Check if the Excel file actually exists BEFORE trying to analyze it
+    # Check if all Excel files actually exist BEFORE trying to analyze them
     # This gives a clear, early error message instead of a confusing crash later
     # os.path.exists() returns True if the file is found, False otherwise
-    if not os.path.exists(excel_path):
-        print(f"❌ Excel file not found: {excel_path}")
-        print("Please make sure the example Excel file is in the correct location.")
+    missing_files = [path for path in excel_paths if not os.path.exists(path)]
+    if missing_files:
+        print(f"❌ Excel file(s) not found:")
+        for path in missing_files:
+            print(f"  - {path}")
+        print("Please make sure the example Excel files are in the correct location.")
         return  # Exit the main() function early (but not the whole program)
+    
+    print(f"✅ Found {len(excel_paths)} Excel file(s) to analyze:")
+    for path in excel_paths:
+        print(f"  📄 {os.path.basename(path)}")
 
     # === Step 3: Initialize the Agent ===
     # Create a SheetBrain instance to perform the analysis
@@ -81,7 +97,8 @@ def main():
     # Option 1: Simple initialization with default settings
     # - Uses environment variables for API key and other config
     # - Sets a token budget of 5000 (limits AI context size)
-    agent = SheetBrain(excel_path=excel_path, total_token_budget=5000)
+    # - Pass excel_paths as a list for multi-file support
+    agent = SheetBrain(excel_paths=excel_paths, total_token_budget=5000)
 
     # Option 2: Advanced initialization with custom configuration (commented out)
     # - Uncomment this section for full control over agent behavior

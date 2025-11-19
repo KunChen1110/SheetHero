@@ -95,9 +95,10 @@ def main():
             config.deployment = args.deployment
 
         # Create the SheetBrain agent - this is the "brain" that analyzes Excel
-        # We pass it the file path, config settings, and token budget
+        # We pass it the file path(s), config settings, and token budget
+        # excel_paths can be a single string or a list of strings
         agent = SheetBrain(
-            excel_path=args.excel_path,
+            excel_paths=args.excel_path,
             config=config,
             total_token_budget=args.token_budget
         )
