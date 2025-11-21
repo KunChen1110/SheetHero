@@ -90,9 +90,10 @@ missing_info = pd.DataFrame({
 print(missing_info[missing_info['缺失数量'] > 0])
 
 # 保存合并后的数据集
-output_filename = "olist_merged_dataset.csv"
-df_merged.to_csv(output_filename, index=False)
+output_filename = "output15.xlsx"
+df_merged.to_excel(output_filename, index=False)
 print(f"\n合并后的数据集已保存为: {output_filename}")
+
 
 # 可选：创建数据字典
 data_dict = {
