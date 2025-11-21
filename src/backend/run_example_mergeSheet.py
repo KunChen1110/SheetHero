@@ -37,7 +37,7 @@ def main():
     """
      * Main demonstration function for SheetBrain usage.
      *
-     * This function walks through a complete example of analyzing an Excel file
+ * This function walks through a complete example of analyzing an Excel/CSV file
      * with a natural language question. It demonstrates:
      *
      * 1. **Setup Phase**: Define file path and question, verify file exists
@@ -64,8 +64,8 @@ def main():
     # Use path relative to this script's directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # For multi-file example, specify multiple Excel files
-    # This example uses two separate files (example_table.xlsx and example2.xlsx)
+    # For multi-file example, specify multiple spreadsheet files (Excel or CSV)
+    # This example uses two separate .xlsx files, but .csv files can be mixed in too
     excel_paths = [
         os.path.join(script_dir, "examples", "academicYearAverage.xlsx"),
         os.path.join(script_dir, "examples", "studentDetail.xlsx"),
