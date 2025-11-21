@@ -39,7 +39,7 @@
  * - Token budgeting: Limits how much data we send to AI (controls cost/speed)
  * - Code sandboxing: Safe Python execution environment for data analysis
  * - Error recovery: Graceful handling of API errors, invalid Excel files, etc.
- * - Rich context generation: Creates markdown summaries of Excel contents
+ * - Rich context generation: Creates markdown summaries of Excel/CSV contents
  *
  * @author: Microsoft Corporation
  * @license: MIT License
@@ -48,12 +48,13 @@
 # Import standard library modules
 import os          # For reading environment variables and file paths
 import time        # For measuring execution duration
+import csv         # For loading CSV files
 from typing import Dict, Any, Optional, Union, List  # Type hints for better code clarity
 
 # Import third-party libraries
 from PIL import Image              # For handling image inputs (Excel screenshots)
 from openai import OpenAI          # OpenAI SDK for AI model access
-from openpyxl import load_workbook # Excel file reading library
+from openpyxl import load_workbook, Workbook # Excel file reading library
 from openpyxl.utils import get_column_letter  # Converts column numbers to letters (1->A, 2->B)
 
 # Import our own modules
@@ -67,6 +68,39 @@ from utils.logger import setup_logger               # Logging setup
 # Create a logger instance for this module
 # This will log messages with timestamps and severity levels
 logger = setup_logger(__name__)
+
+
+def build_output_preferences(mode: str = "text",
+                             file_path: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Normalize user preferences for how results should be delivered.
+
+    Args:
+        mode: "text" for inline markdown answers, "file" to save results.
+        file_path: Optional explicit path for file output.
+
+    Returns:
+        Dict with validated mode and file_path.
+    """
+    normalized_mode = (mode or "text").strip().lower()
+    if normalized_mode not in {"text", "file"}:
+        raise ValueError("output mode must be 'text' or 'file'")
+
+    if normalized_mode == "file":
+        normalized_path = file_path or os.path.join(
+            os.getcwd(), "sheetbrain_output.xlsx"
+        )
+    else:
+        normalized_path = None
+
+    return {"mode": normalized_mode, "file_path": os.path.abspath(normalized_path) if normalized_path else None}
+
+
+def outputMode(mode: str = "text", file_path: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Convenience wrapper so callers can simply write outputMode("file", "/path/output.xlsx").
+    """
+    return build_output_preferences(mode, file_path)
 
 
 class SheetBrain:
@@ -98,9 +132,12 @@ class SheetBrain:
                  config: Optional[Config] = None,
                  total_token_budget: int = 10000,
                  load_excel: bool = True, excel_context_understanding: Optional[str] = None,
-                 excel_context_execution: Optional[str] = None):
+                 excel_context_execution: Optional[str] = None,
+                 output_preferences: Optional[Dict[str, Optional[str]]] = None):
         """
          * Initialize the SheetBrain agent.
+         * @param output_preferences: Dict describing how final results should be delivered.
+         *                            Use build_output_preferences() helper.
          *
          * This constructor sets up everything needed for analysis:
          * 1. Loads and validates configuration (API keys, model settings)
@@ -148,6 +185,16 @@ class SheetBrain:
         self.config = config or Config()  # Use provided config or create default
         self.total_token_budget = total_token_budget
         self.load_excel = load_excel  # Flag to control whether we load the actual Excel file
+        preferred_output = dict(output_preferences) if output_preferences else build_output_preferences()
+        if preferred_output.get("mode") == "file":
+            base_excel_path = os.path.abspath(self.excel_paths[0]) if self.excel_paths else None
+            default_dir = os.path.dirname(base_excel_path) if base_excel_path else os.getcwd()
+            if not preferred_output.get("file_path"):
+                preferred_output["file_path"] = os.path.join(default_dir, "output.xlsx")
+            else:
+                preferred_output["file_path"] = os.path.abspath(preferred_output["file_path"])
+        self.output_preferences = preferred_output
+        self.output_instruction = self._build_output_instruction()
 
         # === OpenAI Client Setup ===
         # Priority: environment variables > config file > defaults
@@ -197,6 +244,7 @@ class SheetBrain:
             'os': __import__('os'),          # Operating system interface
             'sys': __import__('sys'),        # System-specific parameters
             'excel_paths': self.excel_paths, # List of all file paths
+            'output_preferences': self.output_preferences,  # Output requirements
         }
         self.code_locals = {}  # Empty dict for code execution (stores variables created by AI code)
 
@@ -237,7 +285,8 @@ class SheetBrain:
             self.workbooks.get(self.excel_paths[0]) if self.workbooks else None
         )
         self.execution_module = ExecutionModule(
-            self.client, self.config.deployment, self.code_globals, self.code_locals, self.excel_context_execution
+            self.client, self.config.deployment, self.code_globals, self.code_locals,
+            self.excel_context_execution, self.output_instruction
         )
         self.validation_module = ValidationModule(
             self.client, self.config.deployment, self.excel_context_understanding
@@ -630,6 +679,93 @@ Please address these specific points in your new analysis approach."""
             logger.error(f"Error generating Excel overview: {str(e)}")
             return f"❌ Error generating Excel overview: {str(e)}"
 
+    def _build_output_instruction(self) -> str:
+        """
+        Create natural-language guidance for the execution module about output expectations.
+        """
+        mode = self.output_preferences.get("mode", "text")
+        if mode == "file":
+            target_path = self.output_preferences.get("file_path")
+            return (
+                "Final results must be saved to a spreadsheet file. "
+                f"Write the consolidated output to '{target_path}' (e.g., via pandas.to_excel "
+                "or save_workbook). After saving, mention the file path in the final answer."
+            )
+
+        return (
+            "Final results must be presented directly in the final answer as a clean markdown "
+            "table or list. Do not save any files unless the user explicitly asks."
+        )
+
+    def _load_workbook_from_path(self, excel_path: str):
+        """
+        Load a spreadsheet file (Excel or CSV) and return an openpyxl Workbook.
+
+        Args:
+            excel_path: Path to the spreadsheet file.
+
+        Returns:
+            openpyxl Workbook instance.
+        """
+        _, ext = os.path.splitext(excel_path)
+        ext = ext.lower()
+        excel_extensions = {".xlsx", ".xlsm", ".xltx", ".xltm"}
+
+        if ext in excel_extensions:
+            return load_workbook(excel_path, data_only=True)
+        if ext == ".csv":
+            return self._create_workbook_from_csv(excel_path)
+
+        raise ValueError(
+            f"Unsupported file extension '{ext}' for {excel_path}. "
+            "Supported formats: .xlsx, .xlsm, .xltx, .xltm, .csv"
+        )
+
+    def _create_workbook_from_csv(self, csv_path: str) -> Workbook:
+        """
+        Convert a CSV file into an openpyxl Workbook for unified processing.
+
+        Args:
+            csv_path: Path to the CSV file.
+
+        Returns:
+            Workbook populated with CSV content in a single sheet.
+        """
+        workbook = Workbook()
+        sheet = workbook.active
+
+        # Sheet titles in Excel are limited to 31 characters
+        sheet_name = os.path.splitext(os.path.basename(csv_path))[0][:31] or "Sheet1"
+        sheet.title = sheet_name
+
+        with open(csv_path, newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.reader(csv_file)
+            for row in reader:
+                processed_row = [self._infer_cell_value(value) for value in row]
+                sheet.append(processed_row)
+
+        return workbook
+
+    @staticmethod
+    def _infer_cell_value(value: str):
+        """
+        Try to convert a CSV string value to int/float when possible.
+        Keeps original string if conversion fails.
+        """
+        if value is None:
+            return value
+
+        stripped = value.strip()
+        if stripped == "":
+            return ""
+
+        try:
+            if '.' not in stripped:
+                return int(stripped)
+            return float(stripped)
+        except ValueError:
+            return value
+
     def _get_sheet_preview_with_token_limit(self, sheet, token_budget: int,
                                             max_rows: int = 10000, max_cols: int = 1000) -> Dict[str, Any]:
         """
@@ -768,14 +904,13 @@ Please address these specific points in your new analysis approach."""
             all_sheet_names = []  # List of all sheet names across all files
             
             for excel_path in self.excel_paths:
-                logger.info(f"Loading Excel file: {excel_path}")
-                # data_only=True loads cell values instead of formulas (faster)
-                workbook = load_workbook(excel_path, data_only=True)
+                logger.info(f"Loading spreadsheet file: {excel_path}")
+                workbook = self._load_workbook_from_path(excel_path)
                 workbooks[excel_path] = workbook
                 all_sheet_names.extend([(excel_path, sheet_name) for sheet_name in workbook.sheetnames])
             
             load_time = time.time() - start_time
-            logger.info(f"All Excel files loaded in {load_time:.2f}s")
+            logger.info(f"All spreadsheet files loaded in {load_time:.2f}s")
             print(f"📊 [Excel] Loaded {len(self.excel_paths)} file(s) in {load_time:.2f}s")
             
             # Use the first workbook as the primary one for ExcelToolkit

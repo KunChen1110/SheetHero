@@ -25,7 +25,7 @@ class ExecutionModule:
     """
 
     def __init__(self, client, deployment: str, code_globals: dict, code_locals: dict,
-                 excel_context_execution: str):
+                 excel_context_execution: str, output_instruction: Optional[str] = None):
         """
         Initialize the ExecutionModule.
 
@@ -35,18 +35,24 @@ class ExecutionModule:
             code_globals: Global variables for code execution
             code_locals: Local variables for code execution
             excel_context_execution: Excel context for execution
+            output_instruction: Additional guidance on how to deliver results
         """
         self.client = client
         self.deployment = deployment
         self.code_globals = code_globals
         self.code_locals = code_locals
         self.excel_context_execution = excel_context_execution
+        self.output_instruction = output_instruction or ""
         self.conversation_history = []
 
     def _get_system_prompt(self) -> dict:
         """Create the system prompt for the conversation."""
 
-        system_content = """You are an expert Excel data analyst with access to a comprehensive Python environment for Excel analysis.
+        output_guidance = ""
+        if self.output_instruction:
+            output_guidance = f"\n**OUTPUT REQUIREMENTS:**\n{self.output_instruction}\n"
+
+        system_content = f"""You are an expert Excel data analyst with access to a comprehensive Python environment for Excel analysis.
 
 **CODE EXECUTION ENVIRONMENT:**
 You have access to a Python environment with the following pre-loaded:
@@ -61,6 +67,8 @@ You have access to a Python environment with the following pre-loaded:
 - The workbook(s) are already loaded:
   * `workbooks`: Dictionary mapping file paths to workbooks (for multi-file access)
   * `excel_paths`: List of all file paths
+
+{output_guidance}
 
 Available Excel Helper Functions:
 
