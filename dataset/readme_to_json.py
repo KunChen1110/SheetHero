@@ -1,6 +1,11 @@
 import re
 import json
 
+# Here is a converter that can parse the readme to json
+# The readme should follow the format
+# Test ID -> Title -> Spreadsheet -> Answer -> Output -> Feedback
+#
+
 def parse_readme_to_tasks(readme_text):
     tasks = []
 
@@ -13,7 +18,7 @@ def parse_readme_to_tasks(readme_text):
             "title": None,
             "spreadsheets": [],
             "prompt": None,
-            "expected_output_file": None,
+            "expected_output_file": [],
             "feedback": None
         }
 
@@ -22,27 +27,27 @@ def parse_readme_to_tasks(readme_text):
         if title_match:
             task_data["title"] = title_match.group(1).strip()
 
-        # Spreadsheets - 所有不以output开头的文件
+        # Spreadsheets - 
         spreadsheet_matches = re.findall(r"\[(.*?)\]\((.*?)\)", block)
         for label, path in spreadsheet_matches:
-            # 精确判断：不以output开头（考虑路径分隔符）
-            # 检查是否是基础文件名以output开头，而不是路径中包含output
-            filename = path.split('/')[-1]  # 获取文件名（最后一部分）
-            if not filename.startswith('output'):
+           
+            # Get the link of input files
+            filename = path.split('/')[-1]  
+            if not filename.startswith('output'):   # Not start with output
                 task_data["spreadsheets"].append(path)
 
-        # Expected Output - 以output开头且以.xlsx结尾的文件
+        # Get the link of output files
         for label, path in spreadsheet_matches:
-            filename = path.split('/')[-1]  # 获取文件名（最后一部分）
+            filename = path.split('/')[-1] 
             if filename.startswith('output') and path.endswith('.xlsx'):
-                task_data["expected_output_file"] = path
-                break  # 假设每个task只有一个输出文件
+                task_data["expected_output_file"].append(path)
+                
 
         # Prompt
         prompt_match = re.search(r"###\s*Prompt\s*(.*?)(?=###|\Z)", block, re.S)
         if prompt_match:
             prompt = prompt_match.group(1).strip()
-            # 清理可能的多余内容
+            # clean the prompt
             prompt = re.sub(r"###.*", "", prompt, flags=re.S)
             task_data["prompt"] = prompt.strip()
 
@@ -67,4 +72,4 @@ if __name__ == "__main__":
     with open("dataset.json", "w", encoding="utf-8") as f:
         json.dump(tasks_json, f, indent=4, ensure_ascii=False)
 
-    print("dataset.json 已成功生成！")
+    print("Json has been created successfully !")

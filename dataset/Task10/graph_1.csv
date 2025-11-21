@@ -1,7 +1,0 @@
-,
-Node From,Node To
-User_John,"User_Emma, User_Mike, User_Sarah"
-User_Emma,User_Sarah
-User_Mike,"User_John, User_Emma, User_Admin"
-User_Sarah,User_John
-User_Admin,"User_John, User_Emma, User_Mike, User_Sarah"

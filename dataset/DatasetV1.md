@@ -11,8 +11,8 @@ This dataset tests whether the agent can reason with spreadsheets and generate o
 
 ### SpreedSheet
 
-[spreadsheet1](Task01/input1.xlsx)
-[spreadsheet2](Task01/input2.xlsx)
+[spreadsheet1](Task01/tc01_input01.xlsx)
+[spreadsheet2](Task01/tc01_input02.xlsx)
 
 ### Prompt
 Here are two tables about my daily spending. Could you first merge the two forms together, then calculate the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red. You need to output a new spreadsheet.
@@ -35,13 +35,13 @@ LLM: Do you spend 0 pound for gift on Nov 4th and 0 pound for coffee on Nov 14th
 
 ### SpreedSheet
 
-[spreadsheet3](Task02/academic_roles.xlsx)
-[spreadsheet4](Task02/academics_list.xlsx)
-[spreadsheet5](Task02/student_assignments.xlsx)
-[spreadsheet6](Task02/tutor_availability.xlsx)
-[spreadsheet7](Task02/tutor_meetings.xlsx)
+[spreadsheet3](Task02/tc02_input01.csv)
+[spreadsheet4](Task02/tc02_input02.csv)
+[spreadsheet5](Task02/tc02_input03.csv)
+[spreadsheet6](Task02/tc02_input04.csv)
+[spreadsheet7](Task02/tc02_input05.csv)
 ### Prompt
-Hello, I here are tables about students and their tutors. You task is to output a new form listing each tutor’s name, the time and location of their tutor meeting, as well as the students attending the meeting.
+Hello, here are tables about students and their tutors. You task is to output a new form listing each tutor’s name, the time and location of their tutor meeting, as well as the students attending the meeting.
 ### Answer
 
 #### Output File
@@ -57,7 +57,7 @@ LLM : Are room number 'C80' and 'C 80' the same?
 ### Internet Penetration Rate Analysis (visualization)
 
 ### SpreadSheet
-[spreadsheet8](Task03/internet_penetration.xlsx)
+[spreadsheet8](Task03/tc03_input01.xlsx)
 
 ### Prompt
 Here is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate 
@@ -66,6 +66,7 @@ Here is the form detailing the internet_penetration rate from 2009 to 2024. Coul
 
 #### Output file
 [outputfile3](Task03/output3.xlsx)
+[outputfile4](Task03/internet_trend.png)
 
 #### Feedback
 I find that the data in 2020 is missing.
@@ -75,7 +76,8 @@ I find that the data in 2020 is missing.
 ## Test4
 ### Task scheduling table
 ### SpreadSheet
-[spreadsheet9](Task04/Task09_scheduling.xlsx)
+[spreadsheet9](Task04/tc04_input01.xlsx)
+[spreadsheet10](Task04/tc04_input02.xlsx)
 
 ### Prompt
 Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.
@@ -94,7 +96,7 @@ What's the duration of finishing all the tasks ?
 The duration of finishing all tasks is 10 hour.
 
 ## Output file
-[outputfile4](Task04/output4.xlsx)
+[outputfile5](Task04/output4.xlsx)
 
 
 ### Feedback
@@ -107,8 +109,8 @@ Can I assume that there is no time between switching from one task to another?
 ## Test5
 ### Indian Smartphone shipment and market share
 ### SpreadSheet
-[spreadsheet10](Task05/smartphone_shipment.xlsx)
-[spreadsheet11](Task05/market_share.xlsx)
+[spreadsheet11](Task05/tc05_input01.xlsx)
+[spreadsheet12](Task05/tc05_input02.xlsx)
 
 ### Prompt
 Here are two forms, one is the number of unit smartphones in india from 2012 to 2025, the other is 
@@ -123,7 +125,7 @@ Output a form in the following format :
 None
 
 ### Output file
-[outputfile5](Task05/output5.xlsx)
+[outputfile6](Task05/output5.xlsx)
 ### Feedback
 Is market_share * shipment a good estimation?
 
@@ -133,7 +135,7 @@ Is market_share * shipment a good estimation?
 ## Test6
 ### Titanic survivor dataset analysis
 ### SpreadSheet
-[spreadsheet12](Task06/Titanic-Dataset.xlsx)
+[spreadsheet13](Task06/tc06_input01.csv)
 
 ### Prompt
 Your task is to calculate the correlation coefficient between survivor and other factors (sex, age, ...) given the titantic dataset.
@@ -147,7 +149,7 @@ Output an excel with format
 ### Answer
 None
 ### Output
-[outputfile6](Task06/output6.xlsx)
+[outputfile7](Task06/output6.xlsx)
 ### Feedback
 I found missing values — how would you like me to handle them? Can I treat them as NULL?
 
@@ -158,7 +160,7 @@ I found missing values — how would you like me to handle them? Can I treat the
 
 ### Ice-cream sales vs temperature, rain, price
 ### SpreadSheet
-[spreadsheet13](Task07/ice_cream.csv)
+[spreadsheet14](Task07/tc07_input01.csv)
 
 ### Prompt
 Assume a linear relationship between ice-cream sales and the factors — temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights to an Excel file.
@@ -167,7 +169,7 @@ Assume a linear relationship between ice-cream sales and the factors — tempera
 None
 
 ### Output
-[outputfile7](Task07/output7.xlsx)
+[outputfile8](Task07/output7.xlsx)
 ### Feedback
 In this case, I treat rains as 1 and not rains as 0.
 
@@ -177,7 +179,7 @@ In this case, I treat rains as 1 and not rains as 0.
 ## Test8
 ### Iris datasets
 ### SpeadSheet
-[spreadsheet14](Task08/IRIS.csv)
+[spreadsheet15](Task08/tc08_input01.csv)
 
 ### Prompt
 Calculate the correlation matrix for all numeric columns in the Iris dataset separately for species Iris-setosa.
@@ -187,7 +189,7 @@ Output a 4×4 table with both rows and columns as:
 Round all correlation values to two decimals, and label each table clearly with the species name.
 
 ### Output
-[outputfile8](Task08/output8.xlsx)
+[outputfile9](Task08/output8.xlsx)
 ### Answer
 None
 
@@ -199,7 +201,7 @@ Would you like me to include species names as table titles, or as part of the he
 ## Test9
 ### Business Analysis of Coca cola company
 ### SpreadSheet
-[spreadsheet15](Task09/Cola.xlsx)
+[spreadsheet16](Task09/tc09_input01.xlsx)
 
 ### Prompt
 Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculating:
@@ -209,7 +211,7 @@ Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculat
 * Free Cash Flow (Operating Cash Flow minus Capital Expenditures)
 
 ### Output
-[outputfile9](Task09/output1.xlsx)
+[outputfile10](Task09/output1.xlsx)
 
 
 ### Answer
@@ -226,11 +228,11 @@ Do you want the OCF/Net Income ratio averaged across all years or shown year by 
 ## Test10
 ### Cycle detection in graphs
 ### SpreadSheet
-[spreadsheet16](Task10/graph_16.csv)
-[spreadsheet17](Task10/graph_17.csv)
-[spreadsheet18](Task10/graph_18.csv)
-[spreadsheet19](Task10/graph_19.csv)
-[spreadsheet20](Task10/graph_20.csv)
+[spreadsheet17](Task10/tc10_input01.csv)
+[spreadsheet18](Task10/tc10_input02.csv)
+[spreadsheet19](Task10/tc10_input03.csv)
+[spreadsheet20](Task10/tc10_input04.csv)
+[spreadsheet21](Task10/tc10_input05.csv)
 
 
 
@@ -243,7 +245,7 @@ Given 5 excel representing the adjacent list of the directed graph , could you t
 None
 
 ### Output
-[outputfile10](Task10/output10.xlsx)
+[outputfile11](Task10/output10.xlsx)
 
 ### Feedback
 None
@@ -257,7 +259,7 @@ None
 ## Test11
 ### Inventory Management problem
 ### Spreadsheet
-[spreadsheet21](Task11/input.xlsx)
+[spreadsheet22](Task11/tc11_input01.xlsx)
 
 
 ### Prompt
@@ -266,9 +268,9 @@ Based on the provided inventory data, calculate the Economic Order Quantity (EOQ
 ### Answer
 
 ### Output
-[outputfile11](Task11/output1.xlsx)
 [outputfile12](Task11/output1.xlsx)
 [outputfile13](Task11/output1.xlsx)
+[outputfile14](Task11/output1.xlsx)
 
 ### Feedback
 Clarification on Assumptions: The EOQ model assumes constant demand, no stockouts, and fixed costs. The holding cost (H) is often derived as a percentage of the unit cost (e.g., 16.67% of $15 = $2.5). If these assumptions change, the results may need adjustment.
@@ -279,9 +281,9 @@ Clarification on Assumptions: The EOQ model assumes constant demand, no stockout
 ## Test12
 ### Multi-Source Financial Performance Dashboard
 ### Spreadsheet
-[spreadsheet22](Task12/input22.xlsx)
-[spreadsheet23](Task12/input23.xlsx)
-[spreadsheet24](Task12/input24.xlsx)
+[spreadsheet23](Task12/tc12_input01.xlsx)
+[spreadsheet24](Task12/tc12_input02.xlsx)
+[spreadsheet25](Task12/tc12_input03.xlsx)
 
 ### Prompt
 Calculate the following metrics for each month and for the total quarter:
@@ -299,7 +301,7 @@ Marketing Efficiency Ratio (Revenue / Marketing Spend)
 
 
 ### Output
-[outputfile14](Task12/output12.xlsx)
+[outputfile15](Task12/output12.xlsx)
 
 ### Answer
 None
@@ -312,9 +314,9 @@ The dashboard was generated by first consolidating the monthly P&L and Sales dat
 ## Test13
 ### Global Diabetes Population Analysis
 ### Spreadsheet
-[spreadsheet25](Task13/input25.xlsx)
-[spreadsheet26](Task13/input26.xlsx)
-[spreadsheet27](Task13/input27.xlsx)
+[spreadsheet26](Task13/tc13_input01.xlsx)
+[spreadsheet27](Task13/tc13_input02.xlsx)
+[spreadsheet28](Task13/tc13_input03.xlsx)
 ### Prompt
 Given three spreadsheets showing:
 * Diabetes prevalence among adults by country (2024)
@@ -332,7 +334,7 @@ Output an Excel file containing:
 
 
 ### Output
-[outputfile15](Task13/output13.xlsx)
+[outputfile16](Task13/output13.xlsx)
 
 ### Answer
 None
@@ -345,7 +347,7 @@ None
 ### Global Mobile Reviews Analysis
 
 ### Spreadsheet
-[spreadsheet28](Task14/mobile_review.csv)
+[spreadsheet29](Task14/tc14_input01.csv)
 
 
 ### Prompt
@@ -353,7 +355,7 @@ Given a dataset of smartphone reviews containing customer information, brand, mo
 
 
 ### Output
-[outputfile16](Task14/output14.xlsx)
+[outputfile17](Task14/output14.xlsx)
 
 ### Answer
 None
@@ -367,9 +369,14 @@ Some reviews may have missing ratings. Should I exclude them or treat them as ze
 ### Brazilian E-Commerce Public Dataset Analysis
 
 ### Spreadsheet
-[spreadsheet29](Task12/input29.xlsx)
-[spreadsheet30](Task12/input30.xlsx)
-[spreadsheet31](Task12/input31.xlsx)
+[spreadsheet30](Task15/tc15_input01.csv)
+[spreadsheet31](Task15/tc15_input02.csv)
+[spreadsheet32](Task15/tc15_input03.csv)
+[spreadsheet33](Task15/tc15_input04.csv)
+[spreadsheet34](Task15/tc15_input05.csv)
+[spreadsheet35](Task15/tc15_input06.csv)
+[spreadsheet36](Task15/tc15_input07.csv)
+[spreadsheet37](Task15/tc15_input08.csv)
 
 ### Prompt
 Can you merge the dataset, translating the product category name to english? And tell me the side of output in terms of rows and columns.
@@ -377,7 +384,7 @@ Can you merge the dataset, translating the product category name to english? And
 rows : 118310, columns : 39 
 
 ### Output file
-[outputfile17](Task15/output15.xlsx)
+[outputfile18](Task15/output15.xlsx)
 
 ### Feedback
 None
@@ -392,7 +399,7 @@ None
 
 ### Spread Sheet
 
-[spreadsheet32](Task16/Employe_Performance_dataset.csv)
+[spreadsheet38](Task16/Employe_Performance_dataset.csv)
 
 ### Prompt
 
@@ -402,7 +409,7 @@ Here is a dataset containing employee details such as monthly income, years of e
 
 #### Output File
 
-[outputfile18](Task16/output16.xlsx)
+[outputfile19](Task16/output16.xlsx)
 
 ### Feedback
 
@@ -416,8 +423,8 @@ LLM: Should the scatter plot include a trendline?
 
 ### Spread Sheet
 
-[spreadsheet33](Task17/stores.csv)
-[spreadsheet34](Task17/features.csv)
+[spreadsheet39](Task17/stores.csv)
+[spreadsheet40](Task17/features.csv)
 
 ### Prompt
 
@@ -427,7 +434,7 @@ Here are two tables about weekly store information. Please merge them by store, 
 
 #### Output File
 
-[outputfile19](Task17/output17.xlsx)
+[outputfile20](Task17/output17.xlsx)
 
 ### Feedback
 
@@ -441,7 +448,7 @@ LLM: Should holiday and non-holiday averages also be grouped by store type?
 
 ### Spread Sheet
 
-[spreadsheet35](Task18/ISU Enrollment.csv)
+[spreadsheet41](Task18/ISU Enrollment.csv)
 
 ### Prompt
 
@@ -451,7 +458,7 @@ Here is a dataset showing enrollment by college, department, and year. Please ca
 
 #### Output File
 
-[outputfile20](Task18/output18.xlsx)
+[outputfile21](Task18/output18.xlsx)
 
 ### Feedback
 
@@ -465,7 +472,7 @@ LLM: Should growth be calculated only for the most recent year?
 
 ### Spread Sheet
 
-[spreadsheet36](Task19/Carbon_%36CO2%29_Emissions_by_Country.csv)
+[spreadsheet42](Task19/Carbon_%36CO2%29_Emissions_by_Country.csv)
 
 ### Prompt
 
@@ -475,7 +482,7 @@ This dataset lists annual carbon dioxide emissions by country. Please group coun
 
 #### Output File
 
-[outputfile21](Task19/output19.xlsx)
+[outputfile22](Task19/output19.xlsx)
 
 ### Feedback
 
@@ -489,10 +496,10 @@ LLM: Should countries without a continent be grouped under “Unknown”?
 
 ### Spread Sheet
 
-[spreadsheet37](Task20/staff.csv)
-[spreadsheet38](Task20/staff_schedule.csv)
-[spreadsheet39](Task20/services_weekly.csv)
-[spreadsheet40](Task20/patients.csv)
+[spreadsheet43](Task20/staff.csv)
+[spreadsheet44](Task20/staff_schedule.csv)
+[spreadsheet45](Task20/services_weekly.csv)
+[spreadsheet46](Task20/patients.csv)
 
 ### Prompt
 
@@ -502,7 +509,7 @@ Here are four hospital tables containing staff, schedules, services, and patient
 
 #### Output File
 
-[outputfile22](Task20/output20.xlsx)
+[outputfile23](Task20/output20.xlsx)
 
 ### Feedback
 

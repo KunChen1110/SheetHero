@@ -7,10 +7,10 @@ from openpyxl import Workbook
 # Step 1: Load input files
 # ---------------------------------------------------------
 # tasks.xlsx columns: Task ID, Task Name, Duration (hours), Priority
-tasks = pd.read_excel("tasks.xlsx")
+tasks = pd.read_excel("tc04_input01.xlsx")
 
 # dependency.xlsx columns: Task ID, Depends on (empty means no dependency)
-deps_df = pd.read_excel("dependency.xlsx")
+deps_df = pd.read_excel("tc04_input02.xlsx")
 
 # ---------------------------------------------------------
 # Step 2: Clean data
@@ -56,7 +56,6 @@ for _, row in deps_df.iterrows():
             dependencies[task] = [dep]
         else:
             dependencies[task] = []
-
 
 
 

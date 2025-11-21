@@ -4,7 +4,7 @@ from scipy import stats
 import os
 import matplotlib.pyplot as plt
 
-# 读取所有数据集
+# Read all the dataset
 df_item = pd.read_csv("olist_order_items_dataset.csv")
 df_reviews = pd.read_csv("olist_order_reviews_dataset.csv")
 df_orders = pd.read_csv("olist_orders_dataset.csv")
@@ -15,99 +15,95 @@ df_order_pay = pd.read_csv("olist_order_payments_dataset.csv")
 df_customers = pd.read_csv("olist_customers_dataset.csv")
 df_category = pd.read_csv("product_category_name_translation.csv")
 
-print("原始数据集大小:")
-print(f"订单项目: {df_item.shape}")
-print(f"订单评论: {df_reviews.shape}")
-print(f"订单: {df_orders.shape}")
-print(f"产品: {df_products.shape}")
-print(f"地理位置: {df_geolocation.shape}")
-print(f"卖家: {df_sellers.shape}")
-print(f"订单支付: {df_order_pay.shape}")
-print(f"客户: {df_customers.shape}")
-print(f"类别翻译: {df_category.shape}")
+print("Size of existing data frames : ")
+print(f"Order item : {df_item.shape}")
+print(f"Order review : {df_reviews.shape}")
+print(f"Order : {df_orders.shape}")
+print(f"Product : {df_products.shape}")
+print(f"Location : {df_geolocation.shape}")
+print(f"Seller  : {df_sellers.shape}")
+print(f"Payment : {df_order_pay.shape}")
+print(f"Client : {df_customers.shape}")
+print(f"Translation : {df_category.shape}")
 
-# 第一步：将产品类别名称翻译为英文
+# translate the product name to English
 df_products_en = df_products.merge(df_category, on='product_category_name', how='left')
 
-# 对于没有翻译的类别，保留原始名称
+# if no english name found, keep its original name
 df_products_en['product_category_name_english'] = df_products_en['product_category_name_english'].fillna(df_products_en['product_category_name'])
 
-# 删除原始的葡萄牙语类别列（可选）
+# remove column product_category_name
 df_products_en = df_products_en.drop('product_category_name', axis=1)
 df_products_en = df_products_en.rename(columns={'product_category_name_english': 'product_category_name'})
 
-print(f"\n翻译后的产品数据集大小: {df_products_en.shape}")
 
-# 第二步：逐步合并数据集
-print("\n开始合并数据集...")
+# Merging all the dataset
+print("\nMerging the dataset ...")
 
-# 1. 从订单开始，合并订单项目
+
 df_merged = df_orders.merge(df_item, on='order_id', how='inner')
-print(f"订单 + 订单项目: {df_merged.shape}")
+print(f"Merge Order with Order ID : {df_merged.shape}")
 
-# 2. 合并支付信息
 df_merged = df_merged.merge(df_order_pay, on='order_id', how='left')
-print(f"加入支付信息: {df_merged.shape}")
+print(f"Add payment information : {df_merged.shape}")
 
-# 3. 合并评论信息
 df_merged = df_merged.merge(df_reviews, on='order_id', how='left')
-print(f"加入评论信息: {df_merged.shape}")
+print(f"Add remarks : {df_merged.shape}")
 
-# 4. 合并产品信息（使用翻译后的产品数据）
+
 df_merged = df_merged.merge(df_products_en, on='product_id', how='left')
-print(f"加入产品信息: {df_merged.shape}")
+print(f"Add product information: {df_merged.shape}")
 
-# 5. 合并客户信息
+
 df_merged = df_merged.merge(df_customers, on='customer_id', how='left')
-print(f"加入客户信息: {df_merged.shape}")
+print(f"Add client information: {df_merged.shape}")
 
-# 6. 合并卖家信息
 df_merged = df_merged.merge(df_sellers, on='seller_id', how='left')
-print(f"加入卖家信息: {df_merged.shape}")
+print(f"Add seller information: {df_merged.shape}")
 
-# 检查最终数据集
-print(f"\n最终合并数据集大小:")
-print(f"行数: {df_merged.shape[0]:,}")
-print(f"列数: {df_merged.shape[1]}")
 
-print(f"\n数据集信息:")
-print(f"内存使用: {df_merged.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+print(f"Size of final dataset\n")
+print(f"rows: {df_merged.shape[0]:,}")
+print(f"columns: {df_merged.shape[1]}")
 
-print(f"\n前5行预览:")
+print(f"\nDataset info:")
+print(f"Memory usage: {df_merged.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+
+print(f"\nPreview of first 5 rows:")
 print(df_merged.head())
 
-print(f"\n列名列表:")
+print(f"\nList of column names:")
 for i, col in enumerate(df_merged.columns, 1):
     print(f"{i:2d}. {col}")
 
-print(f"\n缺失值统计:")
+print(f"\nMissing value statistics:")
 missing_data = df_merged.isnull().sum()
 missing_percent = (missing_data / len(df_merged)) * 100
 missing_info = pd.DataFrame({
-    '缺失数量': missing_data,
-    '缺失比例%': missing_percent.round(2)
+    'Missing Count': missing_data,
+    'Missing Percentage (%)': missing_percent.round(2)
 })
-print(missing_info[missing_info['缺失数量'] > 0])
+print(missing_info[missing_info['Missing Count'] > 0])
 
-# 保存合并后的数据集
+# Save merged dataset
 output_filename = "output15.xlsx"
 df_merged.to_excel(output_filename, index=False)
-print(f"\n合并后的数据集已保存为: {output_filename}")
+print(f"\nMerged dataset saved as: {output_filename}")
 
 
-# 可选：创建数据字典
+# Optional: Create dataset summary dictionary
 data_dict = {
-    '数据集': [
-        '原始订单项目', '原始订单评论', '原始订单', '原始产品', 
-        '地理位置', '卖家', '订单支付', '客户', '类别翻译', '合并后数据集'
+    'Dataset': [
+        'Original Order Items', 'Original Order Reviews', 'Original Orders', 'Original Products',
+        'Geolocation', 'Sellers', 'Order Payments', 'Customers', 'Category Translation', 'Merged Dataset'
     ],
-    '行数': [
-        df_item.shape[0], df_reviews.shape[0], df_orders.shape[0], 
+    'Rows': [
+        df_item.shape[0], df_reviews.shape[0], df_orders.shape[0],
         df_products.shape[0], df_geolocation.shape[0], df_sellers.shape[0],
         df_order_pay.shape[0], df_customers.shape[0], df_category.shape[0],
         df_merged.shape[0]
     ],
-    '列数': [
+    'Columns': [
         df_item.shape[1], df_reviews.shape[1], df_orders.shape[1],
         df_products.shape[1], df_geolocation.shape[1], df_sellers.shape[1],
         df_order_pay.shape[1], df_customers.shape[1], df_category.shape[1],
@@ -116,9 +112,9 @@ data_dict = {
 }
 
 df_summary = pd.DataFrame(data_dict)
-print(f"\n数据集汇总:")
+print(f"\nDataset Summary:")
 print(df_summary)
 
-# 保存汇总信息
+# Save summary information
 df_summary.to_csv("dataset_summary.csv", index=False)
-print("数据集汇总已保存为: dataset_summary.csv")
+print("Dataset summary saved as: dataset_summary.csv")

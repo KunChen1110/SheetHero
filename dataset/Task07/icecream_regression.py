@@ -1,13 +1,13 @@
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-# 读取数据
-df = pd.read_csv("ice_cream.csv")
+# Read csv
+df = pd.read_csv("tc07_input01.csv")
 
-# 将“Did it rain on that day?”转成数值（Yes -> 1, No -> 0）
+# Coverting “Did it rain on that day?” to numerical value（Yes -> 1, No -> 0）
 df["Did it rain on that day?"] = df["Did it rain on that day?"].map({"Yes": 1, "No": 0})
 
-# 自变量（特征）
+# Feature variable
 X = df[[
     "Temperature (F)",
     "Ice-cream Price ($)",
@@ -15,18 +15,18 @@ X = df[[
     "Did it rain on that day?"
 ]]
 
-# 因变量（目标）
+# Target variable
 y = df["Ice Cream Sales ($,thousands)"]
 
-# 建立线性回归模型
+# Use linear regression model
 model = LinearRegression()
 model.fit(X, y)
 
-# 提取系数与截距
+# Extract weights
 weights = model.coef_
 intercept = model.intercept_
 
-# 输出权重表
+# Output the weight table
 output_df = pd.DataFrame({
     "Feature": [
         "Temperature (F)",
@@ -38,7 +38,7 @@ output_df = pd.DataFrame({
     "Weight": list(weights) + [intercept]
 })
 
-# 保存结果为 Excel
+# save the result to Excel
 output_df.to_excel("output7.xlsx", index=False)
 
 print("✅ Regression weights saved to output7.xlsx")

@@ -2,7 +2,7 @@ import pandas as pd
 from scipy.stats import pearsonr
 
 # Load Titanic dataset
-df = pd.read_csv("Titanic-Dataset.csv")
+df = pd.read_csv("tc06_input01".csv)
 
 # Check missing values
 if df.isnull().values.any():

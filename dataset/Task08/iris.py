@@ -2,7 +2,7 @@ import pandas as pd
 
 # Load the Iris dataset from CSV
 # Make sure the file path is correct relative to your script
-df = pd.read_csv("IRIS.csv")
+df = pd.read_csv("tc08_input01.csv")
 
 # Filter the dataset for species Iris-setosa
 df_setosa = df[df["species"] == "Iris-setosa"]
