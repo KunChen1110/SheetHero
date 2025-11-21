@@ -21,7 +21,7 @@ Here are two tables about my daily spending. Could you first merge the two forms
 
 #### Output
 
-[outputfile1](Task01/output1.xlsx)
+[outputfile1](Task01/tc01_output01.xlsx)
 
 #### Feedback
 
@@ -46,7 +46,7 @@ Hello, here are tables about students and their tutors. You task is to output a 
 
 #### Output File
 
-[outputfile2](Task02/output2.xlsx)
+[outputfile2](Task2/tc02_output01.xlsx)
 
 #### Feedback
 LLM : Are room number 'C80' and 'C 80' the same? 
@@ -65,7 +65,7 @@ Here is the form detailing the internet_penetration rate from 2009 to 2024. Coul
 
 
 #### Output file
-[outputfile3](Task03/output3.xlsx)
+[outputfile3](Task03/tc03_output01.xlsx)
 [outputfile4](Task03/internet_trend.png)
 
 #### Feedback
@@ -96,7 +96,7 @@ What's the duration of finishing all the tasks ?
 The duration of finishing all tasks is 10 hour.
 
 ## Output file
-[outputfile5](Task04/output4.xlsx)
+[outputfile5](Task04/tc04_output01.xlsx)
 
 
 ### Feedback
@@ -125,7 +125,7 @@ Output a form in the following format :
 None
 
 ### Output file
-[outputfile6](Task05/output5.xlsx)
+[outputfile6](Task05/tc05_output01.xlsx)
 ### Feedback
 Is market_share * shipment a good estimation?
 
@@ -149,7 +149,7 @@ Output an excel with format
 ### Answer
 None
 ### Output
-[outputfile7](Task06/output6.xlsx)
+[outputfile7](Task06/tc6_output01.xlsx)
 ### Feedback
 I found missing values — how would you like me to handle them? Can I treat them as NULL?
 
@@ -169,7 +169,7 @@ Assume a linear relationship between ice-cream sales and the factors — tempera
 None
 
 ### Output
-[outputfile8](Task07/output7.xlsx)
+[outputfile8](Task07/tc07_output01.xlsx)
 ### Feedback
 In this case, I treat rains as 1 and not rains as 0.
 
@@ -189,7 +189,7 @@ Output a 4×4 table with both rows and columns as:
 Round all correlation values to two decimals, and label each table clearly with the species name.
 
 ### Output
-[outputfile9](Task08/output8.xlsx)
+[outputfile9](Task08/tc08_output01.xlsx)
 ### Answer
 None
 
@@ -211,7 +211,7 @@ Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculat
 * Free Cash Flow (Operating Cash Flow minus Capital Expenditures)
 
 ### Output
-[outputfile10](Task09/output1.xlsx)
+[outputfile10](Task09/tc09_output01.xlsx)
 
 
 ### Answer
@@ -245,7 +245,7 @@ Given 5 excel representing the adjacent list of the directed graph , could you t
 None
 
 ### Output
-[outputfile11](Task10/output10.xlsx)
+[outputfile11](Task10/tc10_output01.xlsx)
 
 ### Feedback
 None
@@ -268,9 +268,9 @@ Based on the provided inventory data, calculate the Economic Order Quantity (EOQ
 ### Answer
 
 ### Output
-[outputfile12](Task11/output1.xlsx)
-[outputfile13](Task11/output1.xlsx)
-[outputfile14](Task11/output1.xlsx)
+[outputfile12](Task11/tc11_output01.xlsx)
+[outputfile13](Task11/tc11_output02.xlsx)
+[outputfile14](Task11/tc11_output03.xlsx)
 
 ### Feedback
 Clarification on Assumptions: The EOQ model assumes constant demand, no stockouts, and fixed costs. The holding cost (H) is often derived as a percentage of the unit cost (e.g., 16.67% of $15 = $2.5). If these assumptions change, the results may need adjustment.
@@ -301,7 +301,7 @@ Marketing Efficiency Ratio (Revenue / Marketing Spend)
 
 
 ### Output
-[outputfile15](Task12/output12.xlsx)
+[outputfile15](Task12/tc12_output01.xlsx)
 
 ### Answer
 None
@@ -334,7 +334,7 @@ Output an Excel file containing:
 
 
 ### Output
-[outputfile16](Task13/output13.xlsx)
+[outputfile16](Task13/tc13_output01.xlsx)
 
 ### Answer
 None
@@ -355,7 +355,7 @@ Given a dataset of smartphone reviews containing customer information, brand, mo
 
 
 ### Output
-[outputfile17](Task14/output14.xlsx)
+[outputfile17](Task14/tc14_output01.xlsx)
 
 ### Answer
 None
@@ -384,7 +384,7 @@ Can you merge the dataset, translating the product category name to english? And
 rows : 118310, columns : 39 
 
 ### Output file
-[outputfile18](Task15/output15.xlsx)
+[outputfile18](Task15/tc15_output01.xlsx)
 
 ### Feedback
 None
@@ -409,7 +409,7 @@ Here is a dataset containing employee details such as monthly income, years of e
 
 #### Output File
 
-[outputfile19](Task16/output16.xlsx)
+[outputfile19](Task16/tc16_output01.xlsx)
 
 ### Feedback
 
@@ -434,7 +434,7 @@ Here are two tables about weekly store information. Please merge them by store, 
 
 #### Output File
 
-[outputfile20](Task17/output17.xlsx)
+[outputfile20](Task17/tc17_output01.xlsx)
 
 ### Feedback
 
@@ -458,7 +458,7 @@ Here is a dataset showing enrollment by college, department, and year. Please ca
 
 #### Output File
 
-[outputfile21](Task18/output18.xlsx)
+[outputfile21](Task18/tc18_output01.xlsx)
 
 ### Feedback
 
@@ -482,7 +482,7 @@ This dataset lists annual carbon dioxide emissions by country. Please group coun
 
 #### Output File
 
-[outputfile22](Task19/output19.xlsx)
+[outputfile22](Task19/tc19_output01.xlsx)
 
 ### Feedback
 
@@ -509,7 +509,7 @@ Here are four hospital tables containing staff, schedules, services, and patient
 
 #### Output File
 
-[outputfile23](Task20/output20.xlsx)
+[outputfile23](Task20/tc20_output01.xlsx)
 
 ### Feedback
 

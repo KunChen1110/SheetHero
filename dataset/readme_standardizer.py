@@ -46,9 +46,45 @@ class ReadmeStandardizer:
                 f.write(new_content)
 
         return new_content
+    
+
+    def rewrite(self, write_back=True):
+        pattern = re.compile(
+            r'\[outputfile(\d+)\]\(Task(\d+)/output[^)]+\.xlsx\)'
+        )
+
+        with open(self.filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        
+        counters = {}
+
+        def repl(match):
+            z = match.group(1)         # outputfilez
+            task_str = match.group(2)  # Task{i}
+
+            if task_str not in counters:
+                counters[task_str] = 1
+
+            y = counters[task_str]
+            counters[task_str] += 1
+
+            # 新文件名
+            new_path = f"Task{task_str}/tc{task_str}_output{y:02d}.xlsx"
+
+            return f"[outputfile{z}]({new_path})"
+
+        new_content = pattern.sub(repl, content)
+
+        if write_back:
+            with open(self.filepath, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+        return new_content
 
 
 if __name__ == "__main__":
-    std = ReadmeStandardizer("DatasetV1.md")
-    std.standardize_indexes("outputfile")
-    std.standardize_indexes("spreadsheet")
+    std = ReadmeStandardizer("temp.md")
+    # std.standardize_indexes("outputfile")
+    # std.standardize_indexes("spreadsheet")
+    std.rewrite()
