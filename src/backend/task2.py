@@ -20,7 +20,7 @@ def main():
         os.path.join(script_dir, "..", "..", "dataset", "Task2", "tutor_meetings.csv"),
     ]
 
-    user_question = "output a form with each tutor's name, the time and location of their tutor meeting and the students attending the meeting."
+    user_question = "output a form with each tutor's name, day ,their time slot, location of their tutor meeting and the amount of the students attending the meetings."
 
     missing_files = [path for path in excel_paths if not os.path.exists(path)]
     if missing_files:
@@ -37,7 +37,7 @@ def main():
 
     # set output mode: by terminal or saved the file
     # example：output_preferences = outputMode("file", "/Users/kun/Desktop/tutor_schedule.xlsx")
-    output_prefs = outputMode("text")
+    output_prefs = outputMode("file")
 
     agent = SheetBrain(excel_paths=excel_paths, total_token_budget=5000,
                        output_preferences=output_prefs)

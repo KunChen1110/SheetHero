@@ -48,11 +48,7 @@ class ExecutionModule:
     def _get_system_prompt(self) -> dict:
         """Create the system prompt for the conversation."""
 
-        output_guidance = ""
-        if self.output_instruction:
-            output_guidance = f"\n**OUTPUT REQUIREMENTS:**\n{self.output_instruction}\n"
-
-        system_content = f"""You are an expert Excel data analyst with access to a comprehensive Python environment for Excel analysis.
+        intro = """You are an expert Excel data analyst with access to a comprehensive Python environment for Excel analysis.
 
 **CODE EXECUTION ENVIRONMENT:**
 You have access to a Python environment with the following pre-loaded:
@@ -67,10 +63,9 @@ You have access to a Python environment with the following pre-loaded:
 - The workbook(s) are already loaded:
   * `workbooks`: Dictionary mapping file paths to workbooks (for multi-file access)
   * `excel_paths`: List of all file paths
+"""
 
-{output_guidance}
-
-Available Excel Helper Functions:
+        helper_sections = """Available Excel Helper Functions:
 
 **Basic Sheet Operations:**
 - `list_sheets()`: List all sheet names in the workbook
@@ -369,6 +364,13 @@ When working with multiple sheets in a workbook:
    Clearly state how each level contributes to subtotals/totals in your explanation.
 
 Start by exploring the data structure to understand what you're working with."""
+
+        system_parts = [intro]
+        if self.output_instruction:
+            system_parts.append(f"\n**OUTPUT REQUIREMENTS:**\n{self.output_instruction}\n")
+        system_parts.append(helper_sections)
+
+        system_content = "".join(system_parts)
 
         return {"role": "system", "content": system_content}
 
