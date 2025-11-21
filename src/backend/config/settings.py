@@ -60,7 +60,7 @@ class Config:
     # === OpenAI Configuration ===
     # These settings control how we connect to the AI service
 
-    api_key: str = "your_api_key"
+    api_key: str = "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"
     """
      * OpenAI API authentication key.
      * 
