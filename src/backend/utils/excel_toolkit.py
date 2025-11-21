@@ -467,6 +467,79 @@ class ExcelToolkit:
 
         return df
 
+
+
+#############################################
+    def list_sheets(self) -> List[str]:
+        """
+        List all sheet names in the workbook.
+        
+        Returns:
+            List of sheet names
+        """
+        return self.workbook.sheetnames
+
+    def get_sheet_info(self, sheet_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get information about a specific sheet.
+        
+        Args:
+            sheet_name: Name of the sheet (None for active sheet)
+            
+        Returns:
+            Dictionary with sheet information (name, dimensions, etc.)
+        """
+        sheet = self.get_sheet(sheet_name)
+        return {
+            'name': sheet.title,
+            'max_row': sheet.max_row,
+            'max_column': sheet.max_column,
+            'dimensions': f"{sheet.max_row} rows × {sheet.max_column} columns"
+        }
+
+    def get_all_sheets_info(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about all sheets in the workbook.
+        
+        Returns:
+            Dictionary mapping sheet names to their information
+        """
+        result = {}
+        for sheet_name in self.workbook.sheetnames:
+            result[sheet_name] = self.get_sheet_info(sheet_name)
+        return result
+
+    def read_multiple_sheets(self, sheet_names: List[str], range_ref: Optional[str] = None) -> Dict[str, List[List]]:
+        """
+        Read data from multiple sheets at once.
+        
+        Args:
+            sheet_names: List of sheet names to read from
+            range_ref: Optional range reference (e.g., "A1:C10"). If None, reads entire sheet.
+            
+        Returns:
+            Dictionary mapping sheet names to their data
+        """
+        result = {}
+        for sheet_name in sheet_names:
+            if sheet_name not in self.workbook.sheetnames:
+                result[sheet_name] = None
+                continue
+            
+            if range_ref:
+                result[sheet_name] = self.inspector(range_ref, sheet_name)
+            else:
+                # Read entire sheet
+                sheet = self.get_sheet(sheet_name)
+                max_range = f"A1:{get_column_letter(sheet.max_column)}{sheet.max_row}"
+                result[sheet_name] = self.inspector(max_range, sheet_name)
+        
+        return result
+#####################################################
+
+
+
+
     def save_plot_to_excel(self, sheet_name: str, cell_position: str = "A1",
                            figsize: tuple = (10, 6), dpi: int = 100) -> str:
         """
@@ -1224,8 +1297,12 @@ class ExcelToolkit:
 
             # File operations
             'save_workbook': self.save_workbook,
-
-            # Editing functions
+            # Multi-sheet operations
+            'list_sheets': self.list_sheets,
+            'get_sheet_info': self.get_sheet_info,
+            'get_all_sheets_info': self.get_all_sheets_info,
+            'read_multiple_sheets': self.read_multiple_sheets,
+            #additional editing tools
             'insert_rows': self.insert_rows,
             'insert_columns': self.insert_columns,
             'delete_rows': self.delete_rows,

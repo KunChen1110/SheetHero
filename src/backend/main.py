@@ -20,7 +20,7 @@ import sys       # Provides system-specific functionality like exiting the progr
 from typing import Optional  # Type hint for optional values (not used directly here)
 
 # Import our custom classes from other modules in the project
-from core.agent import SheetBrain    # Main AI agent that performs Excel analysis
+from core.agent import SheetBrain, build_output_preferences    # Main AI agent + output helper
 from config.settings import Config    # Configuration management for API keys/settings
 
 
@@ -75,6 +75,12 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Enable verbose logging")
 
+    # Control how final answers should be delivered
+    parser.add_argument("--output-mode", choices=["text", "file"], default="text",
+                        help="Choose 'text' for inline answers or 'file' to save results (default: text)")
+    parser.add_argument("--output-file",
+                        help="Path to save results when --output-mode=file (optional)")
+
     # Parse all arguments - this will show an error if required args are missing
     args = parser.parse_args()
 
@@ -94,12 +100,16 @@ def main():
         if args.deployment:
             config.deployment = args.deployment
 
+        output_prefs = build_output_preferences(args.output_mode, args.output_file)
+
         # Create the SheetBrain agent - this is the "brain" that analyzes Excel
-        # We pass it the file path, config settings, and token budget
+        # We pass it the file path(s), config settings, and token budget
+        # excel_paths can be a single string or a list of strings
         agent = SheetBrain(
-            excel_path=args.excel_path,
+            excel_paths=args.excel_path,
             config=config,
-            total_token_budget=args.token_budget
+            total_token_budget=args.token_budget,
+            output_preferences=output_prefs
         )
 
         # Run the actual analysis with the user's question

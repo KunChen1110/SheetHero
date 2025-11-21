@@ -35,3 +35,16 @@
 - Added **background research folder** under `docs/` (`docs/BGResearch/`)
   - Collected reference papers used in the project
   - Added reading notes and background research summaries for the papers
+
+## 21/11/2025
+### --- Added ---
+- Added ouyput mode handling in `core/agent.py`
+  - Added `outputMode()` as a shared public entry point for all task scripts.
+  - Added support for choosing **terminal** or **file** output modes.
+
+### --- Changed ---
+- Updated multi-file handling in `SheetBrain` to improve merging behaviour.
+
+### --- Fixed ---
+- Fixed a bug where numeric values were incorrectly summed when merging multiple Excel files.
+  - Numeric columns are now aggregated correctly across all input files.
