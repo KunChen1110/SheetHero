@@ -1,6 +1,8 @@
 import sys
 import os
 
+from config import Config
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from core import SheetBrain, output_mode
@@ -39,8 +41,7 @@ def main():
     # example：output_preferences = outputMode("file", "/Users/kun/Desktop/tutor_schedule.xlsx")
     output_prefs = output_mode("file")
 
-    agent = SheetBrain(excel_paths=excel_paths, total_token_budget=5000,
-                       output_preferences=output_prefs)
+    agent = SheetBrain(excel_paths=excel_paths, config=Config())
 
 
     print("📋 [Task2] Starting analysis...")
@@ -48,12 +49,7 @@ def main():
 
     try:
 
-        result = agent.run(
-            user_question=user_question,
-            max_turns=3,
-            enable_validation=True,
-            enable_understanding=True
-        )
+        result = agent.run(user_question=user_question)
 
         # === Step 5: Display Results ===
         # Print a formatted report showing the analysis outcome
