@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from core import SheetBrain, outputMode
+from core import SheetBrain, output_mode
 
 
 def main():
@@ -37,7 +37,7 @@ def main():
 
     # set output mode: by terminal or saved the file
     # example：output_preferences = outputMode("file", "/Users/kun/Desktop/tutor_schedule.xlsx")
-    output_prefs = outputMode("file")
+    output_prefs = output_mode("file")
 
     agent = SheetBrain(excel_paths=excel_paths, total_token_budget=5000,
                        output_preferences=output_prefs)
