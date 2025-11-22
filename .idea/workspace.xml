@@ -5,9 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="Tried installing an import(didnt work)">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/team29_project.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/team29_project.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/modules/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/backend/utils/excel_toolkit.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/utils/excel_toolkit.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/config/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/core/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/core/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/core/agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/core/agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/task2.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/task2.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,32 +51,40 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python.agent.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;backend__branch&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/team29_project/src/backend/data_washing&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
-    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
-    &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;project.propVCSSupport.Mappings&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.agent.executor": "Run",
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "backend__baldwin",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/team29_project/src/backend/data_washing",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "project.propVCSSupport.Mappings",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\team29_project\assets" />
     </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-b26f3e71634d-JavaScript-PY-251.26094.141" />
+        <option value="bundled-python-sdk-9f8e2b94138c-36ea0e71a18c-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26094.141" />
+      </set>
+    </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -87,6 +100,7 @@
       <workItem from="1762880967357" duration="632000" />
       <workItem from="1762994895390" duration="1568000" />
       <workItem from="1763034697677" duration="309000" />
+      <workItem from="1763757941281" duration="7408000" />
     </task>
     <task id="LOCAL-00001" summary="Added javadocs and comments">
       <option name="closed" value="true" />
