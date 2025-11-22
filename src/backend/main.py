@@ -9,32 +9,9 @@ def main():
     parser = argparse.ArgumentParser(description="SheetBrain - AI-powered Excel analysis")
 
     # === Required Arguments ===
-    parser.add_argument("excel_path", help="Path to the Excel file to analyze")
     parser.add_argument("question", help="Question to ask about the Excel file")
+    parser.add_argument("excel_paths", nargs='+', help="Path(s) to the Excel file(s)")
 
-    # === Optional Arguments ===
-    parser.add_argument("--max-turns", type=int, default=3,
-                        help="Maximum number of execution turns (default: 3)")
-
-    parser.add_argument("--no-validation", action="store_true",
-                        help="Disable validation stage")
-    parser.add_argument("--no-understanding", action="store_true",
-                        help="Disable understanding stage")
-
-    parser.add_argument("--token-budget", type=int, default=10000,
-                        help="Token budget for context generation (default: 10000)")
-
-    parser.add_argument("--api-key", help="OpenAI API key (overrides config)")
-    parser.add_argument("--base-url", help="OpenAI base URL (overrides config)")
-    parser.add_argument("--deployment", help="Model deployment name (overrides config)")
-
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable verbose logging")
-
-    parser.add_argument("--output-mode", choices=["text", "file"], default="text",
-                        help="Choose 'text' for inline answers or 'file' to save results (default: text)")
-    parser.add_argument("--output-file",
-                        help="Path to save results when --output-mode=file (optional)")
 
     args = parser.parse_args()
 
@@ -42,7 +19,7 @@ def main():
         config = Config()
 
         # Create agent
-        agent = SheetBrain(excel_paths=args.excel_path,config=config)
+        agent = SheetBrain(excel_paths=args.excel_path, config=config)
 
         # Run the actual analysis with the user's question
         result = agent.run(user_question=args.question)
@@ -66,7 +43,7 @@ def main():
                 print(f"  - {issue}")
 
         # Show detailed feedback only if verbose mode is enabled
-        if args.verbose and result['improvement_feedback']:
+        if config.verbose and result['improvement_feedback']:
             print(f"\nImprovement Feedback:")
             print(result['improvement_feedback'])
 
