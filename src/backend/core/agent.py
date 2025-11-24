@@ -2,7 +2,6 @@ import os
 import time
 import csv
 from typing import Dict, Any, Optional, Union, List
-from PIL import Image
 from openai import OpenAI
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
