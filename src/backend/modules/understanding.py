@@ -24,7 +24,7 @@ class UnderstandingModule:
     Processes both table data and table images to extract visual context.
     """
 
-    def __init__(self, client, deployment: str, excel_context_understanding: str, workbook=None):
+    def __init__(self, client, deployment: str, excel_context_understanding: str):
         """
         Initialize the UnderstandingModule.
 
@@ -36,10 +36,9 @@ class UnderstandingModule:
         """
         self.client = client
         self.deployment = deployment
-        self.workbook = workbook
         self.excel_context_understanding = excel_context_understanding
 
-    def analyze(self, user_question: str, table_image: Optional[Image.Image] = None) -> str:
+    def analyze(self, user_question: str) -> str:
         """
         Analyze the user question and Excel workbook to generate comprehensive understanding.
 
@@ -52,14 +51,13 @@ class UnderstandingModule:
         """
         logger.info("Starting understanding analysis")
 
-        messages = self._create_multimodal_prompt(user_question, self.excel_context_understanding, table_image)
+        messages = self._create_multimodal_prompt(user_question, self.excel_context_understanding)
         understanding_output = self._get_llm_response(messages)
 
         logger.info("Understanding analysis completed")
         return understanding_output
 
-    def _create_multimodal_prompt(self, user_question: str, excel_context_understanding: str,
-                                 table_image: Optional[Image.Image]) -> list:
+    def _create_multimodal_prompt(self, user_question: str, excel_context_understanding: str) -> list:
         """Create a multimodal prompt for the LLM."""
 
         prompt_text = f"""You are an expert Excel data analyst. I need you to analyze the spreadsheet content and visual representation (if provided) to understand the context for answering a specific question.
@@ -115,24 +113,6 @@ Provide a comprehensive overview including:
                 "content": prompt_text
             }
         ]
-
-        # Add image if provided
-        if table_image:
-            # Convert PIL Image to base64
-            buffered = io.BytesIO()
-            table_image.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-
-            # Modify the message to include image
-            messages[0]["content"] = [
-                {"type": "text", "text": prompt_text},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{img_str}"
-                    }
-                }
-            ]
 
         return messages
 

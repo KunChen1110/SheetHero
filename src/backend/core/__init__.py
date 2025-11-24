@@ -31,7 +31,7 @@
 # Import the main SheetBrain class from the agent module in this package
 # The dot (.) before 'agent' means "look in the current package"
 # This is a relative import - it only works inside a package
-from .agent import SheetBrain, build_output_preferences, outputMode
+from .agent import SheetBrain, build_output_preferences, output_mode
 
 # __all__ defines the public API of this package
 # This special variable controls what gets imported when someone uses:
@@ -45,7 +45,7 @@ from .agent import SheetBrain, build_output_preferences, outputMode
 #
 # In this case, we're saying: "The only thing we want to expose from the core
 # package is the SheetBrain class - everything else is implementation detail."
-__all__ = ["SheetBrain", "build_output_preferences", "outputMode"]
+__all__ = ["SheetBrain", "build_output_preferences", "output_mode"]
 
 # === Architecture Note ===
 # This structure follows a layered architecture pattern:

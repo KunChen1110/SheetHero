@@ -1,72 +1,18 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
+import os
+import time
+import csv
+from typing import Dict, Any, Optional, Union, List
+from openai import OpenAI
+from openpyxl import load_workbook, Workbook
+from openpyxl.utils import get_column_letter
 
-"""
- * Core SheetBrain agent implementing a three-stage AI architecture.
- *
- * This is the "brain" of the entire application - it coordinates the analysis
- * of Excel files using a sophisticated Understand-Execute-Validate workflow.
- *
- * Three-Stage Architecture Explained:
- * ===================================
- *
- * 1. **UNDERSTANDING STAGE**
- *    - The AI first studies the Excel file's structure
- *    - Identifies column names, data types, table formats
- *    - Figures out what data is relevant to the user's question
- *    - Creates a "mental model" of the spreadsheet
- *
- * 2. **EXECUTION STAGE**
- *    - The AI writes and runs Python code to analyze the data
- *    - Can perform calculations, filtering, aggregations, visualizations
- *    - Uses a sandboxed environment with access to Excel-reading libraries
- *    - Returns an answer based on the code execution results
- *
- * 3. **VALIDATION STAGE**
- *    - The AI critically reviews its own answer
- *    - Checks if the answer makes sense given the data
- *    - Identifies potential errors or oversights
- *    - Either approves the answer or suggests improvements
- *
- * Iterative Loop:
- * ===============
- * The Execute-Validate stages run in a loop (default: 3 iterations).
- * If validation fails, feedback is passed back to execution for another attempt.
- * This creates a "reflection" capability where the AI learns from its mistakes.
- *
- * Key Features:
- * =============
- * - Token budgeting: Limits how much data we send to AI (controls cost/speed)
- * - Code sandboxing: Safe Python execution environment for data analysis
- * - Error recovery: Graceful handling of API errors, invalid Excel files, etc.
- * - Rich context generation: Creates markdown summaries of Excel/CSV contents
- *
- * @author: Microsoft Corporation
- * @license: MIT License
-"""
+from config.settings import Config
+from modules.understanding import UnderstandingModule
+from modules.execution import ExecutionModule
+from modules.validation import ValidationModule
+from utils.excel_toolkit import ExcelToolkit, calculate_token_cost_line
+from utils.logger import setup_logger
 
-# Import standard library modules
-import os          # For reading environment variables and file paths
-import time        # For measuring execution duration
-import csv         # For loading CSV files
-from typing import Dict, Any, Optional, Union, List  # Type hints for better code clarity
-
-# Import third-party libraries
-from PIL import Image              # For handling image inputs (Excel screenshots)
-from openai import OpenAI          # OpenAI SDK for AI model access
-from openpyxl import load_workbook, Workbook # Excel file reading library
-from openpyxl.utils import get_column_letter  # Converts column numbers to letters (1->A, 2->B)
-
-# Import our own modules
-from config.settings import Config                 # Configuration management
-from modules.understanding import UnderstandingModule  # Stage 1: Understand the data
-from modules.execution import ExecutionModule         # Stage 2: Execute analysis code
-from modules.validation import ValidationModule       # Stage 3: Validate the results
-from utils.excel_toolkit import ExcelToolkit, calculate_token_cost_line  # Excel utilities
-from utils.logger import setup_logger               # Logging setup
-
-# Create a logger instance for this module
-# This will log messages with timestamps and severity levels
 logger = setup_logger(__name__)
 
 
@@ -96,147 +42,51 @@ def build_output_preferences(mode: str = "text",
     return {"mode": normalized_mode, "file_path": os.path.abspath(normalized_path) if normalized_path else None}
 
 
-def outputMode(mode: str = "text", file_path: Optional[str] = None) -> Dict[str, Optional[str]]:
-    """
-    Convenience wrapper so callers can simply write outputMode("file", "/path/output.xlsx").
-    """
+def output_mode(mode: str = "text", file_path: Optional[str] = None) -> Dict[str, Optional[str]]:
     return build_output_preferences(mode, file_path)
 
 
-class SheetBrain:
-    """
-     * Main agent class for Excel analysis.
-     *
-     * This class orchestrates the entire three-stage analysis pipeline.
-     * It manages Excel file loading, AI client setup, module coordination,
-     * and iterative improvement through validation feedback.
-     *
-     * Core Components:
-     * ================
-     * - **client**: OpenAI API client for making requests to AI models
-     * - **workbooks**: Dictionary of loaded Excel files (using openpyxl)
-     * - **excel_context**: Markdown summary of the Excel file's contents
-     * - **code_globals/locals**: Sandbox environment for running analysis code
-     * - **Three modules**: UnderstandingModule, ExecutionModule, ValidationModule
-     *
-     * The agent can be configured to:
-     * - Use different AI models (GPT-4o, GPT-4o-mini, etc.)
-     * - Enable/disable stages for speed vs. accuracy tradeoffs
-     * - Set token budgets to control cost
-     * - Run in a "headless" mode with pre-generated context
-     *
-     * @see: UnderstandingModule, ExecutionModule, ValidationModule
-    """
+"""                                                                                                                                                                                                 
+config (Config)
+output_preferences (dict)
+output_instruction (str)
 
+excel_paths (list)
+
+excel_conntext_understanding (str)
+excel_conntext_execution (str)
+
+self.client (OpenAI)
+code_globals (dict)
+code_locals (dict)
+workbooks
+
+understanding_module
+execution_module
+validation_module
+"""
+class SheetBrain:
     def __init__(self, excel_paths: Union[str, List[str]],
-                 config: Optional[Config] = None,
-                 total_token_budget: int = 10000,
-                 load_excel: bool = True, excel_context_understanding: Optional[str] = None,
-                 excel_context_execution: Optional[str] = None,
-                 output_preferences: Optional[Dict[str, Optional[str]]] = None):
-        """
-         * Initialize the SheetBrain agent.
-         * @param output_preferences: Dict describing how final results should be delivered.
-         *                            Use build_output_preferences() helper.
-         *
-         * This constructor sets up everything needed for analysis:
-         * 1. Loads and validates configuration (API keys, model settings)
-         * 2. Initializes the OpenAI client
-         * 3. Loads the Excel file(s) into memory
-         * 4. Generates context summaries (markdown descriptions)
-         * 5. Creates the three analysis modules
-         * 6. Sets up the code execution sandbox
-         *
-         * Configuration Priority (highest to lowest):
-         * ===========================================
-         * 1. Environment variables (OPENAI_API_KEY, etc.)
-         * 2. Command-line arguments (if using CLI)
-         * 3. Config object passed to constructor
-         * 4. Default values in Config class
-         *
-         * @param excel_paths: Path(s) to Excel file(s) - can be a string (single file) or list of strings (multiple files)
-         *                     Examples:
-         *                     - Single file: excel_paths="data/sales.xlsx"
-         *                     - Multiple files: excel_paths=["data/sales.xlsx", "data/customers.xlsx"]
-         * @param config: Config object with settings (if None, creates default)
-         * @param total_token_budget: Max tokens for AI context (default: 10,000)
-         * @param load_excel: Whether to actually load the file(s) (False for pre-processed context)
-         * @param excel_context_understanding: Pre-generated understanding context (optimization)
-         * @param excel_context_execution: Pre-generated execution context (optimization)
-         *
-         * @throws: ValueError if API key is missing or invalid
-         * @throws: ImportError if required libraries aren't installed
-         * @throws: FileNotFoundError if Excel file doesn't exist
-         * @throws: Exception if Excel file is corrupted or invalid
-        """
-        # Normalize excel_paths to always be a list
-        # Accept both single string and list of strings for convenience
-        if isinstance(excel_paths, str):
-            self.excel_paths = [excel_paths]
-        elif isinstance(excel_paths, list):
-            self.excel_paths = excel_paths
-        else:
-            raise ValueError("excel_paths must be a string or a list of strings")
-        
-        if not self.excel_paths:
-            raise ValueError("excel_paths cannot be empty")
-        
-        # Store basic parameters as instance variables (accessible across all methods)
-        self.config = config or Config()  # Use provided config or create default
-        self.total_token_budget = total_token_budget
-        self.load_excel = load_excel  # Flag to control whether we load the actual Excel file
-        preferred_output = dict(output_preferences) if output_preferences else build_output_preferences()
-        if preferred_output.get("mode") == "file":
-            base_excel_path = os.path.abspath(self.excel_paths[0]) if self.excel_paths else None
-            default_dir = os.path.dirname(base_excel_path) if base_excel_path else os.getcwd()
-            if not preferred_output.get("file_path"):
-                preferred_output["file_path"] = os.path.join(default_dir, "output.xlsx")
-            else:
-                preferred_output["file_path"] = os.path.abspath(preferred_output["file_path"])
-        self.output_preferences = preferred_output
+                 config: Config,
+                 load_excel: bool = True):
+        # === Load Config ===
+        self.config = config
+        self.output_preferences = build_output_preferences(
+            mode=self.config.output_mode,
+            file_path=self.config.output_file
+        )
         self.output_instruction = self._build_output_instruction()
+        self.excel_paths = excel_paths if isinstance(excel_paths, list) else [excel_paths]
 
         # === OpenAI Client Setup ===
-        # Priority: environment variables > config file > defaults
-
-        # Check for API key in environment first (more secure), then config
-        api_key = os.environ.get("OPENAI_API_KEY") or self.config.api_key
-
-        # Get base URL (for Azure or custom endpoints)
-        base_url = os.environ.get("OPENAI_BASE_URL") or self.config.base_url
-
-        # Get model/deployment name
-        deployment = os.environ.get("OPENAI_DEPLOYMENT") or self.config.deployment
-
-        # Validate and clean base_url
-        # "your_base_url" is a placeholder in config files - treat as None
-        if base_url in ("your_base_url", ""):
-            base_url = None  # None means "use OpenAI's default URL"
-
-        # Validate API key is actually set (not empty or placeholder)
-        if not api_key or api_key == "your_api_key":
-            raise ValueError(
-                "OpenAI API key not found! Please set OPENAI_API_KEY environment variable "
-                "or provide it via Config class. Example: export OPENAI_API_KEY='your-key'"
-            )
-
-        # Initialize OpenAI client with our credentials
-        # **kwargs syntax unpacks dictionary into function arguments
-        client_kwargs = {"api_key": api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-
-        self.client = OpenAI(**client_kwargs)  # Create the client instance
-
-        # Update config with the final resolved values
-        self.config.api_key = api_key
-        self.config.base_url = base_url or "https://api.openai.com/v1"  # Store default for reference
-        self.config.deployment = deployment
+        if not self.config.api_key:
+            raise ValueError("OpenAI API key is missing in Config")
+        client_kwargs = {"api_key": self.config.api_key}
+        if self.config.base_url:
+            client_kwargs["base_url"] = self.config.base_url
+        self.client = OpenAI(**client_kwargs)
 
         # === Code Execution Environment Setup ===
-        # This creates a sandbox where AI-generated Python code can run safely
-        # We pre-load useful libraries and the Excel workbook itself
-
         self.code_globals = {
             'math': __import__('math'),      # Mathematical functions (sin, cos, sqrt, etc.)
             'json': __import__('json'),      # JSON parsing/formatting
@@ -249,90 +99,43 @@ class SheetBrain:
         self.code_locals = {}  # Empty dict for code execution (stores variables created by AI code)
 
         # === Excel File Loading and Context Generation ===
-        if self.load_excel:
+        if load_excel:
             # Load the Excel file(s) and libraries (openpyxl, pandas, etc.)
             self._setup_excel_libraries()
             self.workbooks = self.code_globals.get('workbooks', {})
 
             # Generate markdown summary of Excel contents for AI context
-            # We create TWO versions with different token budgets:
-            # - Understanding context: larger (2x budget) for deeper analysis
-            # - Execution context: smaller (1x budget) for code generation
-
-            if excel_context_understanding is None:
-                # Generate fresh context if not provided
-                self.excel_context_understanding = self._generate_sheets_markdown_summary(total_token_budget * 2)
-            else:
-                # Use pre-generated context (optimization for batch processing)
-                self.excel_context_understanding = excel_context_understanding
-
-            if excel_context_execution is None:
-                self.excel_context_execution = self._generate_sheets_markdown_summary(total_token_budget)
-            else:
-                self.excel_context_execution = excel_context_execution
+            self.excel_context_understanding = self._generate_sheets_markdown_summary(self.config.total_token_budget * 2)
+            self.excel_context_execution = self._generate_sheets_markdown_summary(self.config.total_token_budget)
         else:
             # Headless mode: don't load Excel, work with provided context only
-            # Useful for testing or when context is pre-computed
             self.workbooks = {}
-            self.excel_context_understanding = excel_context_understanding or "Excel file not loaded. Working with provided context only."
-            self.excel_context_execution = excel_context_execution or "Excel file not loaded. Working with provided context only."
+            self.excel_context_understanding = "Excel file not loaded. Working with provided context only."
+            self.excel_context_execution = "Excel file not loaded. Working with provided context only."
 
         # === Module Initialization ===
-        # Create the three analysis modules, passing them the resources they need
-
         self.understanding_module = UnderstandingModule(
-            self.client, self.config.deployment, self.excel_context_understanding,
-            self.workbooks.get(self.excel_paths[0]) if self.workbooks else None
+            self.client,
+            self.config.deployment,
+            self.excel_context_understanding
         )
         self.execution_module = ExecutionModule(
-            self.client, self.config.deployment, self.code_globals, self.code_locals,
-            self.excel_context_execution, self.output_instruction
+            self.client,
+            self.config.deployment,
+            self.code_globals,
+            self.code_locals,
+            self.excel_context_execution,
+            self.output_instruction
         )
         self.validation_module = ValidationModule(
-            self.client, self.config.deployment, self.excel_context_understanding
+            self.client,
+            self.config.deployment,
+            self.excel_context_understanding
         )
 
-    def run(self, user_question: str, table_image: Optional[Image.Image] = None,
-            max_turns: Optional[int] = None, enable_validation: Optional[bool] = None,
-            enable_understanding: Optional[bool] = None) -> Dict[str, Any]:
-        """
-         * Execute the complete three-stage analysis pipeline.
-         *
-         * This is the main entry point for running an analysis. It orchestrates:
-         *
-         * 1. **Understanding Stage** (optional): Analyze Excel structure and question
-         * 2. **Execute-Validate Loop** (iterative): Run up to max_turns times
-         *    - Execution: Generate and run Python code to answer the question
-         *    - Validation: Check if the answer is correct and suggest improvements
-         * 3. **Final Report**: Compile results, metrics, and feedback
-         *
-         * The loop continues until:
-         * - Validation passes (success!)
-         * - Max turns reached (gives up)
-         * - Validation says no improvement possible (stops early)
-         * - An error occurs (returns error info)
-         *
-         * @param user_question: Natural language question about the Excel file
-         * @param table_image: Optional screenshot of Excel sheet (helps AI understand)
-         * @param max_turns: Maximum Execute-Validate iterations (default: from config)
-         * @param enable_validation: Whether to run validation (default: from config)
-         * @param enable_understanding: Whether to run understanding (default: from config)
-         *
-         * @return: Dictionary with complete analysis results including:
-         *     - success: Boolean - did analysis complete successfully?
-         *     - answer: String - the final answer to user's question
-         *     - confidence_score: Float - how confident AI is (0.0 to 1.0)
-         *     - validation_passed: Boolean - did validation approve the answer?
-         *     - total_iterations: Int - how many Execute-Validate cycles ran
-         *     - total_duration: Float - time taken in seconds
-         *     - issues_found: List - problems identified in data or analysis
-         *     - improvement_feedback: String - AI suggestions for better results
-         *     - conversation_history: List - full dialog with AI for debugging
-        """
+    def run(self, user_question: str) -> Dict[str, Any]:
         # Use config defaults if parameters not provided (allows CLI overrides)
-        max_turns = max_turns or self.config.max_turns
-        enable_validation = enable_validation if enable_validation is not None else self.config.enable_validation
-        enable_understanding = enable_understanding if enable_understanding is not None else self.config.enable_understanding
+        max_turns = self.config.max_turns
 
         # Log and print that we're starting analysis
         logger.info("Starting iterative three-stage analysis")
@@ -346,28 +149,19 @@ class SheetBrain:
 
         try:
             # ===== STAGE 1: UNDERSTANDING (Optional but Recommended) =====
-            if enable_understanding:
-                logger.info("Running understanding module")
-                print("📖 [STAGE 1] UNDERSTANDING MODULE")
-                print("-" * 40)
+            logger.info("Running understanding module")
+            print("📖 [STAGE 1] UNDERSTANDING MODULE")
+            print("-" * 40)
 
-                understanding_start_time = time.time()
-                # Call the UnderstandingModule to analyze the question + Excel context
-                understanding_output = self.understanding_module.analyze(user_question, table_image)
-                understanding_duration = time.time() - understanding_start_time
+            understanding_start_time = time.time()
+            # Call the UnderstandingModule to analyze the question + Excel context
+            understanding_output = self.understanding_module.analyze(user_question)
+            understanding_duration = time.time() - understanding_start_time
 
-                print(f"✅ [STAGE 1] Understanding completed in {understanding_duration:.2f}s")
-                print(f"📝 [STAGE 1] Analysis preview: {understanding_output}...")
-            else:
-                # Understanding disabled - use direct question (faster but less accurate)
-                logger.info("Understanding module disabled")
-                print("⏭️ [STAGE 1] UNDERSTANDING MODULE SKIPPED")
-                print("-" * 40)
-                understanding_output = f"Understanding module disabled. Direct analysis of user question: {user_question}"
-                print(f"📝 [STAGE 1] Using direct question: {user_question}")
+            print(f"✅ [STAGE 1] Understanding completed in {understanding_duration:.2f}s")
+            print(f"📝 [STAGE 1] Analysis preview: {understanding_output}...")
 
             # ===== ITERATIVE EXECUTE-VALIDATE LOOP =====
-            # This is the core loop where AI tries to answer and validates its work
             for iteration in range(max_turns):
                 logger.info(f"Starting iteration {iteration + 1}/{max_turns}")
                 print(f"\n🔄 [ITERATION {iteration + 1}/{max_turns}] EXECUTE-VALIDATE CYCLE")
@@ -379,7 +173,6 @@ class SheetBrain:
                 execution_start_time = time.time()
 
                 # If this isn't the first iteration, add validation feedback from previous attempt
-                # This helps the AI learn from its mistakes
                 if iteration > 0 and all_validation_results:
                     last_validation = all_validation_results[-1]
                     if last_validation.get('improvement_feedback'):
@@ -410,69 +203,57 @@ Please address these specific points in your new analysis approach."""
                 print(f"📊 [ITERATION {iteration + 1}] Code executions: {execution_result.get('execution_summary', {}).get('total_code_executions', 0)}")
 
                 # ===== STAGE 3: VALIDATION (if enabled) =====
-                if enable_validation:
-                    logger.info(f"Running validation module for iteration {iteration + 1}")
-                    print(f"\n🔍 [ITERATION {iteration + 1}] VALIDATION MODULE")
-                    print("-" * 40)
-                    validation_start_time = time.time()
+                logger.info(f"Running validation module for iteration {iteration + 1}")
+                print(f"\n🔍 [ITERATION {iteration + 1}] VALIDATION MODULE")
+                print("-" * 40)
+                validation_start_time = time.time()
 
-                    # Run the ValidationModule to check if the answer is correct
-                    validation_result = self.validation_module.reflect(execution_result, user_question, understanding_output)
-                    validation_duration = time.time() - validation_start_time
-                    all_validation_results.append(validation_result)
+                # Run the ValidationModule to check if the answer is correct
+                validation_result = self.validation_module.reflect(execution_result, user_question, understanding_output)
+                validation_duration = time.time() - validation_start_time
+                all_validation_results.append(validation_result)
 
-                    # Print validation results
-                    validation_emoji = "✅" if validation_result["validation_passed"] else "⚠️"
-                    print(f"{validation_emoji} [ITERATION {iteration + 1}] Validation completed in {validation_duration:.2f}s")
-                    print(f"🎯 [ITERATION {iteration + 1}] Confidence: {validation_result['confidence_score']:.2f}")
-                    print(f"📋 [ITERATION {iteration + 1}] Validation: {'PASSED' if validation_result['validation_passed'] else 'FAILED'}")
+                # Print validation results
+                validation_emoji = "✅" if validation_result["validation_passed"] else "⚠️"
+                print(f"{validation_emoji} [ITERATION {iteration + 1}] Validation completed in {validation_duration:.2f}s")
+                print(f"🎯 [ITERATION {iteration + 1}] Confidence: {validation_result['confidence_score']:.2f}")
+                print(f"📋 [ITERATION {iteration + 1}] Validation: {'PASSED' if validation_result['validation_passed'] else 'FAILED'}")
 
-                    # === Loop Termination Logic ===
-                    # Decide whether to stop iterating or try again
+                # === Loop Termination Logic ===
+                # Decide whether to stop iterating or try again
+                if validation_result['validation_passed']:
+                    # Success! Answer is good enough
+                    logger.info(f"Validation passed on iteration {iteration + 1}")
+                    print(f"🎉 [SUCCESS] Validation passed on iteration {iteration + 1}!")
+                    final_answer = validation_result.get('verified_answer', execution_result['answer'])
+                    overall_success = True
+                    confidence_score = validation_result['confidence_score']
+                    validation_passed = True
+                    break  # Exit the loop
 
-                    if validation_result['validation_passed']:
-                        # Success! Answer is good enough
-                        logger.info(f"Validation passed on iteration {iteration + 1}")
-                        print(f"🎉 [SUCCESS] Validation passed on iteration {iteration + 1}!")
-                        final_answer = validation_result.get('verified_answer', execution_result['answer'])
-                        overall_success = True
-                        confidence_score = validation_result['confidence_score']
-                        validation_passed = True
-                        break  # Exit the loop
+                elif not validation_result.get('requires_reexecution', True):
+                    # Validation says no point in trying again
+                    logger.warning("Validation indicates no further improvement possible")
+                    print(f"🛑 [STOPPING] Validation indicates no further improvement possible")
+                    final_answer = execution_result['answer']
+                    overall_success = False
+                    confidence_score = validation_result['confidence_score']
+                    validation_passed = False
+                    break  # Exit the loop
 
-                    elif not validation_result.get('requires_reexecution', True):
-                        # Validation says no point in trying again
-                        logger.warning("Validation indicates no further improvement possible")
-                        print(f"🛑 [STOPPING] Validation indicates no further improvement possible")
+                else:
+                    # Validation found issues - prepare for next iteration
+                    logger.info(f"Issues found, preparing for iteration {iteration + 2}")
+                    print(f"🔄 [CONTINUE] Issues found, preparing for iteration {iteration + 2}")
+
+                    # Check if we're out of iterations
+                    if iteration == max_turns - 1:
+                        logger.warning("Reached maximum iterations without validation")
+                        print(f"⚠️ [MAX ITERATIONS] Reached maximum iterations without validation")
                         final_answer = execution_result['answer']
                         overall_success = False
                         confidence_score = validation_result['confidence_score']
                         validation_passed = False
-                        break  # Exit the loop
-
-                    else:
-                        # Validation found issues - prepare for next iteration
-                        logger.info(f"Issues found, preparing for iteration {iteration + 2}")
-                        print(f"🔄 [CONTINUE] Issues found, preparing for iteration {iteration + 2}")
-
-                        # Check if we're out of iterations
-                        if iteration == max_turns - 1:
-                            logger.warning("Reached maximum iterations without validation")
-                            print(f"⚠️ [MAX ITERATIONS] Reached maximum iterations without validation")
-                            final_answer = execution_result['answer']
-                            overall_success = False
-                            confidence_score = validation_result['confidence_score']
-                            validation_passed = False
-                            # Fall through to final summary
-                else:
-                    # Validation disabled - just trust the execution result
-                    logger.info("Validation disabled, using execution results directly")
-                    final_answer = execution_result['answer']
-                    overall_success = execution_result['success']
-                    # Assign a simple confidence score based on success
-                    confidence_score = 0.8 if execution_result['success'] else 0.3
-                    validation_passed = execution_result['success']
-                    break  # Exit loop after one execution
 
             # === Final Report Generation ===
             # Collect issues and feedback from the last validation (if any)

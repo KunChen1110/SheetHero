@@ -1,5 +1,6 @@
 import sys     
-import os 
+import os
+from config.settings import Config
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -29,8 +30,7 @@ def main():
     for path in excel_paths:
         print(f"  📄 {os.path.basename(path)}")
 
-
-    agent = SheetBrain(excel_paths=excel_paths, total_token_budget=5000)
+    agent = SheetBrain(excel_paths=excel_paths, config=Config())
 
 
     print("📋 [Task1] Starting analysis...")
@@ -38,12 +38,7 @@ def main():
 
     try:
 
-        result = agent.run(
-            user_question=user_question,
-            max_turns=3,
-            enable_validation=True,
-            enable_understanding=True
-        )
+        result = agent.run(user_question=user_question)
 
         # === Step 5: Display Results ===
         # Print a formatted report showing the analysis outcome
