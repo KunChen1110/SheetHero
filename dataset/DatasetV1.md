@@ -95,7 +95,7 @@ What's the duration of finishing all the tasks ?
 ### Answer
 The duration of finishing all tasks is 10 hour.
 
-## Output file
+### Output
 [outputfile5](Task04/tc04_output01.xlsx)
 
 
@@ -514,3 +514,54 @@ Here are four hospital tables containing staff, schedules, services, and patient
 ### Feedback
 
 LLM: Should the highlighting apply only to the utilisation value or the entire row?
+
+
+---
+
+## Test 21
+
+### Interviewee screening
+
+### Spread Sheet
+[spreadsheet47](Task21/tc21_input01.xlsx)
+[spreadsheet48](Task21/tc21_input02.xlsx)
+[spreadsheet49](Task21/tc21_input03.xlsx)
+[spreadsheet50](Task21/tc21_input04.xlsx)
+[spreadsheet51](Task21/tc21_input05.xlsx)
+[spreadsheet52](Task21/tc21_input06.xlsx)
+[spreadsheet53](Task21/tc21_input07.xlsx)
+[spreadsheet54](Task21/tc21_input08.xlsx)
+[spreadsheet55](Task21/tc21_input09.xlsx)
+[spreadsheet56](Task21/tc21_input10.xlsx)
+[spreadsheet57](Task21/tc21_input11.xlsx)
+[spreadsheet58](Task21/tc21_input12.xlsx)
+[spreadsheet59](Task21/tc21_input13.xlsx)
+[spreadsheet60](Task21/tc21_input14.xlsx)
+[spreadsheet61](Task21/tc21_input15.xlsx)
+[spreadsheet62](Task21/tc21_input16.xlsx)
+[spreadsheet63](Task21/tc21_input17.xlsx)
+[spreadsheet64](Task21/tc21_input18.xlsx)
+[spreadsheet65](Task21/tc21_input19.xlsx)
+[spreadsheet66](Task21/tc21_input20.xlsx)
+
+### Prompt
+As an HR, I've received 20 spreadsheets about candidate information. You task is to rank the candidates based on the following 
+criteria :   
+0.5 * working experience + 0.3 * number of skills + 0.2 * personality score
+Output a file with score, skills and other attributes of candidates.
+
+
+### Answer
+None
+
+
+### Output File
+[outputfile24](Task21/tc21_output01.xlsx)
+
+
+### Feedback
+Some candidates did not fill in essential information. Should these fields be treated as null values? Additionally, a few candidates did not provide their names. In such cases, can we exclude them from the analysis?
+
+
+
+

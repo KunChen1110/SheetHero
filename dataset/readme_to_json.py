@@ -1,61 +1,97 @@
 import re
 import json
 
-# Here is a converter that can parse the readme to json
-# The readme should follow the format
-# Test ID -> Title -> Spreadsheet -> Answer -> Output -> Feedback
-#
-
 def parse_readme_to_tasks(readme_text):
+    """
+    Parse a Markdown dataset description into a structured JSON format.
+
+    Each task block follows the structure:
+    ## Test X
+    ### Title
+    ### Spreadsheet
+    [spreadsheetN](path...)
+    ### Prompt
+    ...
+    ### Answer
+    ...
+    ### Output File
+    ...
+    ### Feedback
+    ...
+
+    This parser extracts:
+    - task_id
+    - title
+    - spreadsheets (input files)
+    - prompt
+    - answer (empty string if missing)
+    - expected_output_file
+    - feedback
+    """
+
     tasks = []
 
+    # Match each "## Test N" section
     pattern = r"##\s*Test\s*(\d+)(.*?)(?=##\s*Test|\Z)"
     matches = re.findall(pattern, readme_text, re.S)
 
     for task_id, block in matches:
+        # Initialize task object
         task_data = {
             "task_id": f"Test {task_id}",
             "title": None,
             "spreadsheets": [],
             "prompt": None,
+            "answer": "",
             "expected_output_file": [],
-            "feedback": None
+            "feedback": ""
         }
 
-        # Title
+        # --- Extract Title ---
         title_match = re.search(r"###\s*(.*?)\n", block)
         if title_match:
             task_data["title"] = title_match.group(1).strip()
 
-        # Spreadsheets - 
-        spreadsheet_matches = re.findall(r"\[(.*?)\]\((.*?)\)", block)
-        for label, path in spreadsheet_matches:
-           
-            # Get the link of input files
-            filename = path.split('/')[-1]  
-            if not filename.startswith('output'):   # Not start with output
-                task_data["spreadsheets"].append(path)
+        # --- Extract file links (spreadsheets & output files) ---
+        links = re.findall(r"\[(.*?)\]\((.*?)\)", block)
+        for label, path in links:
+            filename = path.split('/')[-1]
 
-        # Get the link of output files
-        for label, path in spreadsheet_matches:
-            filename = path.split('/')[-1] 
-            if filename.startswith('output') and path.endswith('.xlsx'):
-                task_data["expected_output_file"].append(path)
-                
+            # Identify output files: label "outputfileX" + matched filename
+            if label.lower().startswith("outputfile"):
+                if re.match(r"tc\d+_output\d{2}\.xlsx$", filename):
+                    task_data["expected_output_file"].append(path)
+                continue
 
-        # Prompt
+            # Identify input spreadsheets
+            if label.lower().startswith("spreadsheet"):
+                if re.match(r"tc\d+_input\d{2}\.(csv|xlsx)$", filename):
+                    task_data["spreadsheets"].append(path)
+                continue
+
+        # --- Extract Prompt section ---
         prompt_match = re.search(r"###\s*Prompt\s*(.*?)(?=###|\Z)", block, re.S)
         if prompt_match:
-            prompt = prompt_match.group(1).strip()
-            # clean the prompt
-            prompt = re.sub(r"###.*", "", prompt, flags=re.S)
-            task_data["prompt"] = prompt.strip()
+            task_data["prompt"] = prompt_match.group(1).strip()
 
-        # Feedback
+        # --- Extract Answer section ---
+        answer_match = re.search(r"###\s*Answer\s*(.*?)(?=###|\Z)", block, re.S)
+        if answer_match:
+            answer = answer_match.group(1).strip()
+
+            # Remove nested Output File segment if present
+            answer = re.sub(r"####?\s*Output.*", "", answer, flags=re.S).strip()
+
+            # Normalize empty or null-like answers
+            if answer.lower() in ["", "none", "null"]:
+                task_data["answer"] = ""
+            else:
+                task_data["answer"] = answer
+
+        # --- Extract Feedback section ---
         fb_match = re.search(r"###\s*Feedback\s*(.*?)(?=###|\Z)", block, re.S)
         if fb_match:
-            feedback = fb_match.group(1).strip()
-            task_data["feedback"] = feedback
+            task_data["feedback"] = fb_match.group(1).strip()
 
         tasks.append(task_data)
 
@@ -64,12 +100,16 @@ def parse_readme_to_tasks(readme_text):
 
 # === Example usage ===
 if __name__ == "__main__":
+    # Load the Markdown specification
     with open("DatasetV1.md", "r", encoding="utf-8") as f:
         readme_text = f.read()
 
+    # Convert into structured dataset
     tasks_json = parse_readme_to_tasks(readme_text)
 
+    # Write to dataset.json
     with open("dataset.json", "w", encoding="utf-8") as f:
         json.dump(tasks_json, f, indent=4, ensure_ascii=False)
 
-    print("Json has been created successfully !")
+    print("JSON has been created successfully!")
+

@@ -84,7 +84,7 @@ class ReadmeStandardizer:
 
 
 if __name__ == "__main__":
-    std = ReadmeStandardizer("temp.md")
-    # std.standardize_indexes("outputfile")
-    # std.standardize_indexes("spreadsheet")
-    std.rewrite()
+    std = ReadmeStandardizer("DatasetV1.md")
+    std.standardize_indexes("outputfile")
+    std.standardize_indexes("spreadsheet")
+    # std.rewrite()
