@@ -5,7 +5,7 @@ Inp1
 ### Prompt
 Check for missing data in the file
 ### Output
-Missing data on line 3 col 1
+Missing data on line 3 col B
 ### Testing
 Missing Data
 
