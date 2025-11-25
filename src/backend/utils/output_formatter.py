@@ -150,7 +150,7 @@ def _detect_file_path(text: str) -> Optional[str]:
     return None
 
 
-def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question: str) -> str:
+def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question: str, output_mode: str = "text") -> str:
     """
     Format output in user-friendly mode (default, concise).
     
@@ -189,28 +189,36 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
     output_lines.append(f"Iterations:  {result['total_iterations']}")
     output_lines.append(f"Duration:    {result['total_duration']:.2f}s")
     
-    # Extract and display table if present
-    answer = result['answer']
-    answer_without_table, table_content = extract_table_from_answer(answer)
+    if output_mode == "file":
+        answer_path = result.get('answer', '').strip()
+        output_lines.append("\nResult:")
+        if answer_path:
+            output_lines.append(f"  Result file saved to: {answer_path}")
+        else:
+            output_lines.append("  Result file saved successfully.")
+    else:
+        # Extract and display table if present
+        answer = result['answer']
+        answer_without_table, table_content = extract_table_from_answer(answer)
 
-    if not table_content:
-        table_content = extract_table_from_history(result.get('conversation_history'))
+        if not table_content:
+            table_content = extract_table_from_history(result.get('conversation_history'))
 
-    if not table_content:
-        file_path = _detect_file_path(answer_without_table) or _detect_file_path(answer)
-        if file_path:
-            table_from_file = read_table_from_file(file_path)
-            if table_from_file:
-                table_content = table_from_file
-                answer_without_table = ""
+        if not table_content:
+            file_path = _detect_file_path(answer_without_table) or _detect_file_path(answer)
+            if file_path:
+                table_from_file = read_table_from_file(file_path)
+                if table_from_file:
+                    table_content = table_from_file
+                    answer_without_table = ""
 
-    if table_content:
-        output_lines.append("\nResult table:")
-        output_lines.append(table_content)
-    elif answer_without_table:
-        # If no table, show answer (truncated if too long)
-        answer_preview = answer_without_table[:200] + "..." if len(answer_without_table) > 200 else answer_without_table
-        output_lines.append(f"\nAnswer:\n  {answer_preview}")
+        if table_content:
+            output_lines.append("\nResult table:")
+            output_lines.append(table_content)
+        elif answer_without_table:
+            # If no table, show answer (truncated if too long)
+            answer_preview = answer_without_table[:200] + "..." if len(answer_without_table) > 200 else answer_without_table
+            output_lines.append(f"\nAnswer:\n  {answer_preview}")
     
     # Issues
     if result['issues_found']:
