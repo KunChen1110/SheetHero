@@ -25,7 +25,8 @@ class ExecutionModule:
     """
 
     def __init__(self, client, deployment: str, code_globals: dict, code_locals: dict,
-                 excel_context_execution: str, output_instruction: Optional[str] = None):
+                 excel_context_execution: str, output_instruction: Optional[str] = None,
+                 verbose: bool = False):
         """
         Initialize the ExecutionModule.
 
@@ -43,6 +44,7 @@ class ExecutionModule:
         self.code_locals = code_locals
         self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
+        self.verbose = verbose
         self.conversation_history = []
 
     def _get_system_prompt(self) -> dict:
@@ -591,11 +593,12 @@ Please start by exploring the data structure and then work toward answering the 
                 choice = response.choices[0]
                 message = choice.message
 
-                print("="*50)
-                print("EXECUTION MODULE LLM RESPONSE:")
-                print("="*50)
-                print(message.content)
-                print("="*50)
+                if self.verbose:
+                    print("="*50)
+                    print("EXECUTION MODULE LLM RESPONSE:")
+                    print("="*50)
+                    print(message.content)
+                    print("="*50)
                 return message
 
             except RateLimitError as e:

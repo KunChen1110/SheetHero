@@ -48,3 +48,17 @@
 ### --- Fixed ---
 - Fixed a bug where numeric values were incorrectly summed when merging multiple Excel files.
   - Numeric columns are now aggregated correctly across all input files.
+
+## 25/11/2025
+### --- Added ---
+- Added CLI handling in `main.py` so SheetBrain can be run directly from the command line with a question and one or more input files.
+- Added support for choosing **text** or **file** output modes in the CLI, re-using the `outputMode()` logic from `task2.py`.
+- Introduced `output_formatter` module to centralise result formatting and support **user** vs **verbose** output modes.
+
+### --- Changed ---
+- Updated `core/agent.py`, `modules/execution.py`, `modules/validation.py`, and `utils/logger.py` to integrate configurable output modes and cleaner, more focused logging.
+- Reorganised the backend structure: moved previous ad-hoc test scripts into the `examples/scripts` folder to separate core library code from examples and experiments.
+
+### --- Fixed ---
+- Fixed `main.py` so CLI arguments are parsed correctly and passed into `SheetBrain`.
+- Ensured the selected output mode (file or text) is respected end-to-end when running tasks via the command line.

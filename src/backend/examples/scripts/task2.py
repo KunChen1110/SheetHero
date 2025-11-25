@@ -1,22 +1,31 @@
-import sys     
 import os
-from config.settings import Config
+import sys
 
-sys.path.insert(0, os.path.dirname(__file__))
 
-from core import SheetBrain
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+if BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, BACKEND_ROOT)
+
+from config import Config
+from core import SheetBrain, output_mode
+
+
 def main():
 
-    print("🚀 [Task1] Initializing SheetBrain...")
+    print("🚀 [Task2] Initializing SheetBrain...")
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
+    project_root = os.path.abspath(os.path.join(BACKEND_ROOT, "..", ".."))
+    dataset_dir = os.path.join(project_root, "dataset", "Task2")
     excel_paths = [
-        os.path.join(script_dir, "..", "..", "dataset", "Task1", "input1.xlsx"),
-        os.path.join(script_dir, "..", "..", "dataset", "Task1", "input2.xlsx"),
+        os.path.join(dataset_dir, "academic_roles.csv"),
+        os.path.join(dataset_dir, "academics_list.csv"),
+        os.path.join(dataset_dir, "student_assignments.csv"),
+        os.path.join(dataset_dir, "tutor_availability.csv"),
+        os.path.join(dataset_dir, "tutor_meetings.csv"),
     ]
 
-    user_question = "what's the total spending in November, and that's is the daily average spending"
+    user_question = "output a form with each tutor's name, day ,their time slot, location of their tutor meeting and the amount of the students attending the meetings."
 
     missing_files = [path for path in excel_paths if not os.path.exists(path)]
     if missing_files:
@@ -30,10 +39,15 @@ def main():
     for path in excel_paths:
         print(f"  📄 {os.path.basename(path)}")
 
+
+    # set output mode: by terminal or saved the file
+    # example：output_preferences = outputMode("file", "/Users/kun/Desktop/tutor_schedule.xlsx")
+    output_prefs = output_mode("file")
+
     agent = SheetBrain(excel_paths=excel_paths, config=Config())
 
 
-    print("📋 [Task1] Starting analysis...")
+    print("📋 [Task2] Starting analysis...")
 
 
     try:
