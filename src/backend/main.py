@@ -56,7 +56,12 @@ def main():
         if config.verbose:
             output = format_output_verbose_mode(result, args.excel_paths, args.question)
         else:
-            output = format_output_user_mode(result, args.excel_paths, args.question)
+            output = format_output_user_mode(
+                result,
+                args.excel_paths,
+                args.question,
+                output_mode=config.output_mode
+            )
         
         print(output)
 
