@@ -1,28 +1,26 @@
-import sys
 import os
+import sys
+
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+if BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, BACKEND_ROOT)
 
 from config import Config
-
-sys.path.insert(0, os.path.dirname(__file__))
-
-from core import SheetBrain, output_mode
-
-
+from core import SheetBrain
 def main():
 
-    print("🚀 [Task2] Initializing SheetBrain...")
+    print("🚀 [Task1] Initializing SheetBrain...")
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
+    project_root = os.path.abspath(os.path.join(BACKEND_ROOT, "..", ".."))
+    dataset_dir = os.path.join(project_root, "dataset", "Task1")
     excel_paths = [
-        os.path.join(script_dir, "..", "..", "dataset", "Task2", "academic_roles.csv"),
-        os.path.join(script_dir, "..", "..", "dataset", "Task2", "academics_list.csv"),
-        os.path.join(script_dir, "..", "..", "dataset", "Task2", "student_assignments.csv"),
-        os.path.join(script_dir, "..", "..", "dataset", "Task2", "tutor_availability.csv"),
-        os.path.join(script_dir, "..", "..", "dataset", "Task2", "tutor_meetings.csv"),
+        os.path.join(dataset_dir, "input1.xlsx"),
+        os.path.join(dataset_dir, "input2.xlsx"),
     ]
 
-    user_question = "output a form with each tutor's name, day ,their time slot, location of their tutor meeting and the amount of the students attending the meetings."
+    user_question = "what's the total spending in November, and that's is the daily average spending"
 
     missing_files = [path for path in excel_paths if not os.path.exists(path)]
     if missing_files:
@@ -36,15 +34,10 @@ def main():
     for path in excel_paths:
         print(f"  📄 {os.path.basename(path)}")
 
-
-    # set output mode: by terminal or saved the file
-    # example：output_preferences = outputMode("file", "/Users/kun/Desktop/tutor_schedule.xlsx")
-    output_prefs = output_mode("file")
-
     agent = SheetBrain(excel_paths=excel_paths, config=Config())
 
 
-    print("📋 [Task2] Starting analysis...")
+    print("📋 [Task1] Starting analysis...")
 
 
     try:

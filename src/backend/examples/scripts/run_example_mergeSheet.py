@@ -19,14 +19,13 @@
  * @license: MIT License
 """
 
-import sys     # System-specific parameters (path manipulation, exit codes)
 import os      # Operating system interface (file checking, path operations)
+import sys     # System-specific parameters (path manipulation, exit codes)
 
-# Add the script's directory to Python's module search path
-# This is CRITICAL: it tells Python where to find our custom modules (core, config)
-# When running a script directly, Python may not automatically know about nearby packages
-# sys.path[0] ensures our local files take priority over installed packages
-sys.path.insert(0, os.path.dirname(__file__))
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+if BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, BACKEND_ROOT)
 
 # Import the SheetBrain class - the main engine for Excel analysis
 from core import SheetBrain
@@ -62,13 +61,13 @@ def main():
     # === Step 1: Define Analysis Parameters ===
     # Specify which Excel file(s) to analyze and what question to ask
     # Use path relative to this script's directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.abspath(os.path.join(CURRENT_DIR, "..", "data"))
     
     # For multi-file example, specify multiple spreadsheet files (Excel or CSV)
     # This example uses two separate .xlsx files, but .csv files can be mixed in too
     excel_paths = [
-        os.path.join(script_dir, "examples", "academicYearAverage.xlsx"),
-        os.path.join(script_dir, "examples", "studentDetail.xlsx"),
+        os.path.join(data_dir, "academicYearAverage.xlsx"),
+        os.path.join(data_dir, "studentDetail.xlsx"),
     ]
     
     # Multi-file question: Calculate average across multiple files/classes
