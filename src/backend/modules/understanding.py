@@ -1,5 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
 
 """Understanding module for initial analysis and context generation."""
 
@@ -10,7 +8,6 @@ import time
 import random
 from typing import Dict, Any, Optional
 
-from PIL import Image
 from openai import RateLimitError
 
 from utils.logger import setup_logger
@@ -25,42 +22,24 @@ class UnderstandingModule:
     """
 
     def __init__(self, client, deployment: str, excel_context_understanding: str):
-        """
-        Initialize the UnderstandingModule.
+        """ Initialize the UnderstandingModule. """
 
-        Args:
-            client: OpenAI client instance
-            deployment: Model deployment name
-            excel_context_understanding: Excel context for understanding
-            workbook: Excel workbook instance (optional)
-        """
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
 
     def analyze(self, user_question: str) -> str:
-        """
-        Analyze the user question and Excel workbook to generate comprehensive understanding.
-
-        Args:
-            user_question: The user's query or task
-            table_image: Screenshot of the relevant sheet area
-
-        Returns:
-            String containing analysis results
-        """
-        logger.info("Starting understanding analysis")
+        """ Analyze the user question and Excel workbook to generate comprehensive understanding. """
 
         messages = self._create_multimodal_prompt(user_question, self.excel_context_understanding)
         understanding_output = self._get_llm_response(messages)
 
-        logger.info("Understanding analysis completed")
         return understanding_output
 
     def _create_multimodal_prompt(self, user_question: str, excel_context_understanding: str) -> list:
-        """Create a multimodal prompt for the LLM."""
+        """Create a prompt for the LLM."""
 
-        prompt_text = f"""You are an expert Excel data analyst. I need you to analyze the spreadsheet content and visual representation (if provided) to understand the context for answering a specific question.
+        prompt_text = f"""You are an expert Excel data analyst. I need you to analyze the spreadsheet content to understand the context for answering a specific question.
 
 **User Question:** {user_question}
 
@@ -68,7 +47,7 @@ class UnderstandingModule:
 {excel_context_understanding}
 
 **Your Task:**
-Analyze the Excel content and visual representation (if provided) to provide analysis in the following format EXACTLY. Do NOT provide the actual answer to the user's question - only provide the analysis framework:
+Analyze the Excel content to provide an analysis in the following format EXACTLY. Do NOT provide the actual answer to the user's question - only provide the analysis framework:
 
 1. **Sheet Summary**:
 Provide a comprehensive overview including:
@@ -116,10 +95,9 @@ Provide a comprehensive overview including:
 
         return messages
 
-    def _get_llm_response(self, messages: list, max_retries: int = 5, base_delay: float = 1.0) -> str:
-        """Get response from the multimodal LLM with retry logic."""
-        last_exception = None
-
+    def _get_llm_response(self, messages: list, max_retries: int = 5) -> str:
+        """Get response from the LLM."""
+        last_error = None
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
@@ -128,54 +106,10 @@ Provide a comprehensive overview including:
                 )
                 return response.choices[0].message.content
 
-            except RateLimitError as e:
-                last_exception = e
-                logger.warning(f"Rate limit hit, attempt {attempt + 1}/{max_retries}: {str(e)}")
-
-                # Extract wait time from error message if available
-                wait_time = self._extract_wait_time_from_error(str(e))
-
-                if attempt < max_retries - 1:
-                    if wait_time:
-                        delay = wait_time + random.uniform(1, 3)
-                        logger.info(f"Waiting {delay:.1f} seconds as suggested by API")
-                    else:
-                        delay = 10
-                        logger.info(f"Waiting {delay:.1f} seconds")
-
-                    time.sleep(delay)
-                else:
-                    logger.error(f"All {max_retries} attempts failed due to rate limiting")
-                    break
-
             except Exception as e:
-                last_exception = e
-                logger.error(f"API error, attempt {attempt + 1}/{max_retries}: {str(e)}")
+                last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(5)
+        raise last_error
 
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    logger.info(f"Waiting {delay:.1f} seconds before retry")
-                    time.sleep(delay)
-                else:
-                    logger.error(f"All {max_retries} attempts failed")
-                    break
 
-        if last_exception:
-            raise last_exception
-
-    def _extract_wait_time_from_error(self, error_message: str) -> Optional[int]:
-        """Extract wait time from rate limit error message."""
-        try:
-            # Look for patterns like "Try again in X seconds"
-            match = re.search(r'try again in (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-
-            # Look for other patterns like "Retry after X seconds"
-            match = re.search(r'retry after (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-
-            return None
-        except:
-            return None
