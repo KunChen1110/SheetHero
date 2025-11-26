@@ -21,7 +21,7 @@ daily_total.columns = ["Date", "Total Spending (£)"]
 
 # === calculate the total and average  ===
 total_spending = daily_total["Total Spending (£)"].sum()
-average_spending = daily_total["Total Spending (£)"].mean()
+average_spending = daily_total["Total Spending (£)"].sum() / 28
 
 print(f"✅ Total spendings: £{total_spending:.2f}")
 print(f"✅ Average daily spendings: £{average_spending:.2f}")
