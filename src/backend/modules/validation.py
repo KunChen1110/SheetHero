@@ -18,7 +18,7 @@ class ValidationModule:
     If issues are found, provides feedback for re-execution. If validation passes, confirms the final answer.
     """
 
-    def __init__(self, client, deployment: str, excel_context_understanding: str):
+    def __init__(self, client, deployment: str, excel_context_understanding: str, verbose: bool = False):
         """
         Initialize the ValidationModule.
 
@@ -30,6 +30,7 @@ class ValidationModule:
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
+        self.verbose = verbose
 
     def reflect(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> Dict[str, Any]:
         """
@@ -250,11 +251,12 @@ Please be thorough and objective in your assessment. If issues are found, focus 
                     messages=messages,
                 )
 
-                print("="*50)
-                print("VALIDATION MODULE LLM RESPONSE CONTENT:")
-                print("="*50)
-                print(response.choices[0].message.content)
-                print("="*50)
+                if self.verbose:
+                    print("="*50)
+                    print("VALIDATION MODULE LLM RESPONSE CONTENT:")
+                    print("="*50)
+                    print(response.choices[0].message.content)
+                    print("="*50)
 
                 return response.choices[0].message.content
 

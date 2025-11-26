@@ -5,7 +5,15 @@
 
 import logging
 import sys
-from typing import Optional
+from typing import Optional, List
+
+_REGISTERED_LOGGERS: List[logging.Logger] = []
+
+
+def _register_logger(logger: logging.Logger) -> None:
+    """Keep track of loggers so we can adjust their levels later."""
+    if logger not in _REGISTERED_LOGGERS:
+        _REGISTERED_LOGGERS.append(logger)
 
 
 def setup_logger(
@@ -27,6 +35,7 @@ def setup_logger(
     logger = logging.getLogger(name)
 
     if logger.handlers:
+        _register_logger(logger)
         return logger
 
     if format_string is None:
@@ -39,5 +48,14 @@ def setup_logger(
 
     logger.addHandler(handler)
     logger.setLevel(level)
+    _register_logger(logger)
 
     return logger
+
+
+def set_log_level(level: int) -> None:
+    """Update the logging level for all registered SheetBrain loggers."""
+    for logger in _REGISTERED_LOGGERS:
+        logger.setLevel(level)
+        for handler in logger.handlers:
+            handler.setLevel(level)
