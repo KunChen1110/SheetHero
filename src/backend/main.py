@@ -43,7 +43,7 @@ def main():
         config.verbose = args.verbose
 
         # Configure logger verbosity
-        log_level = logging.INFO if config.verbose else logging.WARNING
+        log_level = logging.INFO if config.verbose else logging.ERROR
         set_log_level(log_level)
 
         # Create agent
