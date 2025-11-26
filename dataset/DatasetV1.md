@@ -18,6 +18,8 @@ This dataset tests whether the agent can reason with spreadsheets and generate o
 Here are two tables about my daily spending. Could you first merge the two forms together, then calculate the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red. You need to output a new spreadsheet.
 
 ### Answer
+Total spendings: £2023.75
+Average daily spendings: £72.28
 
 #### Output
 
