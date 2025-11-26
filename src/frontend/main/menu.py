@@ -1,9 +1,12 @@
 from cgitb import reset
-import enum
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
+
 import os
+
+from backend.core.agent import SheetBrain
+from backend.config.settings import Config
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -13,6 +16,8 @@ root.geometry("550x500")
 root.resizable(False, False)
 root.configure(background='gray14')
 
+home_dir = os.path.expanduser("~")
+export_path = os.path.join(home_dir, "Documents")
 selected_files = []
 settings_visible = False
 
@@ -96,7 +101,7 @@ def update_file_list():
         widget.destroy()
 
     row_height = 45
-    max_chars = 35
+    max_chars = 10
 
     for i in range(len(selected_files)):
         file_row = ctk.CTkFrame(file_scroll_list, corner_radius=10, height=row_height,fg_color="gray14")
@@ -149,8 +154,30 @@ def start_query():
     prompt = prompt_entry.get("1.0", "end-1c").strip()
     messagebox.showinfo("Submitted", f"Prompt: {prompt}\nFiles: {len(selected_files)} added.")
 
-    for i in range(len(selected_files)):
-        print(f"{selected_files[i]} is index {i+1}") # These indexes will be used as reference points in prompt 
+    try:
+        config = Config()
+        config.output_mode = "file"
+        config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
+
+        agent = SheetBrain(excel_paths=selected_files, config=config)
+        result = agent.run(user_question=prompt)
+
+        result_text = f"""
+            Success: {'✅' if result['success'] else '❌'}
+            Answer: {result['answer']}
+            Confidence: {result['confidence_score']:.2f}/1.0
+            Iterations: {result['total_iterations']}
+            Duration: {result['total_duration']:.2f}s
+            """
+        if result['issues_found']:
+            result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
+        if result.get('improvement_feedback'):
+            result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+
+        messagebox.showinfo("Analysis Result", result_text)
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
 
 # Toggles the mode between light and dark theme
@@ -168,6 +195,38 @@ def toggle_mode():
             prompt_entry.configure(text_color="white")
 
 
+
+# Asks the user where the exported files should go
+def choose_export_folder():
+    global export_path
+    folder = filedialog.askdirectory(title="Select Export Folder")
+    if folder:
+        export_path = folder
+        export_button.configure(text=f"Saving to {export_path}")
+
+
+# When hovering the export button, change text
+def on_hover_enter(event):
+    export_button.configure(text="Click to change export folder")
+
+
+# When not hovering the export button, go to original text
+def on_hover_leave(event):
+    export_button.configure(text=f"Saving to {export_path}")
+
+
+# Header, for displaying additional info
+header = ctk.CTkFrame(master=root, height=25)
+header.pack_propagate(False)
+header.pack(fill="x", side="top")
+
+
+export_button = ctk.CTkButton(master=header, text=f"Saving to {export_path}", command=choose_export_folder, fg_color="transparent",hover_color="gray25")
+export_button.bind("<Enter>", on_hover_enter)
+export_button.bind("<Leave>", on_hover_leave)
+export_button.pack(side="left", padx=(10, 5))
+
+
 # Footer, for displaying additional info
 footer = ctk.CTkFrame(master=root, height=25)
 footer.pack_propagate(False)
@@ -175,9 +234,10 @@ footer.pack(fill="x", side="bottom")
 footer_label = ctk.CTkLabel(master=footer, text="Footer text here")
 footer_label.pack(side="left",padx=(10, 0))
 
+
 # Prompt entry, for inputting user prompt
 placeholder_text = "Enter your prompt here..."
-prompt_entry = ctk.CTkTextbox(master=root, height=0, width=320)
+prompt_entry = ctk.CTkTextbox(master=root, height=0, width=320, wrap="word")
 prompt_entry.pack(pady=(10, 10), fill="y", padx=(10, 0), side="left")
 prompt_entry.insert("0.0", placeholder_text)
 prompt_entry.configure(text_color="gray")
