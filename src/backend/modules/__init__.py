@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """
  * File: __init__.py (Modules Package)
  * ------------------------------------
@@ -62,9 +59,6 @@
  *
  * The modules communicate via dictionaries (results) and strings (context),
  * making them loosely coupled and maintainable.
- *
- * @author: Microsoft Corporation
- * @license: MIT License
 """
 
 # Import the three pipeline stage modules

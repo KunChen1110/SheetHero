@@ -6,7 +6,7 @@
             "Task01/tc01_input01.xlsx",
             "Task01/tc01_input02.xlsx"
         ],
-        "prompt": "Here are two tables about my daily spending. Could you first merge the two forms together, then calculate the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red. You need to output a new spreadsheet.",
+        "prompt": "Here are two tables about my daily spending. Could you create a new sheet that merges the two forms together and calculates the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red.",
         "answer": "",
         "expected_output_file": [
             "Task01/tc01_output01.xlsx"
