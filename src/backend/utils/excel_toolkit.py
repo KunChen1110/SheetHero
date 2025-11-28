@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """
  * Excel utility library and toolkit for SheetBrain.
  *
@@ -29,9 +26,6 @@
  * The calculate_token_cost_line() function helps manage AI context limits
  * by accurately counting tokens using tiktoken (OpenAI's tokenizer).
  * This prevents sending too much data to the AI model.
- *
- * @author: Microsoft Corporation
- * @license: MIT License
 """
 
 # Import standard library modules
@@ -145,12 +139,13 @@ class ExcelToolkit:
      * @param excel_path: Path to the original Excel file (for saving)
     """
 
-    def __init__(self, workbook, excel_path: str):
+    def __init__(self, workbook, excel_path: str, output_path: Optional[str] = None):
         """
          * Initialize the Excel toolkit.
          *
          * @param workbook: An openpyxl workbook instance (from load_workbook())
          * @param excel_path: Path to the Excel file (used when saving changes)
+         * @param output_path: Optional explicit output path (overrides default naming)
          *
          * @example:
          * ```python
@@ -158,13 +153,15 @@ class ExcelToolkit:
          * from openpyxl import load_workbook
          * workbook = load_workbook("sales.xlsx")
          *
-         * # Create toolkit
-         * toolkit = ExcelToolkit(workbook, "sales.xlsx")
+         * # Create toolkit with explicit output path
+         * toolkit = ExcelToolkit(workbook, "sales.xlsx", "/path/to/output.xlsx")
          * ```
         """
         self.workbook = workbook
         self.excel_path = excel_path
+        self.output_path = output_path  # Explicit output path (if provided)
         self._temp_files = []  # Track temporary image files for cleanup
+        self._output_workbook = None  # Separate workbook for output (created on demand)
 
     def get_sheet(self, sheet_name: Optional[str] = None):
         """
@@ -609,33 +606,43 @@ class ExcelToolkit:
 
     def save_workbook(self) -> str:
         """
-         * Save the workbook to a new file and cleanup temporary files.
+         * Save the OUTPUT workbook to a new file (keeps input files unchanged).
          *
          * This method:
-         * 1. Generates output filename by appending "_output" to original name
-         * 2. Saves the workbook
+         * 1. Saves the OUTPUT workbook (not the input workbook!)
+         * 2. Uses explicit output_path if set, otherwise generates from input filename
          * 3. Deletes all temporary image files created by save_plot_to_excel()
          * 4. Clears the _temp_files tracking list
          *
-         * **Important**: Always call this after using save_plot_to_excel() to
-         * prevent temporary files from accumulating on your system.
+         * **Important**: This saves only the output workbook with sheets created
+         * via create_output_sheet() and write_dataframe_to_sheet().
          *
          * @return: Path to the saved file
          *
          * @example:
          * ```python
-         * # After making changes and saving plots
+         * # After creating output sheets and writing data
          * new_file = toolkit.save_workbook()
-         * # Returns: "sales_data_output.xlsx"
+         * # Returns: "test1_output.xlsx" (a NEW file, not modifying inputs)
          * ```
         """
-        # Generate output filename
-        dir_path = os.path.dirname(self.excel_path)
-        base_name = os.path.splitext(os.path.basename(self.excel_path))[0]
-        filename = os.path.join(dir_path, f"{base_name}_output.xlsx")
+        # Use explicit output_path if set, otherwise generate from input filename
+        if self.output_path:
+            filename = self.output_path
+        else:
+            dir_path = os.path.dirname(self.excel_path)
+            base_name = os.path.splitext(os.path.basename(self.excel_path))[0]
+            filename = os.path.join(dir_path, f"{base_name}_output.xlsx")
 
-        # Save the workbook
-        self.workbook.save(filename)
+        # Get output workbook (create if needed)
+        output_wb = self._get_output_workbook()
+        
+        # If no sheets were created, add a default one to avoid empty workbook error
+        if len(output_wb.sheetnames) == 0:
+            output_wb.create_sheet("Output")
+        
+        # Save the OUTPUT workbook (not the input!)
+        output_wb.save(filename)
 
         # Clean up temporary image files
         for temp_file in self._temp_files:
@@ -1254,6 +1261,255 @@ class ExcelToolkit:
             # Assume it's already a hex code
             return color
 
+    def _get_output_workbook(self):
+        """Get or create the output workbook (separate from input files)."""
+        from openpyxl import Workbook as OpenpyxlWorkbook
+        if self._output_workbook is None:
+            self._output_workbook = OpenpyxlWorkbook()
+            # Remove the default sheet created by openpyxl
+            if 'Sheet' in self._output_workbook.sheetnames:
+                del self._output_workbook['Sheet']
+        return self._output_workbook
+
+    def create_output_sheet(self, sheet_name: str = "Output") -> str:
+        """
+         * Create a new sheet in the OUTPUT workbook (separate from input files).
+         *
+         * This creates a brand new Excel file for output, keeping input files unchanged.
+         *
+         * @param sheet_name: Name of the sheet to create (default: "Output")
+         *
+         * @return: Success message string
+         *
+         * @example:
+         * ```python
+         * # Create a new output sheet in a new file
+         * create_output_sheet("Combined Data")
+         * ```
+        """
+        try:
+            output_wb = self._get_output_workbook()
+            
+            if sheet_name in output_wb.sheetnames:
+                # Remove existing sheet and recreate
+                del output_wb[sheet_name]
+            
+            output_wb.create_sheet(sheet_name)
+            message = f"✅ Created output sheet '{sheet_name}' (in new output file)"
+            print(message)
+            return message
+        except Exception as e:
+            error_msg = f"❌ Error creating sheet: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
+
+    def write_dataframe_to_sheet(self, data: List[List], sheet_name: str, 
+                                  start_cell: str = "A1", include_header: bool = True) -> str:
+        """
+         * Write a 2D list (DataFrame-like data) to the OUTPUT workbook.
+         *
+         * This writes to a NEW output file, keeping input files unchanged.
+         * Use this instead of DataFrame.to_excel() to keep all operations
+         * within ExcelToolkit and avoid file path confusion.
+         *
+         * @param data: 2D list of values (list of rows, first row can be headers)
+         * @param sheet_name: Target sheet name (will be created if not exists)
+         * @param start_cell: Top-left cell to start writing (default: "A1")
+         * @param include_header: Whether first row is header (default: True)
+         *
+         * @return: Success message with written range info
+         *
+         * @example:
+         * ```python
+         * # Write DataFrame data to a new output file
+         * data = [
+         *     ["Date", "Category", "Amount"],  # Header
+         *     ["2025-01-01", "Food", 50.0],
+         *     ["2025-01-02", "Transport", 30.0]
+         * ]
+         * write_dataframe_to_sheet(data, "Output", "A1")
+         * ```
+        """
+        try:
+            output_wb = self._get_output_workbook()
+            
+            # Create sheet if not exists in output workbook
+            if sheet_name not in output_wb.sheetnames:
+                output_wb.create_sheet(sheet_name)
+            
+            sheet = output_wb[sheet_name]
+            
+            # Convert start cell to row/column numbers
+            start_row, start_col = coordinate_to_tuple(start_cell)
+            
+            # Write data
+            for row_idx, row_data in enumerate(data):
+                for col_idx, value in enumerate(row_data):
+                    current_row = start_row + row_idx
+                    current_col = start_col + col_idx
+                    sheet.cell(row=current_row, column=current_col, value=value)
+            
+            rows_written = len(data)
+            cols_written = max(len(row) for row in data) if data else 0
+            end_row = start_row + rows_written - 1
+            end_col = start_col + cols_written - 1
+            end_cell = f"{get_column_letter(end_col)}{end_row}"
+            
+            message = f"✅ Wrote {rows_written} rows to {sheet_name}!{start_cell}:{end_cell}"
+            print(message)
+            return message
+            
+        except Exception as e:
+            error_msg = f"❌ Error writing data to sheet: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
+
+    def highlight_rows(self, sheet_name: str, row_numbers: List[int], 
+                       format_dict: Dict[str, Any] = None) -> str:
+        """
+         * Highlight entire rows in the OUTPUT workbook (default: red background).
+         *
+         * Use this for highlighting max spending days, important records, etc.
+         * Applies formatting to all cells in the specified rows from column A
+         * to the last used column.
+         *
+         * @param sheet_name: Target sheet name in the output workbook
+         * @param row_numbers: List of row numbers to highlight (1-indexed)
+         * @param format_dict: Optional formatting dict (default: red fill)
+         *
+         * @return: Success message string
+         *
+         * @example:
+         * ```python
+         * # Highlight row 5 in red (the max spending day)
+         * highlight_rows("Output", [5], {"fill_color": "red"})
+         *
+         * # Highlight multiple rows
+         * highlight_rows("Output", [3, 7, 12])
+         * ```
+        """
+        try:
+            if format_dict is None:
+                format_dict = {"fill_color": "red"}
+            
+            output_wb = self._get_output_workbook()
+            if sheet_name not in output_wb.sheetnames:
+                raise ValueError(f"Sheet '{sheet_name}' not found in output workbook. Create it first with create_output_sheet().")
+            sheet = output_wb[sheet_name]
+            max_col = sheet.max_column
+            
+            for row_num in row_numbers:
+                # Apply formatting to all cells in the row
+                for col_idx in range(1, max_col + 1):
+                    cell = sheet.cell(row=row_num, column=col_idx)
+                    
+                    # Apply fill color
+                    if 'fill_color' in format_dict:
+                        color = self._parse_color(format_dict['fill_color'])
+                        cell.fill = PatternFill(start_color=color, end_color=color, fill_type='solid')
+                    
+                    # Apply font properties
+                    font_kwargs = {}
+                    if 'font_color' in format_dict:
+                        font_kwargs['color'] = self._parse_color(format_dict['font_color'])
+                    if 'bold' in format_dict:
+                        font_kwargs['bold'] = format_dict['bold']
+                    if font_kwargs:
+                        cell.font = Font(**font_kwargs)
+            
+            message = f"✅ Highlighted row(s) {row_numbers} in sheet '{sheet_name}'"
+            print(message)
+            return message
+            
+        except Exception as e:
+            error_msg = f"❌ Error highlighting rows: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
+
+    def save_workbook_to(self, output_path: str) -> str:
+        """
+         * Save the OUTPUT workbook to a specific path (keeps input files unchanged).
+         *
+         * Use this when you need explicit control over the output file path.
+         * This saves the OUTPUT workbook, not the input workbook.
+         *
+         * @param output_path: Full path where to save the output file
+         *
+         * @return: The path where the file was saved
+         *
+         * @example:
+         * ```python
+         * # Save to a specific path
+         * saved_path = save_workbook_to("/path/to/output.xlsx")
+         * ```
+        """
+        try:
+            output_wb = self._get_output_workbook()
+            
+            # If no sheets were created, add a default one
+            if len(output_wb.sheetnames) == 0:
+                output_wb.create_sheet("Output")
+            
+            output_wb.save(output_path)
+            
+            # Clean up temporary files
+            for temp_file in self._temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                except Exception:
+                    pass
+            self._temp_files = []
+            
+            message = f"💾 Workbook saved to: {output_path}"
+            print(message)
+            return output_path
+            
+        except Exception as e:
+            error_msg = f"❌ Error saving workbook: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
+
+    def add_summary_row(self, sheet_name: str, row_number: int, 
+                        summary_data: Dict[str, Any]) -> str:
+        """
+         * Add a summary row with labeled statistics to the OUTPUT workbook.
+         *
+         * @param sheet_name: Target sheet name in output workbook
+         * @param row_number: Row number where to write the summary
+         * @param summary_data: Dict with label-value pairs
+         *
+         * @return: Success message
+         *
+         * @example:
+         * ```python
+         * add_summary_row("Output", 35, {
+         *     "Total Spending": 2023.75,
+         *     "Average Daily": 72.28
+         * })
+         * ```
+        """
+        try:
+            output_wb = self._get_output_workbook()
+            if sheet_name not in output_wb.sheetnames:
+                raise ValueError(f"Sheet '{sheet_name}' not found in output workbook.")
+            sheet = output_wb[sheet_name]
+            col = 1
+            
+            for label, value in summary_data.items():
+                sheet.cell(row=row_number, column=col, value=label)
+                sheet.cell(row=row_number, column=col + 1, value=value)
+                col += 3  # Space between each stat
+            
+            message = f"✅ Added summary row at row {row_number} in sheet '{sheet_name}'"
+            print(message)
+            return message
+            
+        except Exception as e:
+            error_msg = f"❌ Error adding summary row: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
+
     def get_helper_functions_dict(self) -> Dict:
         """
          * Return dictionary of all helper functions for AI code sandbox.
@@ -1312,5 +1568,11 @@ class ExcelToolkit:
             'copy_range': self.copy_range,
             'apply_formatting': self.apply_formatting,
             'create_chart': self.create_chart,
-            'add_formula': self.add_formula
+            'add_formula': self.add_formula,
+            # New unified output functions
+            'create_output_sheet': self.create_output_sheet,
+            'write_dataframe_to_sheet': self.write_dataframe_to_sheet,
+            'highlight_rows': self.highlight_rows,
+            'save_workbook_to': self.save_workbook_to,
+            'add_summary_row': self.add_summary_row
         }

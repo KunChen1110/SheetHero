@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """Execution module for multi-turn reasoning and code execution."""
 
 import io

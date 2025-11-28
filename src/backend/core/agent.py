@@ -71,12 +71,23 @@ class SheetBrain:
                  load_excel: bool = True):
         # === Load Config ===
         self.config = config
+        self.excel_paths = excel_paths if isinstance(excel_paths, list) else [excel_paths]
         self.output_preferences = build_output_preferences(
             mode=self.config.output_mode,
             file_path=self.config.output_file
         )
+        
+        # Compute output_path BEFORE calling _build_output_instruction
+        if self.output_preferences.get("mode") == "file":
+            self._output_path = self.output_preferences.get("file_path")
+        else:
+            # Default output path based on first input file
+            first_input = self.excel_paths[0] if self.excel_paths else "output"
+            dir_path = os.path.dirname(first_input)
+            base_name = os.path.splitext(os.path.basename(first_input))[0]
+            self._output_path = os.path.join(dir_path, f"{base_name}_output.xlsx")
+        
         self.output_instruction = self._build_output_instruction()
-        self.excel_paths = excel_paths if isinstance(excel_paths, list) else [excel_paths]
 
         # === OpenAI Client Setup ===
         if not self.config.api_key:
@@ -95,6 +106,7 @@ class SheetBrain:
             'sys': __import__('sys'),        # System-specific parameters
             'excel_paths': self.excel_paths, # List of all file paths
             'output_preferences': self.output_preferences,  # Output requirements
+            'output_path': self._output_path,  # Explicit output file path for generated code
         }
         self.code_locals = {}  # Empty dict for code execution (stores variables created by AI code)
 
@@ -481,12 +493,17 @@ Please address these specific points in your new analysis approach."""
         """
         mode = self.output_preferences.get("mode", "text")
         if mode == "file":
-            target_path = self.output_preferences.get("file_path")
-            return (
-                "Final results must be saved to a spreadsheet file. "
-                f"Write the consolidated output to '{target_path}' (e.g., via pandas.to_excel "
-                "or save_workbook). After saving, mention the file path in the final answer."
-            )
+            return f"""**OUTPUT REQUIREMENTS:**
+1. Save final results to: `output_path` (variable available in code: "{self._output_path}")
+2. Use the UNIFIED OUTPUT WORKFLOW:
+   - Convert DataFrame to 2D list: `[df.columns.tolist()] + df.values.tolist()`
+   - Create output sheet: `create_output_sheet("Output")`
+   - Write data: `write_dataframe_to_sheet(data_2d, "Output", "A1")`
+   - Add summary if needed: `add_summary_row("Output", row_num, {{"Total": val, "Average": avg}})`
+   - Highlight important rows: `highlight_rows("Output", [row_nums], {{"fill_color": "red"}})`
+   - Save: `save_workbook_to(output_path)`
+3. Return the saved file path in Final Answer
+4. DO NOT use DataFrame.to_excel() or pd.ExcelWriter()"""
 
         return (
             "Final results must be presented directly in the final answer as a clean markdown "
@@ -729,7 +746,7 @@ Please address these specific points in your new analysis approach."""
 
             # Create ExcelToolkit with helper functions for common operations
             # For multi-file support, we'll use the primary workbook but provide access to all
-            self.mcp_toolkit = ExcelToolkit(primary_workbook, primary_path)
+            self.mcp_toolkit = ExcelToolkit(primary_workbook, primary_path, self._output_path)
             excel_helpers = self.mcp_toolkit.get_helper_functions_dict()
             
             # Add multi-workbook helper functions
