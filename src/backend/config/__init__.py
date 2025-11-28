@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """
  * Package initialization file for the SheetBrain configuration module.
  *

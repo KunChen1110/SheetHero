@@ -91,66 +91,126 @@ You have access to a Python environment with the following pre-loaded:
 
 EXECUTION_HELPER_SECTIONS = """Available Excel Helper Functions:
 
+**🚫 CRITICAL CONSTRAINTS - MUST FOLLOW:**
+1. **DO NOT use `pd.ExcelWriter()` or `DataFrame.to_excel()`** - These create separate files and cause path confusion
+2. **DO NOT use `engine="xlsxwriter"`** - This module is not available
+3. **DO NOT use pandas Styler (`df.style.apply()`)** - Use `apply_formatting()` or `highlight_rows()` instead
+4. **ALL file writing MUST go through ExcelToolkit functions** - Use `write_dataframe_to_sheet()` + `save_workbook_to()`
+
+**📝 UNIFIED OUTPUT WORKFLOW (MUST FOLLOW):**
+When you need to write results to an Excel file, follow this exact pattern:
+```python
+# Step 1: Convert combined DataFrame to 2D list (include headers)
+# This is the DETAILED DATA TABLE (e.g., all 30 rows of spending records)
+detailed_data = [combined_data.columns.tolist()] + combined_data.values.tolist()
+
+# Step 2: Create/clear output sheet
+create_output_sheet("Output")
+
+# Step 3: Write DETAILED DATA TABLE starting at A1
+write_dataframe_to_sheet(detailed_data, "Output", "A1")
+# Now the sheet has: Row 1 = headers, Rows 2-31 = data (30 rows)
+
+# Step 4: Calculate where summary should go (after detailed data + 2 blank rows)
+summary_start_row = len(detailed_data) + 2  # e.g., 32 if detailed_data has 31 rows (1 header + 30 data)
+
+# Step 5: Prepare summary statistics as 2D list
+summary_data = [
+    ["Metric", "Value"],  # Header row
+    ["Total Spending (£)", total_spending],
+    ["Average Daily Spending (£)", average_spending],
+    ["Max Spending Day(s)", max_spending_days_str],  # Convert dates to strings!
+    ["Max Spending Amount (£)", max_spending]
+]
+
+# Step 6: Write summary below detailed data
+write_dataframe_to_sheet(summary_data, "Output", f"A{summary_start_row}")
+
+# Step 7: Highlight the max spending day ROW in the DETAILED DATA TABLE
+# Find which row in detailed_data contains the max spending day
+# Row numbers are 1-indexed: row 1 = header, row 2 = first data row
+max_spending_row_in_table = None
+for idx, row in combined_data.iterrows():
+    if row['Daily Spending (£)'] == max_spending:
+        # +2 because: +1 for header row, +1 for 1-indexing
+        max_spending_row_in_table = idx + 2
+        break
+
+if max_spending_row_in_table:
+    highlight_rows("Output", [max_spending_row_in_table], {"fill_color": "red"})
+
+# Step 8: Save to SINGLE output path (use the provided output_path variable)
+saved_file = save_workbook_to(output_path)
+```
+
+**CRITICAL: Output Structure Requirements:**
+- The Output sheet MUST contain BOTH:
+  1. **Detailed data table** (all merged records) starting at A1
+  2. **Summary statistics** below the detailed table (with 2 blank rows gap)
+- DO NOT write only summary - always include the full detailed data table first!
+
 **Basic Sheet Operations:**
 - `list_sheets()`: List all sheet names in the workbook
   - **Usage:** `sheets = list_sheets()`
   - **Output:** List of sheet names: `['Sheet1', 'Sheet2', 'Sheet3']`
-  - **Important:** Use this first to see what sheets are available!
 
 - `get_sheet(sheet_name=None)`: Get worksheet by name or active sheet
   - **Usage:** `sheet = get_sheet("Sheet1")` or `sheet = get_sheet()` for active sheet
-  - **Output:** Returns openpyxl worksheet object for further operations
 
 - `get_sheet_info(sheet_name=None)`: Get information about a sheet
   - **Usage:** `info = get_sheet_info("Sheet1")`
-  - **Output:** Dict with name, dimensions: `{'name': 'Sheet1', 'max_row': 100, 'max_column': 5, 'dimensions': '100 rows × 5 columns'}`
+  - **Output:** Dict with name, dimensions
 
 - `get_all_sheets_info()`: Get information about all sheets
   - **Usage:** `all_info = get_all_sheets_info()`
-  - **Output:** Dict mapping sheet names to their info: `{'Sheet1': {...}, 'Sheet2': {...}}`
 
 **Reading Data:**
 - `inspector(range_ref, sheet_name=None)`: Read cell values from specified range
   - **Usage:** `data = inspector("A1:C3", "Sheet1")` or `value = inspector("B5")`
-  - **Output:** List of lists format: `[['A1', 'B1', 'C1'], ['A2', 'B2', 'C2']]` or `[['single_value']]`
-  - **Multi-sheet:** Always specify `sheet_name` when working with multiple sheets!
+  - **Output:** List of lists format: `[['A1', 'B1', 'C1'], ['A2', 'B2', 'C2']]`
 
 - `read_multiple_sheets(sheet_names, range_ref=None)`: Read data from multiple sheets at once
   - **Usage:** `data = read_multiple_sheets(["Sheet1", "Sheet2"], "A1:C10")`
-  - **Output:** Dict mapping sheet names to data: `{'Sheet1': [[...]], 'Sheet2': [[...]]}`
 
-- `inspector_attribute(range_ref, attributes, sheet_name=None)`: Extract cell formatting and properties
+- `inspector_attribute(range_ref, attributes, sheet_name=None)`: Extract cell formatting
   - **Usage:** `attrs = inspector_attribute("A1:B2", ["color", "font"], "Sheet1")`
-  - **Attributes:** `["color", "font", "formula"]` - specify which properties to extract
-  - **Output:** Dict with structure: `{"range": "A1:B2", "sheet": "Sheet1", "attributes": {"color": {"A1": "#FF0000"}, "font": {"B2": "name:Arial; size:12; bold:True"}}}`
 
-- `search(value, sheet_name=None, case_sensitive=False, search_type='partial')`: Find cells containing specific values
+- `search(value, sheet_name=None, case_sensitive=False, search_type='partial')`: Find cells
   - **Usage:** `matches = search("Total", case_sensitive=True, search_type="whole")`
-  - **Search types:** `"partial"` (default), `"whole"`, `"strip"`
-  - **Output:** List of dicts: `[{"coordinate": "A5", "value": "Total Sales", "row": 5, "column": 1}]`
 
-- `apply_formatting(sheet_name, range_ref, format_dict)`: Apply cell formatting (colors, fonts, borders)
-  - **Usage:** `result = apply_formatting("Sheet1", "A1:C5", {"fill_color": "#FF0000", "bold": True})`
-  - **Format Options:**
-    - `fill_color`: Background color (hex: '#FF0000' or name: 'red')
-    - `font_color`: Font color (hex: '#FF0000' or name: 'red')
-    - `font_size`: Font size (int)
-    - `font_name`: Font name (str)
-    - `bold`: Bold text (bool)
-    - `italic`: Italic text (bool)
-    - `underline`: Underline text (bool)
-    - `border`: Border style ('thin', 'medium', 'thick')
-    - `alignment`: Text alignment ('left', 'center', 'right')
-  - **Output:** String message confirming formatting applied to specified range
+**📤 Writing Data (USE THESE INSTEAD OF DataFrame.to_excel!):**
+- `create_output_sheet(sheet_name)`: Create or clear a sheet for output
+  - **Usage:** `create_output_sheet("Output")`
+  - **Important:** Always call this before writing new data
 
-- `save_plot_to_excel(sheet_name, cell_position='A1', figsize=(10,6), dpi=100)`: Save current matplotlib plot to Excel sheet
-  - **Usage:** `result = save_plot_to_excel("Charts", "D5", figsize=(8,6))`
-  - **Prerequisites:** Create matplotlib plot first with `plt.plot()` or similar
-  - **Output:** String message: `"Chart saved to Charts!D5"` or `"No plot to save"`
+- `write_dataframe_to_sheet(data, sheet_name, start_cell="A1")`: Write 2D list data to sheet
+  - **Usage:** `write_dataframe_to_sheet(data_2d, "Output", "A1")`
+  - **Important:** Convert DataFrame to 2D list first: `[df.columns.tolist()] + df.values.tolist()`
 
-- `save_workbook()`: Save workbook to file with '_output' postfix
+- `add_summary_row(sheet_name, row_number, summary_data)`: Add labeled summary statistics
+  - **Usage:** `add_summary_row("Output", 35, {"Total": 2023.75, "Average": 72.28})`
+
+**🎨 Formatting:**
+- `apply_formatting(sheet_name, range_ref, format_dict)`: Apply cell formatting
+  - **Usage:** `apply_formatting("Sheet1", "A1:C5", {"fill_color": "red", "bold": True})`
+
+- `highlight_rows(sheet_name, row_numbers, format_dict)`: Highlight entire rows
+  - **Usage:** `highlight_rows("Output", [5], {"fill_color": "red"})`
+  - **Important:** Use this to highlight max spending days, important records, etc.
+  - **Row numbers are 1-indexed!** Add 1 for header row if data starts at row 2
+
+**💾 Saving (USE save_workbook_to FOR EXPLICIT PATH!):**
+- `save_workbook_to(output_path)`: Save workbook to specific path (RECOMMENDED)
+  - **Usage:** `saved_file = save_workbook_to(output_path)`
+  - **Returns:** The exact path where file was saved
+  - **Important:** Use the `output_path` variable provided in the context
+
+- `save_workbook()`: Save workbook with auto-generated '_output' suffix
   - **Usage:** `filename = save_workbook()`
-  - **Output:** Returns saved filename string: `"/path/to/original_output.xlsx"` and prints confirmation message
+  - **Note:** Prefer `save_workbook_to(output_path)` for explicit control
+
+- `save_plot_to_excel(sheet_name, cell_position='A1', figsize=(10,6), dpi=100)`: Save matplotlib plot
+  - **Usage:** `result = save_plot_to_excel("Charts", "D5", figsize=(8,6))`
 
 **RESPONSE FORMATS - MANDATORY COMPLIANCE:**
 

@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """
  * Standalone demonstration script for the SheetBrain library.
  *

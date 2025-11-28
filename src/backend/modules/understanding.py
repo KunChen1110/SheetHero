@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """Understanding module for initial analysis and context generation."""
 
 import base64
