@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """Utility modules for SheetBrain."""
 
 from .excel_toolkit import ExcelToolkit, calculate_token_cost_line

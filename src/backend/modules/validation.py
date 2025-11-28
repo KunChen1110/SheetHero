@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """Validation module for final quality assurance after execution."""
 
 import re
@@ -8,6 +5,7 @@ import time
 from typing import Dict, Any, Optional
 
 from utils.logger import setup_logger
+from modules.prompts import build_validation_prompt
 
 logger = setup_logger(__name__)
 
@@ -18,7 +16,7 @@ class ValidationModule:
     If issues are found, provides feedback for re-execution. If validation passes, confirms the final answer.
     """
 
-    def __init__(self, client, deployment: str, excel_context_understanding: str):
+    def __init__(self, client, deployment: str, excel_context_understanding: str, verbose: bool = False):
         """
         Initialize the ValidationModule.
 
@@ -30,6 +28,7 @@ class ValidationModule:
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
+        self.verbose = verbose
 
     def reflect(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> Dict[str, Any]:
         """
@@ -86,7 +85,6 @@ class ValidationModule:
 
     def _create_validation_prompt(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> list:
         """Create a comprehensive validation prompt for the LLM."""
-
         # Extract key information from execution result
         execution_success = execution_result.get("success", False)
         final_answer = execution_result.get("answer", "No answer provided")
@@ -97,80 +95,15 @@ class ValidationModule:
         # Format full conversation history
         conversation_history_text = self._format_full_conversation_history(conversation_history)
 
-        prompt_text = f"""You are an expert Excel data analysis validator. Your task is to thoroughly review and validate the execution process and final answer for an Excel analysis question.
-
-**ORIGINAL USER QUESTION:**
-{user_question}
-**ORIGINAL USER QUESTION END:**
-
-**EXCEL DATA CONTEXT:**
-{self.excel_context_understanding}
-**EXCEL DATA CONTEXT END:**
-
-**EXECUTION RESULTS:**
-- Success: {execution_success}
-- Total Turns: {total_turns}
-- Final Answer: {final_answer}
-- Code Executions: {execution_summary.get('total_code_executions', 0)}
-- Successful Executions: {execution_summary.get('successful_executions', 0)}
-- Failed Executions: {execution_summary.get('failed_executions', 0)}
-**EXECUTION RESULTS END:**
-
-**FULL CONVERSATION HISTORY:**
-{conversation_history_text}
-**FULL CONVERSATION HISTORY END:**
-
-**ORIGINAL USER QUESTION:**
-{user_question}
-**ORIGINAL USER QUESTION END:**
-
-**YOUR VALIDATION TASKS:**
-
-1. **Answer Quality:**
-- Does the final answer directly address the user's question?
-- Are numerical calculations accurate and verifiable?
-- Is the answer format appropriate (values, comparisons, recommendations)?
-
-2. **Reasoning & Approach:**
-- Was the methodology logical and systematic?
-- Were appropriate Excel functions and analysis methods used?
-- Was the reasoning chain complete from exploration to conclusion?
-
-3. **Data Handling:**
-- Did the agent correctly interpret the Excel data structure?
-- Were relevant columns/sheets and data relationships properly identified?
-- Were data types, null values, and edge cases handled appropriately?
-- Look for hierarchical relationships in data (e.g., "of which", "including", indented items)
-- Do not sum subcategories with their parent categories
-
-4. **Critical Issues:**
-- Are there fundamental data structure misunderstandings?
-- Any calculation errors, wrong formulas, or incorrect aggregations?
-- Missing data validation or logical gaps in reasoning?
-
-**PROVIDE YOUR ASSESSMENT IN THIS EXACT FORMAT:**
-
-**VALIDATION_STATUS:** [PASSED/FAILED]
-
-**CONFIDENCE_SCORE:** [0.0-1.0]
-
-**ISSUES_FOUND:**
-- [List any issues, concerns, or errors identified]
-- [One issue per bullet point]
-- [Use "None identified" if no issues found]
-
-**IMPROVEMENT_FEEDBACK:**
-[If VALIDATION_STATUS is FAILED, provide specific, actionable feedback for re-execution:
-- What specific steps should be taken differently?
-- Which data should be re-examined?
-- What alternative approaches should be tried?
-- Which specific Excel operations or calculations need correction?
-If VALIDATION_STATUS is PASSED, write "No improvement needed - solution is valid."]
-
-**FINAL_ASSESSMENT:**
-[Provide a simple assessment of the solution quality, explaining your confidence score and validation decision]
-
-Please be thorough and objective in your assessment. If issues are found, focus on providing clear, actionable feedback for improvement."""
+        prompt_text = build_validation_prompt(
+            user_question=user_question,
+            excel_context_understanding=self.excel_context_understanding,
+            execution_success=execution_success,
+            total_turns=total_turns,
+            final_answer=final_answer,
+            execution_summary=execution_summary,
+            conversation_history_text=conversation_history_text
+        )
 
         return [{"role": "user", "content": prompt_text}]
 
@@ -250,11 +183,12 @@ Please be thorough and objective in your assessment. If issues are found, focus 
                     messages=messages,
                 )
 
-                print("="*50)
-                print("VALIDATION MODULE LLM RESPONSE CONTENT:")
-                print("="*50)
-                print(response.choices[0].message.content)
-                print("="*50)
+                if self.verbose:
+                    print("="*50)
+                    print("VALIDATION MODULE LLM RESPONSE CONTENT:")
+                    print("="*50)
+                    print(response.choices[0].message.content)
+                    print("="*50)
 
                 return response.choices[0].message.content
 
