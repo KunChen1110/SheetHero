@@ -1,6 +1,6 @@
 """
 Output formatting utilities for SheetBrain results.
-Provides user-friendly and verbose output modes.
+Provides user-friendly output mode.
 """
 import os
 import re
@@ -183,8 +183,8 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
             output_lines.append(f"  - {path}")
     
     # Status and metrics
-    status_emoji = "✅ Success" if result['success'] else "❌ Failed"
-    output_lines.append(f"\nStatus:      {status_emoji}")
+    status_text = "Success" if result['success'] else "Failed"
+    output_lines.append(f"\nStatus:      {status_text}")
     output_lines.append(f"Confidence:  {result['confidence_score']:.2f}")
     output_lines.append(f"Iterations:  {result['total_iterations']}")
     output_lines.append(f"Duration:    {result['total_duration']:.2f}s")
@@ -194,6 +194,10 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
         output_lines.append("\nResult:")
         if answer_path:
             output_lines.append(f"  Result file saved to: {answer_path}")
+            # Add verbose log path if available
+            verbose_log_path = result.get('verbose_log_path')
+            if verbose_log_path:
+                output_lines.append(f"  Verbose log saved to: {verbose_log_path}")
         else:
             output_lines.append("  Result file saved successfully.")
     else:
@@ -227,58 +231,11 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
             output_lines.append(f"  - {issue}")
     else:
         output_lines.append("\nIssues:")
-        output_lines.append("  - None")
+        output_lines.append("  - None identified.")
     
     output_lines.append("===================================================")
     
     return '\n'.join(output_lines)
 
 
-def format_output_verbose_mode(result: Dict[str, Any], excel_paths: list, question: str) -> str:
-    """
-    Format output in verbose mode (detailed, for debugging).
-    
-    Args:
-        result: Dictionary containing analysis results
-        excel_paths: List of input file paths
-        question: User's question
-    
-    Returns:
-        Formatted output string with detailed information
-    """
-    output_lines = []
-    output_lines.append("\n" + "="*60)
-    output_lines.append("ANALYSIS RESULTS")
-    output_lines.append("="*60)
-    
-    # Show key information about the analysis
-    output_lines.append(f"Success: {'✅' if result['success'] else '❌'}")
-    output_lines.append(f"Answer: {result['answer']}")
-    output_lines.append(f"Confidence: {result['confidence_score']:.2f}/1.0")
-    output_lines.append(f"Iterations: {result['total_iterations']}")
-    output_lines.append(f"Duration: {result['total_duration']:.2f}s")
-    output_lines.append(f"Validation Passed: {'✅' if result.get('validation_passed', False) else '❌'}")
-    
-    # Display any problems found in the Excel file
-    if result['issues_found']:
-        output_lines.append(f"\nIssues Found:")
-        for issue in result['issues_found']:
-            output_lines.append(f"  - {issue}")
-    
-    # Show detailed feedback if available
-    if result.get('improvement_feedback'):
-        output_lines.append(f"\nImprovement Feedback:")
-        output_lines.append(result['improvement_feedback'])
-    
-    # Show execution history if available
-    if result.get('all_execution_results'):
-        output_lines.append(f"\nExecution History:")
-        for i, exec_result in enumerate(result['all_execution_results'], 1):
-            output_lines.append(f"  Iteration {i}:")
-            output_lines.append(f"    Success: {exec_result.get('success', False)}")
-            output_lines.append(f"    Turns: {exec_result.get('total_turns', 0)}")
-    
-    output_lines.append("="*60)
-    
-    return '\n'.join(output_lines)
 
