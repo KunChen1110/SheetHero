@@ -16,7 +16,7 @@ class ValidationModule:
     If issues are found, provides feedback for re-execution. If validation passes, confirms the final answer.
     """
 
-    def __init__(self, client, deployment: str, excel_context_understanding: str, verbose: bool = False):
+    def __init__(self, client, deployment: str, excel_context_understanding: str, progress_log_file=None):
         """
         Initialize the ValidationModule.
 
@@ -24,11 +24,18 @@ class ValidationModule:
             client: OpenAI client instance
             deployment: Model deployment name
             excel_context_understanding: Excel context for understanding
+            progress_log_file: File handle for progress logging (optional)
         """
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
-        self.verbose = verbose
+        self.progress_log_file = progress_log_file
+    
+    def _log_to_file(self, message: str):
+        """Write message to progress log file if available."""
+        if self.progress_log_file:
+            self.progress_log_file.write(message + "\n")
+            self.progress_log_file.flush()
 
     def reflect(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> Dict[str, Any]:
         """
@@ -54,6 +61,9 @@ class ValidationModule:
         # Get validation analysis
         try:
             validation_analysis = self._get_llm_response(messages)
+            
+            # Log validation analysis to file
+            self._log_to_file(f"\n**Validation Analysis:**\n```\n{validation_analysis}\n```\n")
 
             # Parse the validation response
             validation_result = self._parse_validation_response(validation_analysis)
@@ -183,12 +193,7 @@ class ValidationModule:
                     messages=messages,
                 )
 
-                if self.verbose:
-                    print("="*50)
-                    print("VALIDATION MODULE LLM RESPONSE CONTENT:")
-                    print("="*50)
-                    print(response.choices[0].message.content)
-                    print("="*50)
+                # Verbose output removed - only logged to file
 
                 return response.choices[0].message.content
 

@@ -24,7 +24,7 @@ class ExecutionModule:
 
     def __init__(self, client, deployment: str, code_globals: dict, code_locals: dict,
                  excel_context_execution: str, output_instruction: Optional[str] = None,
-                 verbose: bool = False):
+                 progress_log_file=None):
         """
         Initialize the ExecutionModule.
 
@@ -35,6 +35,7 @@ class ExecutionModule:
             code_locals: Local variables for code execution
             excel_context_execution: Excel context for execution
             output_instruction: Additional guidance on how to deliver results
+            progress_log_file: File handle for progress logging (optional)
         """
         self.client = client
         self.deployment = deployment
@@ -42,8 +43,14 @@ class ExecutionModule:
         self.code_locals = code_locals
         self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
-        self.verbose = verbose
+        self.progress_log_file = progress_log_file
         self.conversation_history = []
+    
+    def _log_to_file(self, message: str):
+        """Write message to progress log file if available."""
+        if self.progress_log_file:
+            self.progress_log_file.write(message + "\n")
+            self.progress_log_file.flush()
 
     def _get_system_prompt(self) -> dict:
         """Create the system prompt for the conversation."""
@@ -87,6 +94,9 @@ class ExecutionModule:
 
         for turn in range(max_turns):
             logger.info(f"Execution turn {turn + 1}")
+            
+            # Log turn number to file
+            self._log_to_file(f"\n---\n\n### Execution Turn {turn + 1}\n")
 
             try:
                 response_message = self._get_llm_response()
@@ -94,6 +104,10 @@ class ExecutionModule:
 
                 # Parse response for code action or final answer
                 thought, code_action = self._parse_llm_response(response_message.content)
+                
+                # Log thought process to file
+                if thought:
+                    self._log_to_file(f"\n**Thought (Turn {turn + 1}):**\n{thought}\n")
 
                 if code_action is None:
                     # No code to execute, check if it's a final answer
@@ -106,6 +120,9 @@ class ExecutionModule:
                             final_answer = thought.replace("Final Answer:", "").strip()
 
                         logger.info(f"Final answer found: {final_answer}")
+                        
+                        # Log final answer to file
+                        self._log_to_file(f"\n**Final Answer (Turn {turn + 1}):**\n{final_answer}\n")
 
                         return {
                             "success": True,
@@ -132,11 +149,17 @@ class ExecutionModule:
 
                 # Execute code action
                 logger.info(f"Executing Python code:\n{code_action}")
+                
+                # Log code to file
+                self._log_to_file(f"\n**Executing Python code (Turn {turn + 1}):**\n```python\n{code_action}\n```\n")
 
                 try:
                     execution_result = self._execute_code(code_action)
                     observation = f"Code execution result:\n{execution_result}"
                     logger.info(f"Execution result:\n{execution_result}")
+                    
+                    # Log execution result to file
+                    self._log_to_file(f"\n**Execution result (Turn {turn + 1}):**\n```\n{execution_result}\n```\n")
 
                     # Track this execution step
                     execution_steps.append({
@@ -151,6 +174,9 @@ class ExecutionModule:
                 except Exception as e:
                     error_message = f"Code execution error: {str(e)}"
                     logger.error(f"Execution error: {error_message}")
+                    
+                    # Log error to file
+                    self._log_to_file(f"\n**Execution error (Turn {turn + 1}):**\n```\n{error_message}\n```\n")
 
                     # Track this failed execution step
                     execution_steps.append({
@@ -264,12 +290,7 @@ class ExecutionModule:
                 choice = response.choices[0]
                 message = choice.message
 
-                if self.verbose:
-                    print("="*50)
-                    print("EXECUTION MODULE LLM RESPONSE:")
-                    print("="*50)
-                    print(message.content)
-                    print("="*50)
+                # Verbose output removed - only logged to file
                 return message
 
             except RateLimitError as e:

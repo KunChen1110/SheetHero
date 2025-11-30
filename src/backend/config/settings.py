@@ -13,7 +13,6 @@ class Config:
     total_token_budget: int = 5000
 
     # === Output ===
-    verbose: bool = False
     output_mode: str = "text" # "text" or "file"
     output_file: Optional[str] = None
 
