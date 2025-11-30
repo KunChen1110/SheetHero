@@ -62,3 +62,30 @@
 ### --- Fixed ---
 - Fixed `main.py` so CLI arguments are parsed correctly and passed into `SheetBrain`.
 - Ensured the selected output mode (file or text) is respected end-to-end when running tasks via the command line.
+
+## 30/11/2025
+### --- Added ---
+- Added centralized prompt management in `modules/prompts.py`
+  - Integrated all prompts from Understanding, Execution, and Validation modules into a single file
+  - Improved maintainability and consistency of AI prompts
+
+- Added automatic verbose logging system
+  - All detailed execution logs are now automatically saved to markdown files in `loggers/` folder
+  - Logs include LLM thoughts, code execution, validation analysis, and iteration details
+  - Log file path is displayed in the result output
+
+### --- Changed ---
+- Refactored output and logging architecture
+  - Removed verbose/user mode selection - system now always generates detailed logs to file as the team discussed
+  - Terminal output is always concise (user mode format)
+
+### --- Removed ---
+- Removed unused functions and imports
+  - `_content_to_text()`, `_format_dataframe_to_markdown()`, `_detect_file_path()` from `utils/output_formatter.py`
+  - `output_mode()` alias function from `core/agent.py`
+  - Unused `pandas` and `re` imports from `output_formatter.py`
+  - `verbose` configuration option from `config/settings.py` (always enabled now)
+
+- Simplified code structure
+  - Removed verbose comments from `core/__init__.py`
+  - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
