@@ -77,6 +77,29 @@ class SheetBrain:
             file_path=self.config.output_file
         )
         
+        # === Progress Log File Setup (always enabled) ===
+        from datetime import datetime
+        from pathlib import Path
+        
+        backend_dir = Path(__file__).parent.parent
+        log_dir = backend_dir / "loggers"
+        log_dir.mkdir(exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if self.excel_paths:
+            first_file = os.path.splitext(os.path.basename(self.excel_paths[0]))[0]
+            session_id = f"sheetbrain_{first_file}"
+        else:
+            session_id = "sheetbrain"
+        
+        self._progress_log_path = log_dir / f"{session_id}_{timestamp}.md"
+        self._progress_log_file = open(self._progress_log_path, 'w', encoding='utf-8')
+        # Write header
+        self._progress_log_file.write(f"# SheetBrain Verbose Log\n\n")
+        self._progress_log_file.write(f"**Session started:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        self._progress_log_file.write("---\n\n")
+        self._progress_log_file.flush()
+        
         # Compute output_path BEFORE calling _build_output_instruction
         if self.output_preferences.get("mode") == "file":
             self._output_path = self.output_preferences.get("file_path")
@@ -138,19 +161,65 @@ class SheetBrain:
             self.code_locals,
             self.excel_context_execution,
             self.output_instruction,
-            verbose=getattr(self.config, "verbose", False)
+            progress_log_file=None  # Will be set after initialization
         )
         self.validation_module = ValidationModule(
             self.client,
             self.config.deployment,
             self.excel_context_understanding,
-            verbose=getattr(self.config, "verbose", False)
+            progress_log_file=self._progress_log_file
         )
+        
+        # Pass progress log file to execution module
+        self.execution_module.progress_log_file = self._progress_log_file
 
-    def _log_progress(self, message: str, detail: bool = False) -> None:
-        if not getattr(self.config, "verbose", False):
-            return
-        print(message)
+    def _log_to_file(self, message: str):
+        """Write message to progress log file."""
+        if self._progress_log_file:
+            self._progress_log_file.write(message + "\n")
+            self._progress_log_file.flush()
+    
+    def _log_progress(self, message: str, to_terminal: bool = False):
+        """
+        Log progress message to file (always) and optionally to terminal.
+        
+        Args:
+            message: Message to log
+            to_terminal: If True, also print to terminal (for user mode output)
+        """
+        # Always write to file
+        formatted = self._format_progress_message(message)
+        self._log_to_file(formatted)
+        
+        # Optionally print to terminal (only for key milestones) - currently disabled
+        # if to_terminal:
+        #     print(message)
+    
+    def _format_progress_message(self, message: str) -> str:
+        """Format progress message for markdown output."""
+        cleaned = message.strip()
+        
+        # Format separators
+        if cleaned.startswith("=" * 40) or cleaned.startswith("=" * 60) or cleaned.startswith("=" * 80):
+            return "\n---\n"
+        elif cleaned.startswith("-" * 40) or cleaned.startswith("-" * 60):
+            return "\n**" + cleaned.replace("-", "").strip() + "**\n"
+        
+        # Format section headers
+        if "[FINAL SUMMARY]" in cleaned:
+            return f"\n## {cleaned}\n"
+        elif "[STAGE" in cleaned or "[ITERATION" in cleaned:
+            return f"\n### {cleaned}\n"
+        elif any(prefix in cleaned for prefix in ["[SheetBrain]", "[SUCCESS", "[STOPPING", "[CONTINUE", "[MAX ITERATIONS", "[Excel]"]):
+            return f"**{cleaned}**"
+        
+        # Format emoji messages
+        if cleaned.startswith("❌") or cleaned.startswith("⚠️"):
+            return f"⚠️ {cleaned.lstrip('❌⚠️').strip()}"
+        elif cleaned.startswith("✅"):
+            return f"✅ {cleaned.lstrip('✅').strip()}"
+        
+        return cleaned
 
     def run(self, user_question: str) -> Dict[str, Any]:
         # Use config defaults if parameters not provided (allows CLI overrides)
@@ -158,8 +227,8 @@ class SheetBrain:
 
         # Log and print that we're starting analysis
         logger.info("Starting iterative three-stage analysis")
-        self._log_progress("🚀 [SheetBrain] Starting iterative three-stage analysis...", detail=True)
-        self._log_progress("="*80, detail=True)
+        self._log_progress("🚀 [SheetBrain] Starting iterative three-stage analysis...", to_terminal=False)
+        self._log_progress("="*80, to_terminal=False)
 
         # === Timing and Tracking Variables ===
         overall_start_time = time.time()
@@ -169,25 +238,27 @@ class SheetBrain:
         try:
             # ===== STAGE 1: UNDERSTANDING (Optional but Recommended) =====
             logger.info("Running understanding module")
-            self._log_progress("📖 [STAGE 1] UNDERSTANDING MODULE", detail=True)
-            self._log_progress("-" * 40, detail=True)
+            self._log_progress("📖 [STAGE 1] UNDERSTANDING MODULE", to_terminal=False)
+            self._log_progress("-" * 40, to_terminal=False)
 
             understanding_start_time = time.time()
             # Call the UnderstandingModule to analyze the question + Excel context
             understanding_output = self.understanding_module.analyze(user_question)
             understanding_duration = time.time() - understanding_start_time
 
-            self._log_progress(f"✅ [STAGE 1] Understanding completed in {understanding_duration:.2f}s", detail=True)
-            self._log_progress(f"📝 [STAGE 1] Analysis preview: {understanding_output}...", detail=True)
+            self._log_progress(f"✅ [STAGE 1] Understanding completed in {understanding_duration:.2f}s", to_terminal=False)
+            # Log full understanding output to file
+            self._log_to_file(f"\n**Understanding Analysis:**\n```\n{understanding_output}\n```\n")
 
             # ===== ITERATIVE EXECUTE-VALIDATE LOOP =====
             for iteration in range(max_turns):
                 logger.info(f"Starting iteration {iteration + 1}/{max_turns}")
-                self._log_progress(f"\n🔄 [ITERATION {iteration + 1}/{max_turns}] EXECUTE-VALIDATE CYCLE", detail=True)
-                self._log_progress("-" * 60, detail=True)
+                self._log_progress(f"\n🔄 [ITERATION {iteration + 1}/{max_turns}] EXECUTE-VALIDATE CYCLE", to_terminal=False)
+                self._log_progress("="*60, to_terminal=False)
 
                 # ===== STAGE 2: EXECUTION =====
-                self._log_progress(f"💻 [ITERATION {iteration + 1}] EXECUTION MODULE", detail=True)
+                self._log_progress(f"💻 [ITERATION {iteration + 1}] EXECUTION MODULE", to_terminal=False)
+                self._log_progress("-" * 40, to_terminal=False)
                 execution_start_time = time.time()
 
                 # If this isn't the first iteration, add validation feedback from previous attempt
@@ -214,19 +285,16 @@ Please address these specific points in your new analysis approach."""
                 execution_duration = time.time() - execution_start_time
                 all_execution_results.append(execution_result)
 
-                # Print execution metrics
+                # Log execution metrics
                 status_emoji = "✅" if execution_result["success"] else "❌"
-                self._log_progress(f"{status_emoji} [ITERATION {iteration + 1}] Execution completed in {execution_duration:.2f}s", detail=True)
-                self._log_progress(f"🔄 [ITERATION {iteration + 1}] Total turns: {execution_result['total_turns']}", detail=True)
-                self._log_progress(
-                    f"📊 [ITERATION {iteration + 1}] Code executions: {execution_result.get('execution_summary', {}).get('total_code_executions', 0)}",
-                    detail=True
-                )
+                self._log_progress(f"{status_emoji} [ITERATION {iteration + 1}] Execution completed in {execution_duration:.2f}s", to_terminal=False)
+                self._log_progress(f"🔄 [ITERATION {iteration + 1}] Total turns: {execution_result['total_turns']}", to_terminal=False)
+                self._log_progress(f"📊 [ITERATION {iteration + 1}] Code executions: {execution_result.get('execution_summary', {}).get('total_code_executions', 0)}", to_terminal=False)
 
                 # ===== STAGE 3: VALIDATION (if enabled) =====
                 logger.info(f"Running validation module for iteration {iteration + 1}")
-                self._log_progress(f"\n🔍 [ITERATION {iteration + 1}] VALIDATION MODULE", detail=True)
-                self._log_progress("-" * 40, detail=True)
+                self._log_progress(f"\n🔍 [ITERATION {iteration + 1}] VALIDATION MODULE", to_terminal=False)
+                self._log_progress("-" * 40, to_terminal=False)
                 validation_start_time = time.time()
 
                 # Run the ValidationModule to check if the answer is correct
@@ -234,24 +302,18 @@ Please address these specific points in your new analysis approach."""
                 validation_duration = time.time() - validation_start_time
                 all_validation_results.append(validation_result)
 
-                # Print validation results
+                # Log validation results
                 validation_emoji = "✅" if validation_result["validation_passed"] else "⚠️"
-                self._log_progress(
-                    f"{validation_emoji} [ITERATION {iteration + 1}] Validation completed in {validation_duration:.2f}s "
-                    f"(confidence {validation_result['confidence_score']:.2f})",
-                    detail=True
-                )
-                self._log_progress(
-                    f"📋 [ITERATION {iteration + 1}] Validation: {'PASSED' if validation_result['validation_passed'] else 'FAILED'}",
-                    detail=True
-                )
+                self._log_progress(f"{validation_emoji} [ITERATION {iteration + 1}] Validation completed in {validation_duration:.2f}s", to_terminal=False)
+                self._log_progress(f"🎯 [ITERATION {iteration + 1}] Confidence: {validation_result['confidence_score']:.2f}", to_terminal=False)
+                self._log_progress(f"📋 [ITERATION {iteration + 1}] Validation: {'PASSED' if validation_result['validation_passed'] else 'FAILED'}", to_terminal=False)
 
                 # === Loop Termination Logic ===
                 # Decide whether to stop iterating or try again
                 if validation_result['validation_passed']:
                     # Success! Answer is good enough
                     logger.info(f"Validation passed on iteration {iteration + 1}")
-                    self._log_progress(f"🎉 [SUCCESS] Validation passed on iteration {iteration + 1}!", detail=True)
+                    self._log_progress(f"🎉 [SUCCESS] Validation passed on iteration {iteration + 1}!", to_terminal=False)
                     final_answer = validation_result.get('verified_answer', execution_result['answer'])
                     overall_success = True
                     confidence_score = validation_result['confidence_score']
@@ -261,7 +323,7 @@ Please address these specific points in your new analysis approach."""
                 elif not validation_result.get('requires_reexecution', True):
                     # Validation says no point in trying again
                     logger.warning("Validation indicates no further improvement possible")
-                    self._log_progress("🛑 [STOPPING] Validation indicates no further improvement possible", detail=True)
+                    self._log_progress("🛑 [STOPPING] Validation indicates no further improvement possible", to_terminal=False)
                     final_answer = execution_result['answer']
                     overall_success = False
                     confidence_score = validation_result['confidence_score']
@@ -271,12 +333,20 @@ Please address these specific points in your new analysis approach."""
                 else:
                     # Validation found issues - prepare for next iteration
                     logger.info(f"Issues found, preparing for iteration {iteration + 2}")
-                    self._log_progress(f"🔄 [CONTINUE] Issues found, preparing for iteration {iteration + 2}", detail=True)
+                    self._log_progress(f"🔄 [CONTINUE] Issues found, preparing for iteration {iteration + 2}", to_terminal=False)
+                    
+                    # Log issues and feedback to file
+                    if validation_result.get('issues_found'):
+                        self._log_to_file(f"\n**Issues Found:**\n")
+                        for issue in validation_result['issues_found']:
+                            self._log_to_file(f"- {issue}\n")
+                    if validation_result.get('improvement_feedback'):
+                        self._log_to_file(f"\n**Improvement Feedback:**\n```\n{validation_result['improvement_feedback']}\n```\n")
 
                     # Check if we're out of iterations
                     if iteration == max_turns - 1:
                         logger.warning("Reached maximum iterations without validation")
-                        self._log_progress("⚠️ [MAX ITERATIONS] Reached maximum iterations without validation", detail=True)
+                        self._log_progress("⚠️ [MAX ITERATIONS] Reached maximum iterations without validation", to_terminal=False)
                         final_answer = execution_result['answer']
                         overall_success = False
                         confidence_score = validation_result['confidence_score']
@@ -307,19 +377,30 @@ Please address these specific points in your new analysis approach."""
             total_iterations = len(all_execution_results)
 
             logger.info(f"Analysis completed. Success: {overall_success}, Iterations: {total_iterations}")
-            self._log_progress("\n" + "="*80, detail=True)
-            self._log_progress("🎯 [FINAL SUMMARY]", detail=True)
-            self._log_progress("="*80, detail=True)
-            self._log_progress(f"Overall Success: {'✅ YES' if overall_success else '❌ NO'}", detail=True)
-            self._log_progress(f"Total Iterations: {total_iterations}", detail=True)
-            self._log_progress(f"Final Answer: {final_answer}", detail=True)
-            self._log_progress(f"Confidence Score: {confidence_score:.2f}/1.0", detail=True)
-            self._log_progress(f"Validation Passed: {'✅ YES' if validation_passed else '❌ NO'}", detail=True)
-            self._log_progress(f"Total Duration: {total_duration:.2f}s", detail=True)
-            self._log_progress("="*80, detail=True)
+            self._log_progress("\n" + "="*80, to_terminal=False)
+            self._log_progress("🎯 [FINAL SUMMARY]", to_terminal=False)
+            self._log_progress("="*80, to_terminal=False)
+            self._log_progress(f"Overall Success: {'✅ YES' if overall_success else '❌ NO'}", to_terminal=False)
+            self._log_progress(f"Total Iterations: {total_iterations}", to_terminal=False)
+            self._log_progress(f"Final Answer: {final_answer}", to_terminal=False)
+            self._log_progress(f"Confidence Score: {confidence_score:.2f}/1.0", to_terminal=False)
+            self._log_progress(f"Validation Passed: {'✅ YES' if validation_passed else '❌ NO'}", to_terminal=False)
+            self._log_progress(f"Total Duration: {total_duration:.2f}s", to_terminal=False)
+            self._log_progress("="*80, to_terminal=False)
+            
+            # Close progress log file
+            if self._progress_log_file:
+                from datetime import datetime
+                self._progress_log_file.write(f"\n---\n\n")
+                self._progress_log_file.write(f"**Session ended:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                self._progress_log_file.close()
+                progress_log_path = str(self._progress_log_path)
+                self._progress_log_file = None
+            else:
+                progress_log_path = None
 
             # Return comprehensive results dictionary
-            return {
+            result = {
                 "success": overall_success,
                 "answer": final_answer,
                 "confidence_score": confidence_score,
@@ -334,14 +415,30 @@ Please address these specific points in your new analysis approach."""
                 "user_question": user_question,
                 "understanding_output": understanding_output
             }
+            
+            # Add log path to result
+            if progress_log_path:
+                result["verbose_log_path"] = progress_log_path
+            
+            return result
 
         except Exception as e:
             # === Error Handling ===
             # If anything goes wrong, log it and return error info
             error_duration = time.time() - overall_start_time
             logger.error(f"Critical error: {str(e)}")
-            self._log_progress(f"❌ [SheetBrain] Critical error: {str(e)}", detail=True)
-            self._log_progress(f"⏱️ [SheetBrain] Failed after {error_duration:.2f}s", detail=True)
+            self._log_progress(f"❌ [SheetBrain] Critical error: {str(e)}", to_terminal=False)
+            self._log_progress(f"⏱️ [SheetBrain] Failed after {error_duration:.2f}s", to_terminal=False)
+            
+            # Close progress log file
+            progress_log_path = None
+            if self._progress_log_file:
+                from datetime import datetime
+                self._progress_log_file.write(f"\n---\n\n")
+                self._progress_log_file.write(f"**Session ended:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                self._progress_log_file.close()
+                progress_log_path = str(self._progress_log_path)
+                self._progress_log_file = None
 
             # Collect what conversation history we have
             all_conversation_histories = []
@@ -354,7 +451,7 @@ Please address these specific points in your new analysis approach."""
                     })
 
             # Return error results (success=False, answer=error message)
-            return {
+            result = {
                 "success": False,
                 "answer": f"Analysis failed due to error: {str(e)}",
                 "confidence_score": 0.0,
@@ -368,6 +465,12 @@ Please address these specific points in your new analysis approach."""
                 "total_duration": error_duration,
                 "user_question": user_question
             }
+            
+            # Add log path to result
+            if progress_log_path:
+                result["verbose_log_path"] = progress_log_path
+            
+            return result
 
     def _generate_sheets_markdown_summary(self, total_token_budget: int = 50000) -> str:
         """
@@ -813,17 +916,19 @@ Please address these specific points in your new analysis approach."""
             logger.info(f"Loaded {len(workbooks)} workbook(s)")
             for path, wb in workbooks.items():
                 logger.info(f"  - {os.path.basename(path)}: {len(wb.sheetnames)} sheet(s) - {wb.sheetnames}")
-            self._log_progress("📦 [SheetBrain] Excel libraries loaded successfully")
-            self._log_progress(f"📊 [SheetBrain] Loaded {len(workbooks)} workbook(s)")
+            self._log_progress("📦 [SheetBrain] Excel libraries loaded successfully", to_terminal=False)
+            self._log_progress(f"📊 [SheetBrain] Loaded {len(workbooks)} workbook(s):", to_terminal=False)
+            for path, wb in workbooks.items():
+                self._log_to_file(f"  📄 {os.path.basename(path)}: {len(wb.sheetnames)} sheet(s) - {wb.sheetnames}\n")
 
         except ImportError as e:
             # Missing library (e.g., openpyxl not installed)
             logger.error(f"Failed to import required libraries: {e}")
-            self._log_progress(f"❌ [SheetBrain] Failed to import required libraries: {e}")
+            self._log_progress(f"❌ [SheetBrain] Failed to import required libraries: {e}", to_terminal=False)
             raise  # Re-raise to stop execution
 
         except Exception as e:
             # Problem loading the Excel file (corrupted, wrong format, etc.)
             logger.error(f"Failed to load Excel file: {e}")
-            self._log_progress(f"❌ [SheetBrain] Failed to load Excel file: {e}")
+            self._log_progress(f"❌ [SheetBrain] Failed to load Excel file: {e}", to_terminal=False)
             raise  # Re-raise to stop execution
