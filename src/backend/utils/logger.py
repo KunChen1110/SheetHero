@@ -16,7 +16,8 @@ def _register_logger(logger: logging.Logger) -> None:
 def setup_logger(
     name: str = "sheetbrain",
     level: int = logging.INFO,
-    format_string: Optional[str] = None
+    format_string: Optional[str] = None,
+    to_console: bool = False
 ) -> logging.Logger:
     """
     Set up a logger with consistent formatting.
@@ -25,6 +26,7 @@ def setup_logger(
         name: Logger name
         level: Logging level
         format_string: Custom format string
+        to_console: If False, no StreamHandler is added (default: False)
 
     Returns:
         Configured logger instance
@@ -38,13 +40,15 @@ def setup_logger(
     if format_string is None:
         format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    formatter = logging.Formatter(format_string)
-
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-
-    logger.addHandler(handler)
     logger.setLevel(level)
+    
+    # Only add StreamHandler if explicitly requested
+    if to_console:
+        formatter = logging.Formatter(format_string)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    
     _register_logger(logger)
 
     return logger

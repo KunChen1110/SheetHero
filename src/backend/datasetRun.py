@@ -4,7 +4,6 @@ Dataset Runner - Unified Test Execution Script
 
 Usage:
     python3 datasetRun.py --test-n 1
-    python3 datasetRun.py --test-n 2 --verbose
 """
 
 import sys
@@ -14,10 +13,31 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List
 
+# Suppress all logging output to console BEFORE importing other modules
+logging.getLogger().setLevel(logging.CRITICAL)
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.StreamHandler):
+        root_logger.removeHandler(handler)
+
 from core.agent import SheetBrain
 from config.settings import Config
-from utils.output_formatter import format_output_user_mode, format_output_verbose_mode
-from utils.logger import set_log_level
+from utils.output_formatter import format_output_user_mode
+
+# Suppress all logging output AFTER importing modules (to catch any loggers created during import)
+logging.getLogger().setLevel(logging.CRITICAL)
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.StreamHandler):
+        root_logger.removeHandler(handler)
+
+# Suppress all child loggers
+for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.CRITICAL)
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.StreamHandler):
+            logger.removeHandler(handler)
 
 
 def load_dataset_json(dataset_dir: Path) -> List[Dict[str, Any]]:
@@ -84,8 +104,6 @@ def main():
                         help="Test task number (e.g., 1, 2, 3...)")
     parser.add_argument("--dataset-dir", type=str, default=None,
                         help="Dataset directory path (default: dataset folder in project root)")
-    parser.add_argument("--verbose", action="store_true", default=False,
-                        help="Enable verbose output mode")
     
     args = parser.parse_args()
     
@@ -122,34 +140,24 @@ def main():
         config = Config()
         config.output_mode = "file"
         config.output_file = output_path
-        config.verbose = args.verbose
-        
-        log_level = logging.INFO if config.verbose else logging.ERROR
-        set_log_level(log_level)
         
         agent = SheetBrain(excel_paths=input_paths, config=config)
         result = agent.run(user_question=task.get("prompt", ""))
         
-        # Display Results based on verbose mode
-        if config.verbose:
-            output = format_output_verbose_mode(result, input_paths, task.get("prompt", ""))
-        else:
-            output = format_output_user_mode(
-                result,
-                input_paths,
-                task.get("prompt", ""),
-                output_mode=config.output_mode
-            )
+        # Display Results (always user mode, verbose logs are in file)
+        output = format_output_user_mode(
+            result,
+            input_paths,
+            task.get("prompt", ""),
+            output_mode=config.output_mode
+        )
         
         print(output)
         
         sys.exit(0 if result['success'] else 1)
         
     except Exception as e:
-        print(f"❌ Error: {str(e)}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
+        print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 
