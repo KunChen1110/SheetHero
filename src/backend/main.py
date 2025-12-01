@@ -2,14 +2,35 @@ import argparse
 import logging
 import sys
 
-from core.agent import SheetBrain
+# Suppress all logging output to console BEFORE importing other modules
+logging.getLogger().setLevel(logging.CRITICAL)
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.StreamHandler):
+        root_logger.removeHandler(handler)
+
+from core.agent import SheetHero
 from config.settings import Config
-from utils.output_formatter import format_output_user_mode, format_output_verbose_mode
-from utils.logger import set_log_level
+from utils.output_formatter import format_output_user_mode
+
+# Suppress all logging output AFTER importing modules (to catch any loggers created during import)
+logging.getLogger().setLevel(logging.CRITICAL)
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.StreamHandler):
+        root_logger.removeHandler(handler)
+
+# Suppress all child loggers
+for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.CRITICAL)
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.StreamHandler):
+            logger.removeHandler(handler)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SheetBrain - AI-powered Excel analysis")
+    parser = argparse.ArgumentParser(description="SheetHero - AI-powered Excel analysis")
 
     # === Required Arguments ===
     parser.add_argument("question", help="Question to ask about the Excel file")
@@ -20,48 +41,27 @@ def main():
                         help="Choose 'text' for inline answers or 'file' to save results")
     parser.add_argument("--output-file",
                         help="When --output-mode=file, optional custom output filepath")
-    parser.add_argument("--verbose", action="store_true", default=False,
-                        help="Enable verbose output mode (default: user-friendly concise mode)")
-    """ Example: 
-    cd src/backend 
-    python3 main.py \
-    "output a form with each tutor's name, day ,their time slot, location of their tutor meeting and the amount of the students attending the meetings." \
-    ../../dataset/Task02/tc02_input01.csv \
-    ../../dataset/Task02/tc02_input02.csv \
-    ../../dataset/Task02/tc02_input03.csv \
-    ../../dataset/Task02/tc02_input04.csv \
-    ../../dataset/Task02/tc02_input05.csv \
-    --output-mode file \
-    --verbose
-    """
+
     args = parser.parse_args()
 
     try:
         config = Config()
         config.output_mode = args.output_mode
         config.output_file = args.output_file
-        config.verbose = args.verbose
-
-        # Configure logger verbosity
-        log_level = logging.INFO if config.verbose else logging.ERROR
-        set_log_level(log_level)
 
         # Create agent
-        agent = SheetBrain(excel_paths=args.excel_paths, config=config)
+        agent = SheetHero(excel_paths=args.excel_paths, config=config)
 
         # Run the actual analysis with the user's question
         result = agent.run(user_question=args.question)
 
-        # Display Results based on verbose mode
-        if config.verbose:
-            output = format_output_verbose_mode(result, args.excel_paths, args.question)
-        else:
-            output = format_output_user_mode(
-                result,
-                args.excel_paths,
-                args.question,
-                output_mode=config.output_mode
-            )
+        # Display Results (always user mode, verbose logs are in file)
+        output = format_output_user_mode(
+            result,
+            args.excel_paths,
+            args.question,
+            output_mode=config.output_mode
+        )
         
         print(output)
 
@@ -69,7 +69,7 @@ def main():
         sys.exit(0 if result['success'] else 1)
 
     except Exception as e:
-        print(f"❌ Error: {str(e)}", file=sys.stderr)
+        print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
