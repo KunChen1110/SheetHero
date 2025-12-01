@@ -12,6 +12,7 @@ from modules.execution import ExecutionModule
 from modules.validation import ValidationModule
 from utils.excel_toolkit import ExcelToolkit, calculate_token_cost_line
 from utils.logger import setup_logger
+from modules.prompts import build_enhanced_understanding_prompt
 
 logger = setup_logger(__name__)
 
@@ -51,25 +52,6 @@ def output_mode(mode: str = "text", file_path: Optional[str] = None) -> Dict[str
     return build_output_preferences(mode, file_path)
 
 
-"""                                                                                                                                                                                                 
-config (Config)
-output_preferences (dict)
-output_instruction (str)
-
-excel_paths (list)
-
-excel_conntext_understanding (str)
-excel_conntext_execution (str)
-
-self.client (OpenAI)
-code_globals (dict)
-code_locals (dict)
-workbooks
-
-understanding_module
-execution_module
-validation_module
-"""
 class SheetHero:
     def __init__(self, excel_paths: Union[str, List[str]],
                  config: Config,
@@ -285,15 +267,7 @@ class SheetHero:
                     last_validation = all_validation_results[-1]
                     if last_validation.get('improvement_feedback'):
                         # Build enhanced prompt with previous feedback
-                        enhanced_understanding = f"""{understanding_output}
-
-**IMPROVEMENT FEEDBACK FROM PREVIOUS ITERATION:**
-{last_validation['improvement_feedback']}
-
-**ISSUES TO ADDRESS:**
-{'; '.join(last_validation.get('issues_found', []))}
-
-Please address these specific points in your new analysis approach."""
+                        enhanced_understanding = build_enhanced_understanding_prompt(understanding_output, last_validation)
                     else:
                         enhanced_understanding = understanding_output
                 else:
