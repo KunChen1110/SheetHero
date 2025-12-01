@@ -1,4 +1,4 @@
-"""Understanding module for initial analysis and context generation."""
+"""Initial analysis and context generation module for SheetHero."""
 
 import base64
 import io
@@ -18,37 +18,25 @@ logger = setup_logger(__name__)
 
 class UnderstandingModule:
     """
-    Module responsible for initial analysis and context generation using multimodal capabilities.
-    Processes both table data and table images to extract visual context.
+    Module responsible for generating initial analysis and understanding from Excel context and user questions.
     """
 
     def __init__(self, client, deployment: str, excel_context_understanding: str):
-        """
-        Initialize the UnderstandingModule.
+        """ Initialize the UnderstandingModule. """
 
-        Args:
-            client: OpenAI client instance
-            deployment: Model deployment name
-            excel_context_understanding: Excel context for understanding
-            workbook: Excel workbook instance (optional)
-        """
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
 
     def analyze(self, user_question: str) -> str:
         """
-        Analyze the user question and Excel workbook to generate comprehensive understanding.
+        Generate comprehensive understanding of the user's question in context.
 
-        Args:
-            user_question: The user's query or task
-            table_image: Screenshot of the relevant sheet area
-
-        Returns:
-            String containing analysis results
+        Combines Excel data context with the user's question to create an analysis plan that guides the execution module.
         """
         logger.info("Starting understanding analysis")
 
+        # Build prompt and get LLM response
         messages = self._create_multimodal_prompt(user_question, self.excel_context_understanding)
         understanding_output = self._get_llm_response(messages)
 
@@ -56,12 +44,15 @@ class UnderstandingModule:
         return understanding_output
 
     def _create_multimodal_prompt(self, user_question: str, excel_context_understanding: str) -> list:
-        """Create a multimodal prompt for the LLM."""
+        """Build prompt combining user question with Excel context."""
         prompt_text = build_understanding_prompt(user_question, excel_context_understanding)
         return [{"role": "user", "content": prompt_text}]
 
     def _get_llm_response(self, messages: list, max_retries: int = 5, base_delay: float = 1.0) -> str:
-        """Get response from the multimodal LLM with retry logic."""
+        """
+        Get LLM response with exponential backoff retry for rate limits.
+        Retries up to max_retries times, with increasing wait times between attempts.
+        """
         last_exception = None
 
         for attempt in range(max_retries):
@@ -108,7 +99,10 @@ class UnderstandingModule:
             raise last_exception
 
     def _extract_wait_time_from_error(self, error_message: str) -> Optional[int]:
-        """Extract wait time from rate limit error message."""
+        """
+        Parse retry wait time from rate limit error messages.
+        Looks for patterns like "Try again in X seconds" or "Retry after X seconds".
+        """
         try:
             # Look for patterns like "Try again in X seconds"
             match = re.search(r'try again in (\d+) seconds?', error_message.lower())
