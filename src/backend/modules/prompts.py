@@ -11,6 +11,23 @@ from typing import Dict, List, Any
 
 
 # =============================================================================
+# AGENT PROMPTS
+# =============================================================================
+
+def build_enhanced_understanding_prompt(understanding_output: str, last_validation: Dict[str, Any]) -> str:
+    """Build the prompt for enhanced understanding output."""
+
+    return f"""{understanding_output}
+
+**IMPROVEMENT FEEDBACK FROM PREVIOUS ITERATION:**
+{last_validation['improvement_feedback']}
+
+**ISSUES TO ADDRESS:**
+{'; '.join(last_validation.get('issues_found', []))}
+
+Please address these specific points in your new analysis approach."""
+
+# =============================================================================
 # UNDERSTANDING MODULE PROMPT
 # =============================================================================
 
