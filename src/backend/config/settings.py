@@ -1,5 +1,6 @@
-from typing import Optional
-from dataclasses import dataclass
+from typing import Optional, Dict, Any
+from dataclasses import dataclass, asdict
+
 
 @dataclass
 class Config:
@@ -19,3 +20,43 @@ class Config:
     # === Timeouts and Retries ===
     max_retries: int = 3
     timeout: int = 30
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Conver this specific config instance to dictionary for UI rendering."""
+        return asdict(self)
+
+    def update(self, updates: Dict[str, Any]) -> None:
+        """Update this specific config instance with values from a dictionary."""
+        if not updates:
+            return
+
+        for key, value in updates.items():
+            if hasattr(self, key):
+                field_type = self.__annotations__.get(key)
+
+                if value is not None:
+                    try:
+                        if field_type == int and isinstance(value, str):
+                            setattr(self, key, int(value))
+                        elif field_type == float and isinstance(value, str):
+                            setattr(self, key, float(value))
+                        elif field_type == bool and isinstance(value, str):
+                            setattr(self, key, value.lower() in ('true', '1'))
+                        else:
+                            setattr(self, key, value)
+                    except ValueError:
+                        pass
+
+
+def create_config(settings_dict: Optional[Dict[str, Any]] = None) -> Config:
+    """Create a NEW independent Config instance."""
+    new_config = Config()
+
+    if settings_dict:
+        new_config.update(settings_dict)
+
+    return new_config
+
+def get_default_settings_dict() -> Dict[str, Any]:
+    """Get the default settings."""
+    return Config().to_dict()
