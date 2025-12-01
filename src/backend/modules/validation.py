@@ -12,20 +12,14 @@ logger = setup_logger(__name__)
 
 class ValidationModule:
     """
-    Module responsible for final quality assurance after ExecutionModule completes its multi-turn process.
-    If issues are found, provides feedback for re-execution. If validation passes, confirms the final answer.
+    Performs final quality assurance on execution results.
+    Reviews answers for errors, provides confidence scores and improvement feedback,
+    and determines whether re-execution is needed.
     """
 
     def __init__(self, client, deployment: str, excel_context_understanding: str, progress_log_file=None):
-        """
-        Initialize the ValidationModule.
+        """ Initialize the ValidationModule. """
 
-        Args:
-            client: OpenAI client instance
-            deployment: Model deployment name
-            excel_context_understanding: Excel context for understanding
-            progress_log_file: File handle for progress logging (optional)
-        """
         self.client = client
         self.deployment = deployment
         self.excel_context_understanding = excel_context_understanding
@@ -39,15 +33,13 @@ class ValidationModule:
 
     def reflect(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> Dict[str, Any]:
         """
-        Reflect on and validate the execution results.
+        Validate execution results and determine next steps.
 
-        Args:
-            execution_result: Complete result from ExecutionModule
-            user_question: Original user question
-            understanding_output: Output from UnderstandingModule
+        Reviews the answer against the original question, identifies issues,
+        provides improvement feedback, and decides whether to retry.
 
         Returns:
-            Dictionary containing validation results and feedback
+            Dictionary with validation results, confidence score, and re-execution flag
         """
         logger.info("Starting validation on execution results")
 
@@ -65,12 +57,13 @@ class ValidationModule:
             # Log validation analysis to file
             self._log_to_file(f"\n**Validation Analysis:**\n```\n{validation_analysis}\n```\n")
 
-            # Parse the validation response
+            # Parse structured response into components
             validation_result = self._parse_validation_response(validation_analysis)
 
             logger.info(f"Validation completed. Confidence: {validation_result['confidence_score']:.2f}")
             logger.info(f"Validation: {'PASSED' if validation_result['validation_passed'] else 'FAILED'}")
 
+            # Set re-execution flag based on validation result
             if validation_result['validation_passed']:
                 logger.info("Answer validated - ready for final output")
                 validation_result['verified_answer'] = execution_result.get("answer", "")
@@ -82,6 +75,7 @@ class ValidationModule:
             return validation_result
 
         except Exception as e:
+            # Handle validation failures without crashing pipeline
             logger.error(f"Error during validation: {str(e)}")
             return {
                 "validation_passed": False,
@@ -94,7 +88,8 @@ class ValidationModule:
             }
 
     def _create_validation_prompt(self, execution_result: Dict[str, Any], user_question: str, understanding_output: str) -> list:
-        """Create a comprehensive validation prompt for the LLM."""
+        """ Build comprehensive validation prompt from execution results and context for LLM."""
+
         # Extract key information from execution result
         execution_success = execution_result.get("success", False)
         final_answer = execution_result.get("answer", "No answer provided")
@@ -102,7 +97,7 @@ class ValidationModule:
         execution_summary = execution_result.get("execution_summary", {})
         conversation_history = execution_result.get("conversation_history", [])
 
-        # Format full conversation history
+        # Format conversation history into readable form
         conversation_history_text = self._format_full_conversation_history(conversation_history)
 
         prompt_text = build_validation_prompt(
@@ -118,13 +113,20 @@ class ValidationModule:
         return [{"role": "user", "content": prompt_text}]
 
     def _format_full_conversation_history(self, conversation_history: list) -> str:
-        """Format the complete conversation history including thoughts, code, and outputs."""
+        """
+        Parse conversation history into readable format for validation.
+
+        Extracts thoughts, code blocks, execution results, and errors from
+        the execution module's conversation history for comprehensive review.
+        """
+
         if not conversation_history:
             return "No conversation history available."
 
         formatted_parts = []
         turn_count = 0
 
+        # Process each message in conversation history
         for i, msg in enumerate(conversation_history):
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
@@ -183,7 +185,8 @@ class ValidationModule:
         return "\n".join(formatted_parts)
 
     def _get_llm_response(self, messages: list, max_retries: int = 5) -> str:
-        """Get response from the LLM with retry logic."""
+        """ Get LLM response with basic retry logic for errors. """
+
         last_exception = None
 
         for attempt in range(max_retries):
@@ -207,7 +210,13 @@ class ValidationModule:
         raise last_exception
 
     def _parse_validation_response(self, validation_text: str) -> Dict[str, Any]:
-        """Parse the structured validation response from the LLM."""
+        """
+        Extract structured validation data from LLM response.
+
+        Parses confidence scores, issues, feedback, and assessment from
+        the validation module's formatted response text.
+        """
+
         try:
             # Initialize default values
             result = {
@@ -220,7 +229,7 @@ class ValidationModule:
                 "requires_reexecution": False
             }
 
-            # Parse validation status (handle both ** and no ** formats)
+            # Parse validation status PASSED/FAILED (handle both ** and no ** formats)
             validation_match = re.search(r'(\*\*)?VALIDATION_STATUS:(\*\*)?\s*\[?(PASSED|FAILED)\]?', validation_text, re.IGNORECASE)
             if validation_match:
                 result["validation_passed"] = validation_match.group(3).upper() == "PASSED"
@@ -250,6 +259,7 @@ class ValidationModule:
             return result
 
         except Exception as e:
+            # Handle parsing failures gracefully
             logger.error(f"Error parsing validation response: {str(e)}")
             return {
                 "validation_passed": False,

@@ -9,7 +9,7 @@ for handler in root_logger.handlers[:]:
     if isinstance(handler, logging.StreamHandler):
         root_logger.removeHandler(handler)
 
-from core.agent import SheetBrain
+from core.agent import SheetHero
 from config.settings import Config
 from utils.output_formatter import format_output_user_mode
 
@@ -30,7 +30,7 @@ for logger_name in list(logging.Logger.manager.loggerDict.keys()):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SheetBrain - AI-powered Excel analysis")
+    parser = argparse.ArgumentParser(description="SheetHero - AI-powered Excel analysis")
 
     # === Required Arguments ===
     parser.add_argument("question", help="Question to ask about the Excel file")
@@ -50,7 +50,7 @@ def main():
         config.output_file = args.output_file
 
         # Create agent
-        agent = SheetBrain(excel_paths=args.excel_paths, config=config)
+        agent = SheetHero(excel_paths=args.excel_paths, config=config)
 
         # Run the actual analysis with the user's question
         result = agent.run(user_question=args.question)

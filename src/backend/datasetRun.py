@@ -20,7 +20,7 @@ for handler in root_logger.handlers[:]:
     if isinstance(handler, logging.StreamHandler):
         root_logger.removeHandler(handler)
 
-from core.agent import SheetBrain
+from core.agent import SheetHero
 from config.settings import Config
 from utils.output_formatter import format_output_user_mode
 
@@ -141,7 +141,7 @@ def main():
         config.output_mode = "file"
         config.output_file = output_path
         
-        agent = SheetBrain(excel_paths=input_paths, config=config)
+        agent = SheetHero(excel_paths=input_paths, config=config)
         result = agent.run(user_question=task.get("prompt", ""))
         
         # Display Results (always user mode, verbose logs are in file)

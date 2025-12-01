@@ -1,5 +1,5 @@
 """
-Output formatting utilities for SheetBrain results.
+Output formatting utilities for SheetHero results.
 Provides user-friendly output mode.
 """
 import os
@@ -10,11 +10,15 @@ import pandas as pd
 
 
 def _is_table_line(line: str) -> bool:
+    """Check if line looks like a Markdown table row (starts/ends with |)."""
+
     stripped = line.strip()
     return stripped.startswith("|") and stripped.count("|") >= 2
 
 
 def _content_to_text(content: Any) -> str:
+    """Convert various content types (dict, list, etc.) to plain text string."""
+
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -29,16 +33,20 @@ def _content_to_text(content: Any) -> str:
 
 
 def _extract_first_table(lines: List[str]) -> Tuple[List[str], List[int]]:
+    """ Find the first Markdown table in a list of lines."""
+
     table_lines: List[str] = []
     table_indices: List[int] = []
     collecting = False
 
     for idx, line in enumerate(lines):
         if _is_table_line(line):
+            # Start collecting when we find first table line
             collecting = True
             table_lines.append(line)
             table_indices.append(idx)
         else:
+            # Stop collecting when we hit non-table line
             if collecting:
                 break
 
@@ -46,21 +54,12 @@ def _extract_first_table(lines: List[str]) -> Tuple[List[str], List[int]]:
 
 
 def extract_table_from_answer(answer: str) -> Tuple[str, Optional[str]]:
-    """
-    Extract markdown table from answer if present.
-    
-    Args:
-        answer: The answer string that may contain markdown tables.
-    
-    Returns:
-        Tuple of (answer_without_table, table_content)
-        - answer_without_table: Answer text without the table
-        - table_content: Extracted table content, or None if no table found
-    """
+    """ Extract markdown table from answer if present.  """
     lines = answer.split('\n')
     table_lines, table_indices = _extract_first_table(lines)
 
     if table_lines:
+        # Build answer without table lines
         non_table_lines = [
             line for idx, line in enumerate(lines) if idx not in table_indices
         ]
@@ -71,8 +70,10 @@ def extract_table_from_answer(answer: str) -> Tuple[str, Optional[str]]:
 
 def extract_table_from_history(conversation_history: Optional[List[Dict[str, Any]]]) -> Optional[str]:
     """
-    Search conversation history for the most recent markdown table.
+    Search conversation history for the most recent Markdown table.
+    Goes through history in reverse order to find the last table present.
     """
+
     if not conversation_history:
         return None
 
@@ -90,6 +91,8 @@ def extract_table_from_history(conversation_history: Optional[List[Dict[str, Any
 
 
 def _format_dataframe_to_markdown(df: pd.DataFrame) -> str:
+    """Convert pandas DataFrame to Markdown table format."""
+
     columns = [str(col).strip() for col in df.columns]
     header = "| " + " | ".join(columns) + " |"
     separator = "| " + " | ".join(["-" * max(3, len(col) or 3) for col in columns]) + " |"
@@ -136,6 +139,11 @@ def read_table_from_file(file_path: str) -> Optional[str]:
 
 
 def _detect_file_path(text: str) -> Optional[str]:
+    """
+    Extract file path from text using regex pattern matching.
+    Looks for common spreadsheet extensions and returns the last match found.
+    """
+
     if not text:
         return None
 
@@ -151,19 +159,10 @@ def _detect_file_path(text: str) -> Optional[str]:
 
 
 def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question: str, output_mode: str = "text") -> str:
-    """
-    Format output in user-friendly mode (default, concise).
-    
-    Args:
-        result: Dictionary containing analysis results
-        excel_paths: List of input file paths
-        question: User's question
-    
-    Returns:
-        Formatted output string
-    """
+    """ Format output in user-friendly mode (default, concise). """
+
     output_lines = []
-    output_lines.append("================ SheetBrain Result ================")
+    output_lines.append("================ SheetHero Result ================")
     
     # Question
     output_lines.append("Question:")
@@ -188,8 +187,10 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
     output_lines.append(f"Confidence:  {result['confidence_score']:.2f}")
     output_lines.append(f"Iterations:  {result['total_iterations']}")
     output_lines.append(f"Duration:    {result['total_duration']:.2f}s")
-    
+
+    # Show results based on output mode
     if output_mode == "file":
+        # File mode: show saved file path
         answer_path = result.get('answer', '').strip()
         output_lines.append("\nResult:")
         if answer_path:
@@ -201,13 +202,15 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
         else:
             output_lines.append("  Result file saved successfully.")
     else:
-        # Extract and display table if present
+        # Text mode: extract and display table or answer
         answer = result['answer']
         answer_without_table, table_content = extract_table_from_answer(answer)
 
+        # Try to find table in conversation history if not in final answer
         if not table_content:
             table_content = extract_table_from_history(result.get('conversation_history'))
 
+        # Try to detect and read a file path if no table found
         if not table_content:
             file_path = _detect_file_path(answer_without_table) or _detect_file_path(answer)
             if file_path:
@@ -216,6 +219,7 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
                     table_content = table_from_file
                     answer_without_table = ""
 
+        # Display table if found
         if table_content:
             output_lines.append("\nResult table:")
             output_lines.append(table_content)
@@ -223,8 +227,8 @@ def format_output_user_mode(result: Dict[str, Any], excel_paths: list, question:
             # If no table, show answer (truncated if too long)
             answer_preview = answer_without_table[:200] + "..." if len(answer_without_table) > 200 else answer_without_table
             output_lines.append(f"\nAnswer:\n  {answer_preview}")
-    
-    # Issues
+
+    # Show any issues identified during analysis
     if result['issues_found']:
         output_lines.append("\nIssues:")
         for issue in result['issues_found']:
