@@ -1,7 +1,4 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
-"""Utility modules for SheetBrain."""
+"""Utility modules for SheetHero."""
 
 from .excel_toolkit import ExcelToolkit, calculate_token_cost_line
 from .logger import setup_logger
