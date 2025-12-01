@@ -1,8 +1,5 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 """
-Centralized prompt templates for SheetBrain modules.
+Centralized prompt templates for SheetHero modules.
 
 This file contains all LLM prompt templates used by the three pipeline stages:
 - UnderstandingModule: build_understanding_prompt
