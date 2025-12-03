@@ -2,8 +2,12 @@
 """
 Dataset Runner - Unified Test Execution Script
 
-Usage:
+Basic usage:
     python3 datasetRun.py --test-n 1
+
+Optional arguments:
+    --dataset-dir PATH     # Custom dataset folder (default: ./dataset)
+    --output-mode MODE     # 'file' (default) to save Excel, or 'text' for text-only answers
 """
 
 import sys
@@ -104,6 +108,14 @@ def main():
                         help="Test task number (e.g., 1, 2, 3...)")
     parser.add_argument("--dataset-dir", type=str, default=None,
                         help="Dataset directory path (default: dataset folder in project root)")
+    parser.add_argument(
+        "--output-mode",
+        type=str,
+        choices=["file", "text"],
+        default="file",
+        help="Output delivery mode: 'file' (default) to save an Excel file, "
+             "or 'text' to return only a textual answer without writing an output workbook.",
+    )
     
     args = parser.parse_args()
     
@@ -138,8 +150,10 @@ def main():
         
         # Configure and run
         config = Config()
-        config.output_mode = "file"
-        config.output_file = output_path
+        # Allow caller/tester to choose between file and text output
+        config.output_mode = args.output_mode or "file"
+        # Only set an explicit output file when in file mode
+        config.output_file = output_path if config.output_mode == "file" else None
         
         agent = SheetHero(excel_paths=input_paths, config=config)
         result = agent.run(user_question=task.get("prompt", ""))
@@ -163,4 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

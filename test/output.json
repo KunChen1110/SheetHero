@@ -1,0 +1,7 @@
+[
+  {
+    "task_id": "Test 22",
+    "answer": "================ SheetHero Result ================\nQuestion:\n  Check for missing data in the file\n\nInput files:\n  - ../dataset/Task22/tc22_input01.xlsx\n\nStatus:      Success\nConfidence:  0.90\nIterations:  2\nDuration:    37.36s\n\nResult:\n  Result file saved to: The TutorID column has 2 missing entries corresponding to the tutors Bob Tulip and an unnamed entry.\n  Verbose log saved to: /home/scygl3/GRP/team29_project/src/backend/loggers/sheethero_tc22_input01_20251202_225031.md\n\nIssues:\n  - None identified.\n===================================================",
+    "output_file": "../dataset/Task22/tc22_input01.xlsx"
+  }
+]
