@@ -330,9 +330,9 @@ def main() -> None:
     copy_outputs_to_task_dirs(results)
 
     # Build compact summary records for output.json
-    summary_records: List[Dict[str, Any]] = []
+    new_summary_records: List[Dict[str, Any]] = []
     for res in results:
-        summary_records.append(
+        new_summary_records.append(
             {
                 "task_id": res.get("test_id"),
                 "answer": res.get("answer"),
@@ -340,9 +340,46 @@ def main() -> None:
             }
         )
 
+    # Merge with existing summary JSON (if any), updating entries per task_id
+    existing_records: List[Dict[str, Any]] = []
+    if SUMMARY_JSON.exists():
+        try:
+            with SUMMARY_JSON.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    existing_records = [r for r in loaded if isinstance(r, dict)]
+        except Exception:
+            # If the existing file is malformed, fall back to only new records
+            existing_records = []
+
+    # Index existing records by task_id
+    merged_by_id: Dict[str, Dict[str, Any]] = {}
+    for rec in existing_records:
+        task_id = rec.get("task_id")
+        if isinstance(task_id, str):
+            merged_by_id[task_id] = rec
+
+    # Apply/overwrite with new records
+    for rec in new_summary_records:
+        task_id = rec.get("task_id")
+        if isinstance(task_id, str):
+            merged_by_id[task_id] = rec
+
+    # Sort by numeric test number in task_id (e.g., "Test 3", "Test 10")
+    def _task_sort_key(record: Dict[str, Any]) -> int:
+        task_id = str(record.get("task_id", "")).strip()
+        try:
+            # Expect formats like "Test 3"
+            parts = task_id.split()
+            return int(parts[-1])
+        except Exception:
+            return 0
+
+    final_summary_records = sorted(merged_by_id.values(), key=_task_sort_key)
+
     # Write global summary JSON into test/output.json
     with SUMMARY_JSON.open("w", encoding="utf-8") as f:
-        json.dump(summary_records, f, ensure_ascii=False, indent=2)
+        json.dump(final_summary_records, f, ensure_ascii=False, indent=2)
 
     print(f"\nSummary written to: {SUMMARY_JSON}")
 

@@ -8,7 +8,7 @@
             "Task01/tc01_input01.xlsx",
             "Task01/tc01_input02.xlsx"
         ],
-        "prompt": "Here are two tables showing my daily spending. First merge the two tables into a single table, then calculate the average daily spending and the total spending in November. Also highlight in red the day or days on which I spend the most. Finally, output the results as a new spreadsheet.",
+        "prompt": "Here are two tables about my daily spending. Could you first merge the two forms together, then calculate the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red. You need to output a new spreadsheet.",
         "answer": "Total spendings: £2023.75\nAverage daily spendings: £72.28",
         "expected_output_file": [
             "Task01/tc01_output01.xlsx"
@@ -27,7 +27,7 @@
             "Task02/tc02_input04.csv",
             "Task02/tc02_input05.csv"
         ],
-        "prompt": "Here are several tables about students and their tutors. Your task is to produce a new table that lists, for each tutor, the tutor’s name, the meeting time and location, and the students attending that meeting. Output the result as a new spreadsheet.",
+        "prompt": "Hello, here are tables about students and their tutors. You task is to output a new form listing each tutor’s name, the time and location of their tutor meeting, as well as the students attending the meeting.",
         "answer": "",
         "expected_output_file": [
             "Task2/tc02_output01.xlsx"
@@ -42,7 +42,7 @@
         "spreadsheets": [
             "Task03/tc03_input01.xlsx"
         ],
-        "prompt": "[INSTRUCTION FOR ANALYST:\nThe Data sheet has a messy multi-row header. When you read it via inspector / inspector_multi:\n\n1. Do NOT assume that data[0] is the header row.\n2. First, find the FIRST row whose first cell is a year (e.g., 2009, 2010, …).\n3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing \"in %\" or extra notes columns.\n4. When building a DataFrame, always enforce that:\n   len(columns) == len(row)\n   If the header row is longer, slice it: columns = header[:len(row)].\n5. Only after normalizing the header and data rows to equal length, create the DataFrame once and reuse it.\n\nFollow these rules strictly to avoid “N columns passed, passed data had M columns” errors.\nEND OF INSTRUCTION]\n\n\nHere is a table showing internet penetration rates from 2009 to 2024. Please calculate the average internet penetration rate for each region over the years 2020–2024. Identify the region with the fastest growth rate and sort the regions by growth rate. Also provide a line chart where each region is represented by a different color, the horizontal axis is year (2020 to 2024), and the vertical axis is penetration rate.",
+        "prompt": "[INSTRUCTION FOR ANALYST:\nThe Data sheet has a messy multi-row header. When you read it via inspector / inspector_multi:\n\n1. Do NOT assume data[0] is the header row.\n2. First, find the FIRST row whose first cell is a year (e.g. 2009, 2010, …).\n3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing \"in %\" or extra notes column.\n4. When building a DataFrame, always enforce that:\n   len(columns) == len(row)\n   If the header row is longer, slice it: columns = header[:len(row)].\n5. Only after normalizing header + rows to equal length, create the DataFrame once and reuse it.\n\nFollow these rules strictly to avoid “N columns passed, passed data had M columns” errors.\nEND OF INSTRUCTION]\n\n\nHere is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate",
         "answer": "",
         "expected_output_file": [
             "Task03/tc03_output01.xlsx"
@@ -58,7 +58,7 @@
             "Task04/tc04_input01.xlsx",
             "Task04/tc04_input02.xlsx"
         ],
-        "prompt": "Here is a table containing tasks, their durations, and priorities, and another table describing task dependencies (which task needs to be finished before another). All machines start at 8:00 am.\nYour task is to schedule the tasks based on these dependencies.\n\nCreate a new Excel sheet showing the final schedule with columns:\n\n| Task ID | Task Name | Priority | Start Time | End Time |\n|---------|-----------|----------|-----------|----------|\n\nAlso answer the question\nWhat is the total duration required to finish all the tasks?\n\nThis is a scheduling-with-dependencies problem. You MUST:\n\n1. Treat the dependency table as a DAG:\n   - Missing/empty \"Depends on\" = ROOT task, do NOT drop these rows.\n2. Build a topological order:\n   - Every Task ID in the task table appears EXACTLY ONCE in the final schedule.\n   - Print all Task IDs vs scheduled Task IDs and ensure the sets match.\n3. Time:\n   - Start at 08:00, add numeric durations sequentially.\n   - Total duration = sum of all task durations when executed one after another.",
+        "prompt": "Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.\nYour task is to schedule the tasks based on task dependency.\n\nCreate a new Excel sheet showing the final schedule with columns:\n\n| Task ID | Task Name | Priority | Start Time | End Time |\n|---------|-----------|----------|-----------|----------|\n\nAlso answer the question\nWhat's the duration of finishing all the tasks ?\n\nThis is a scheduling-with-dependencies problem. You MUST:\n\n1. Treat the dependency table as a DAG:\n   - Missing/empty \"Depends on\" = ROOT task, do NOT drop these rows.\n2. Build a topological order:\n   - Every Task ID in the task table appears EXACTLY ONCE in the final schedule.\n   - Print all Task IDs vs scheduled Task IDs and ensure the sets match.\n3. Time:\n   - Start at 08:00, add numeric durations sequentially.\n   - Total duration = sum of all task durations when executed one after another.",
         "answer": "The duration of finishing all tasks is 10 hour.",
         "expected_output_file": [
             "Task04/tc04_output01.xlsx"
@@ -74,7 +74,7 @@
             "Task05/tc05_input01.xlsx",
             "Task05/tc05_input02.xlsx"
         ],
-        "prompt": "Here are two tables. One gives the number of smartphone units shipped in India from 2012 to 2025, and the other gives market share in India from 2017 to 2025. Your task is to find the overlapping time period between the two timelines, then estimate the number of smartphones for each brand in India as market_share * shipment.\nOutput a table in the following format:\n\n| Time | Vivo (Unit shipment) | SamSung | ... |  \n|------|----------------------|---------|-----|",
+        "prompt": "Here are two forms, one is the number of unit smartphones in india from 2012 to 2025, the other is \nthe marketshare of 2017 to 2025 in india. You task is two find the overlap between 2 timelines, then compute the estimation of number of smartphones of each brand in india. That is market_share * shipment.\nOutput a form in the following format :\n\n| Time | Vivo (Unit shipment) | SamSung | ... |  \n|------|----------------------|---------|-----|",
         "answer": "",
         "expected_output_file": [
             "Task05/tc05_output01.xlsx"
@@ -89,7 +89,7 @@
         "spreadsheets": [
             "Task06/tc06_input01.csv"
         ],
-        "prompt": "Your task is to calculate the correlation coefficient between survival and other factors (such as sex, age, etc.) using the Titanic dataset.\nPearson correlation coefficient:\nr_xy = cov(X, Y) / (σ_X * σ_Y)\nOutput an Excel file with the following columns:\n| Sex | Age | Fare | Cabin | Embarked | \n|-----|-----|------|--------|-----------|",
+        "prompt": "Your task is to calculate the correlation coefficient between survivor and other factors (sex, age, ...) given the titantic dataset.\nPearson correlation coefficient :\nr_xy = cov(X, Y) / (σ_X * σ_Y)\nOutput an excel with format\n| Sex | Age | Fare | Carbin | Emabarked | \n|-----|-----|------|--------|-----------|",
         "answer": "",
         "expected_output_file": [
             "Task06/tc6_output01.xlsx"
@@ -104,7 +104,7 @@
         "spreadsheets": [
             "Task07/tc07_input01.csv"
         ],
-        "prompt": "Assume a linear relationship between ice-cream sales and three factors: temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights in an Excel file.",
+        "prompt": "Assume a linear relationship between ice-cream sales and the factors — temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights to an Excel file.",
         "answer": "",
         "expected_output_file": [
             "Task07/tc07_output01.xlsx"
@@ -119,7 +119,7 @@
         "spreadsheets": [
             "Task08/tc08_input01.csv"
         ],
-        "prompt": "Calculate the correlation matrix for all numeric columns in the Iris dataset, restricted to the species Iris-setosa.\nOutput a 4×4 table with both rows and columns as:\n|Sepal_Length | Sepal_Width | Petal_Length | Petal_Width |\n|-------------|-------------|--------------|-------------|\nRound all correlation values to two decimal places, and label the table clearly with the species name.",
+        "prompt": "Calculate the correlation matrix for all numeric columns in the Iris dataset separately for species Iris-setosa.\nOutput a 4×4 table with both rows and columns as:\n|Sepal_Length | Sepal_Width | Petal_Length | Petal_Width |\n|-------------|-------------|--------------|-------------|\nRound all correlation values to two decimals, and label each table clearly with the species name.",
         "answer": "",
         "expected_output_file": [
             "Task08/tc08_output01.xlsx"
@@ -134,7 +134,7 @@
         "spreadsheets": [
             "Task09/tc09_input01.xlsx"
         ],
-        "prompt": "Evaluate the cash flow efficiency of Coca-Cola from 2009 to 2018 by calculating:\n\n* Operating Cash Flow to Net Income\n\n* Free Cash Flow (Operating Cash Flow minus Capital Expenditures)",
+        "prompt": "Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculating:\n\n* Operating Cash Flow to Net Income\n\n* Free Cash Flow (Operating Cash Flow minus Capital Expenditures)",
         "answer": "",
         "expected_output_file": [
             "Task09/tc09_output01.xlsx"
@@ -153,7 +153,7 @@
             "Task10/tc10_input04.csv",
             "Task10/tc10_input05.csv"
         ],
-        "prompt": "Given five Excel files representing the adjacency lists of directed graphs, determine which graphs contain a cycle and which do not. Output an Excel file with the following columns:\n| Graph ID| Contains Cycle (True / False)|\n|---------|------------------------------|",
+        "prompt": "Given 5 excel representing the adjacent list of the directed graph , could you tell which graph contains a cycle and which graph not? Output an excel, containing columns in the format\n| Graph ID| Contains Cycle (True / False)|\n|---------|------------------------------|",
         "answer": "",
         "expected_output_file": [
             "Task10/tc10_output01.xlsx"
@@ -204,7 +204,7 @@
             "Task13/tc13_input02.xlsx",
             "Task13/tc13_input03.xlsx"
         ],
-        "prompt": "Given three spreadsheets showing:\n* Diabetes prevalence among adults by country (2024)\n* Number of diabetics worldwide by region (in millions, 2024)\n* Diabetes-related health expenditure by region (in billion USD, 2024)\n\nFor each region, calculate:\n* The share of global diabetic population (%)\n* The average expenditure per diabetic (USD per person)\n\nOutput an Excel file containing the following columns:\n\n| Region | Diabetics (millions) | Share of Global (%) | Expenditure (billion USD) | Avg Expenditure per Person (USD) |\n|--------|----------------------|---------------------|---------------------------|----------------------------------|",
+        "prompt": "Given three spreadsheets showing:\n* Diabetes prevalence among adults by country (2024)\n* Number of diabetics worldwide by region (in millions, 2024)\n* Diabetes-related health expenditure by region (in billion USD, 2024)\n\nCalculate for each region:\n* The share of global diabetic population (%)\n* The average expenditure per diabetic (USD per person)\n\nOutput an Excel file containing:\n\n| Region | Diabetics (millions) | Share of Global (%) | Expenditure (billion USD) | Avg Expenditure per Person (USD) |\n|--------|----------------------|---------------------|---------------------------|----------------------------------|",
         "answer": "",
         "expected_output_file": [
             "Task13/tc13_output01.xlsx"
@@ -219,7 +219,7 @@
         "spreadsheets": [
             "Task14/tc14_input01.csv"
         ],
-        "prompt": "Given a dataset of smartphone reviews containing customer information, brand, model, and overall ratings, generate a table that shows, for each country and brand, the average rating and the number of reviews. The output should be an Excel file with columns: country, brand, avg_rating, num_reviews. Focus only on the average rating metric and provide a clear summary suitable for analysis.",
+        "prompt": "Given a dataset of smartphone reviews containing customer information, brand, model, and overall ratings, generate a table that shows, for each country and brand, the average rating and the number of reviews. The output should be an Excel file with columns: country, brand, avg_rating, num_reviews. Focus only on the average rating metric and provide a clean summary suitable for analysis.",
         "answer": "",
         "expected_output_file": [
             "Task14/tc14_output01.xlsx"
@@ -241,7 +241,7 @@
             "Task15/tc15_input07.csv",
             "Task15/tc15_input08.csv"
         ],
-        "prompt": "Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names into English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).",
+        "prompt": "Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names to English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).",
         "answer": "rows : 118310, columns : 44",
         "expected_output_file": [
             "Task15/tc15_output01.xlsx"
@@ -272,7 +272,7 @@
             "Task17/tc17_input01.xlsx",
             "Task17/tc17_input02.xlsx"
         ],
-        "prompt": "Here are two tables containing weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.",
+        "prompt": "Here are two tables about weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.",
         "answer": "",
         "expected_output_file": [
             "Task17/tc17_output01.xlsx"
@@ -287,7 +287,7 @@
         "spreadsheets": [
             "Task18/tc18_input01.xlsx"
         ],
-        "prompt": "Here is a dataset showing total enrollment by year and semester. Please calculate the total enrollment for each year, determine year-over-year growth in total enrollment, identify years with more than ten percent growth, and create a line chart showing overall enrollment trends over time. Highlight the high‑growth years clearly in the Excel output. Output the results in a new Excel file.",
+        "prompt": "Here is a dataset showing enrollment by college, department, and year. Please calculate the total enrollment for each department, determine year-over-year growth, identify departments with more than ten percent growth, and create a line chart showing enrollment trends for each college. Output the results in a new Excel file.",
         "answer": "",
         "expected_output_file": [
             "Task18/tc18_output01.xlsx"
@@ -302,7 +302,7 @@
         "spreadsheets": [
             "Task19/tc19_input01.xlsx"
         ],
-        "prompt": "This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, and compute the percentage change from 2000 to 2022.\n\nIf data for the year 2022 is missing, then instead use the latest available year (for example 2019) as the comparison endpoint, and clearly state this assumption in the output.\n\nCreate a bar chart ranking continents by emissions in 2022; if 2022 is not available, rank by the latest available year used in your calculation. Output the results in a new Excel file.",
+        "prompt": "This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, compute the percentage change from 2000 to 2022, and create a bar chart ranking continents by emissions in 2022. Output a new Excel file.",
         "answer": "",
         "expected_output_file": [
             "Task19/tc19_output01.xlsx"
@@ -320,7 +320,7 @@
             "Task20/tc20_input03.xlsx",
             "Task20/tc20_input04.xlsx"
         ],
-        "prompt": "Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results in a new Excel file.",
+        "prompt": "Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results to a new Excel file.",
         "answer": "",
         "expected_output_file": [
             "Task20/tc20_output01.xlsx"
@@ -354,7 +354,7 @@
             "Task21/tc21_input19.xlsx",
             "Task21/tc21_input20.xlsx"
         ],
-        "prompt": "As an HR professional, I have received 20 spreadsheets containing candidate information. Your task is to rank the candidates based on the following score:\n0.5 * working experience + 0.3 * number of skills + 0.2 * personality score\nOutput a file that includes each candidate’s score, skills, and other attributes.",
+        "prompt": "As an HR, I've received 20 spreadsheets about candidate information. You task is to rank the candidates based on the following \ncriteria :   \n0.5 * working experience + 0.3 * number of skills + 0.2 * personality score\nOutput a file with score, skills and other attributes of candidates.",
         "answer": "",
         "expected_output_file": [
             "Task21/tc21_output01.xlsx"
@@ -369,7 +369,7 @@
         "spreadsheets": [
             "Task22/tc22_input01.xlsx"
         ],
-        "prompt": "Check the file for missing data and identify where values are missing.",
+        "prompt": "Check for missing data in the file",
         "answer": "Missing data on line 3 col 1",
         "expected_output_file": [],
         "feedback": "Can I help you fill the missing data with a default value?\n\n---"
@@ -383,7 +383,7 @@
             "Task23/tc23_input01.xlsx",
             "Task23/tc23_input02.xlsx"
         ],
-        "prompt": "Fill any missing data in tc23_input01 using information from file tc23_input02, and output a file with complete data.",
+        "prompt": "Fill any missing data in tc23_input01 using info from file tc23_input02, output the file with complete data",
         "answer": "",
         "expected_output_file": [
             "Task23/tc23_output01.xlsx"
@@ -399,7 +399,7 @@
             "Task24/tc24_input01.xlsx",
             "Task24/tc24_input02.xlsx"
         ],
-        "prompt": "Merge the two files into a single file.",
+        "prompt": "Merge the files",
         "answer": "",
         "expected_output_file": [
             "Task24/tc24_output01.xlsx"
@@ -416,7 +416,7 @@
             "Task25/tc25_input02.xlsx",
             "Task25/tc25_input03.xlsx"
         ],
-        "prompt": "Merge the three files into a single file.",
+        "prompt": "Merge the files",
         "answer": "",
         "expected_output_file": [
             "Task25/tc25_output01.xlsx"
@@ -434,7 +434,7 @@
             "Task26/tc26_input03.xlsx",
             "Task26/tc26_input04.xlsx"
         ],
-        "prompt": "Merge the four files into a single file.",
+        "prompt": "Merge the files",
         "answer": "",
         "expected_output_file": [
             "Task26/tc26_output01.xlsx"
@@ -449,7 +449,7 @@
         "spreadsheets": [
             "Task27/tc27_input01.xlsx"
         ],
-        "prompt": "Inspect the room identifiers in the spreadsheet and check for any inconsistencies in how the same room is written (for example: \"C 80\" vs \"C80\" vs \"c80\"). Do not modify the workbook. Instead, describe any inconsistencies you find in natural language, and, if appropriate, ask a clarifying question such as: \"Should Room be C 80 or C80 or c80?\"",
+        "prompt": "check for an errors",
         "answer": "Should Room be C 80 or C80 or c80",
         "expected_output_file": [],
         "feedback": "Are \"C 80\", \"C80\", and \"c80\" all the same room, or should I treat them as different values?"

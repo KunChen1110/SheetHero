@@ -9,13 +9,19 @@ This dataset tests whether the agent can reason with spreadsheets and generate o
 
 ### Budget calculating
 
+### Scenario
+Business / personal finance analysis
+
+### Category
+merge daily spending tables; compute total and average spending; highlight maximum spending
+
 ### SpreedSheet
 
 [spreadsheet1](Task01/tc01_input01.xlsx)
 [spreadsheet2](Task01/tc01_input02.xlsx)
 
 ### Prompt
-Here are two tables about my daily spending. Could you first merge the two forms together, then calculate the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red. You need to output a new spreadsheet.
+Here are two tables showing my daily spending. First merge the two tables into a single table, then calculate the average daily spending and the total spending in November. Also highlight in red the day or days on which I spend the most. Finally, output the results as a new spreadsheet.
 
 ### Answer
 Total spendings: £2023.75
@@ -35,6 +41,12 @@ LLM: Do you spend 0 pound for gift on Nov 4th and 0 pound for coffee on Nov 14th
 
 ### Meeting schdeuling
 
+### Scenario
+Operations management / scheduling
+
+### Category
+join student and tutor tables; build consolidated meeting schedule
+
 ### SpreedSheet
 
 [spreadsheet3](Task02/tc02_input01.csv)
@@ -43,7 +55,7 @@ LLM: Do you spend 0 pound for gift on Nov 4th and 0 pound for coffee on Nov 14th
 [spreadsheet6](Task02/tc02_input04.csv)
 [spreadsheet7](Task02/tc02_input05.csv)
 ### Prompt
-Hello, here are tables about students and their tutors. You task is to output a new form listing each tutor’s name, the time and location of their tutor meeting, as well as the students attending the meeting.
+Here are several tables about students and their tutors. Your task is to produce a new table that lists, for each tutor, the tutor’s name, the meeting time and location, and the students attending that meeting. Output the result as a new spreadsheet.
 ### Answer
 
 #### Output File
@@ -58,6 +70,12 @@ LLM : Are room number 'C80' and 'C 80' the same?
 ## Test 3
 ### Internet Penetration Rate Analysis (visualization)
 
+### Scenario
+Statistical analysis and data visualization
+
+### Category
+clean multi-row headers; compute regional averages and growth; generate line chart
+
 ### SpreadSheet
 [spreadsheet8](Task03/tc03_input01.xlsx)
 
@@ -65,19 +83,19 @@ LLM : Are room number 'C80' and 'C 80' the same?
 [INSTRUCTION FOR ANALYST:
 The Data sheet has a messy multi-row header. When you read it via inspector / inspector_multi:
 
-1. Do NOT assume data[0] is the header row.
-2. First, find the FIRST row whose first cell is a year (e.g. 2009, 2010, …).
-3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing "in %" or extra notes column.
+1. Do NOT assume that data[0] is the header row.
+2. First, find the FIRST row whose first cell is a year (e.g., 2009, 2010, …).
+3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing "in %" or extra notes columns.
 4. When building a DataFrame, always enforce that:
    len(columns) == len(row)
    If the header row is longer, slice it: columns = header[:len(row)].
-5. Only after normalizing header + rows to equal length, create the DataFrame once and reuse it.
+5. Only after normalizing the header and data rows to equal length, create the DataFrame once and reuse it.
 
 Follow these rules strictly to avoid “N columns passed, passed data had M columns” errors.
 END OF INSTRUCTION]
 
 
-Here is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate 
+Here is a table showing internet penetration rates from 2009 to 2024. Please calculate the average internet penetration rate for each region over the years 2020–2024. Identify the region with the fastest growth rate and sort the regions by growth rate. Also provide a line chart where each region is represented by a different color, the horizontal axis is year (2020 to 2024), and the vertical axis is penetration rate.
 
 
 ### Answer
@@ -94,13 +112,20 @@ I find that the data in 2020 is missing.
 
 ## Test4
 ### Task scheduling table
+
+### Scenario
+Algorithmic scheduling problem
+
+### Category
+build task dependency graph; perform topological scheduling; compute total duration
+
 ### SpreadSheet
 [spreadsheet9](Task04/tc04_input01.xlsx)
 [spreadsheet10](Task04/tc04_input02.xlsx)
 
 ### Prompt
-Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.
-Your task is to schedule the tasks based on task dependency.
+Here is a table containing tasks, their durations, and priorities, and another table describing task dependencies (which task needs to be finished before another). All machines start at 8:00 am.
+Your task is to schedule the tasks based on these dependencies.
 
 Create a new Excel sheet showing the final schedule with columns:
 
@@ -108,7 +133,7 @@ Create a new Excel sheet showing the final schedule with columns:
 |---------|-----------|----------|-----------|----------|
 
 Also answer the question
-What's the duration of finishing all the tasks ?
+What is the total duration required to finish all the tasks?
 
 This is a scheduling-with-dependencies problem. You MUST:
 
@@ -138,14 +163,20 @@ Can I assume that there is no time between switching from one task to another?
 
 ## Test5
 ### Indian Smartphone shipment and market share
+
+### Scenario
+Business / market analysis
+
+### Category
+align time ranges; combine shipment and market share; compute estimated unit shipments per brand
+
 ### SpreadSheet
 [spreadsheet11](Task05/tc05_input01.xlsx)
 [spreadsheet12](Task05/tc05_input02.xlsx)
 
 ### Prompt
-Here are two forms, one is the number of unit smartphones in india from 2012 to 2025, the other is 
-the marketshare of 2017 to 2025 in india. You task is two find the overlap between 2 timelines, then compute the estimation of number of smartphones of each brand in india. That is market_share * shipment.
-Output a form in the following format :
+Here are two tables. One gives the number of smartphone units shipped in India from 2012 to 2025, and the other gives market share in India from 2017 to 2025. Your task is to find the overlapping time period between the two timelines, then estimate the number of smartphones for each brand in India as market_share * shipment.
+Output a table in the following format:
 
 | Time | Vivo (Unit shipment) | SamSung | ... |  
 |------|----------------------|---------|-----|
@@ -164,15 +195,22 @@ Is market_share * shipment a good estimation?
 
 ## Test6
 ### Titanic survivor dataset analysis
+
+### Scenario
+Machine learning / exploratory data analysis
+
+### Category
+compute correlation coefficients between survival and features; handle missing values; output summary table
+
 ### SpreadSheet
 [spreadsheet13](Task06/tc06_input01.csv)
 
 ### Prompt
-Your task is to calculate the correlation coefficient between survivor and other factors (sex, age, ...) given the titantic dataset.
-Pearson correlation coefficient :
+Your task is to calculate the correlation coefficient between survival and other factors (such as sex, age, etc.) using the Titanic dataset.
+Pearson correlation coefficient:
 r_xy = cov(X, Y) / (σ_X * σ_Y)
-Output an excel with format
-| Sex | Age | Fare | Carbin | Emabarked | 
+Output an Excel file with the following columns:
+| Sex | Age | Fare | Cabin | Embarked | 
 |-----|-----|------|--------|-----------|
 
 
@@ -189,11 +227,18 @@ I found missing values — how would you like me to handle them? Can I treat the
 ## Test7
 
 ### Ice-cream sales vs temperature, rain, price
+
+### Scenario
+Machine learning regression task
+
+### Category
+fit linear regression model; estimate feature coefficients; export learned weights
+
 ### SpreadSheet
 [spreadsheet14](Task07/tc07_input01.csv)
 
 ### Prompt
-Assume a linear relationship between ice-cream sales and the factors — temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights to an Excel file.
+Assume a linear relationship between ice-cream sales and three factors: temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights in an Excel file.
 
 ### Answer
 None
@@ -208,15 +253,22 @@ In this case, I treat rains as 1 and not rains as 0.
 
 ## Test8
 ### Iris datasets
+
+### Scenario
+Machine learning / statistical analysis
+
+### Category
+filter by species; compute correlation matrix of numeric features; format correlation table
+
 ### SpeadSheet
 [spreadsheet15](Task08/tc08_input01.csv)
 
 ### Prompt
-Calculate the correlation matrix for all numeric columns in the Iris dataset separately for species Iris-setosa.
+Calculate the correlation matrix for all numeric columns in the Iris dataset, restricted to the species Iris-setosa.
 Output a 4×4 table with both rows and columns as:
 |Sepal_Length | Sepal_Width | Petal_Length | Petal_Width |
 |-------------|-------------|--------------|-------------|
-Round all correlation values to two decimals, and label each table clearly with the species name.
+Round all correlation values to two decimal places, and label the table clearly with the species name.
 
 ### Output
 [outputfile9](Task08/tc08_output01.xlsx)
@@ -230,11 +282,18 @@ Would you like me to include species names as table titles, or as part of the he
 
 ## Test9
 ### Business Analysis of Coca cola company
+
+### Scenario
+Financial / business analysis
+
+### Category
+compute cash flow ratios; calculate free cash flow; summarize yearly and overall efficiency
+
 ### SpreadSheet
 [spreadsheet16](Task09/tc09_input01.xlsx)
 
 ### Prompt
-Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculating:
+Evaluate the cash flow efficiency of Coca-Cola from 2009 to 2018 by calculating:
 
 * Operating Cash Flow to Net Income
 
@@ -257,6 +316,13 @@ Do you want the OCF/Net Income ratio averaged across all years or shown year by 
 
 ## Test10
 ### Cycle detection in graphs
+
+### Scenario
+Algorithm problem on graph structures
+
+### Category
+parse adjacency lists; detect cycles in directed graphs; flag graphs with cycles
+
 ### SpreadSheet
 [spreadsheet17](Task10/tc10_input01.csv)
 [spreadsheet18](Task10/tc10_input02.csv)
@@ -267,7 +333,7 @@ Do you want the OCF/Net Income ratio averaged across all years or shown year by 
 
 
 ### Prompt
-Given 5 excel representing the adjacent list of the directed graph , could you tell which graph contains a cycle and which graph not? Output an excel, containing columns in the format
+Given five Excel files representing the adjacency lists of directed graphs, determine which graphs contain a cycle and which do not. Output an Excel file with the following columns:
 | Graph ID| Contains Cycle (True / False)|
 |---------|------------------------------|
 
@@ -288,6 +354,13 @@ None
 
 ## Test11
 ### Inventory Management problem
+
+### Scenario
+Operations research / inventory management
+
+### Category
+compute EOQ and related metrics; run sensitivity analysis; compare cost scenarios
+
 ### Spreadsheet
 [spreadsheet22](Task11/tc11_input01.xlsx)
 
@@ -320,6 +393,13 @@ Clarification on Assumptions: The EOQ model assumes constant demand, no stockout
 
 ## Test12
 ### Multi-Source Financial Performance Dashboard
+
+### Scenario
+Financial performance and marketing analytics
+
+### Category
+consolidate multi-sheet financial data; compute profit and margin metrics; calculate CAC and marketing efficiency
+
 ### Spreadsheet
 [spreadsheet23](Task12/tc12_input01.xlsx)
 [spreadsheet24](Task12/tc12_input02.xlsx)
@@ -353,6 +433,13 @@ The dashboard was generated by first consolidating the monthly P&L and Sales dat
 
 ## Test13
 ### Global Diabetes Population Analysis
+
+### Scenario
+Public health and healthcare expenditure analysis
+
+### Category
+aggregate diabetic population by region; compute global share and average expenditure per person; build summary table
+
 ### Spreadsheet
 [spreadsheet26](Task13/tc13_input01.xlsx)
 [spreadsheet27](Task13/tc13_input02.xlsx)
@@ -363,11 +450,11 @@ Given three spreadsheets showing:
 * Number of diabetics worldwide by region (in millions, 2024)
 * Diabetes-related health expenditure by region (in billion USD, 2024)
 
-Calculate for each region:
+For each region, calculate:
 * The share of global diabetic population (%)
 * The average expenditure per diabetic (USD per person)
 
-Output an Excel file containing:
+Output an Excel file containing the following columns:
 
 | Region | Diabetics (millions) | Share of Global (%) | Expenditure (billion USD) | Avg Expenditure per Person (USD) |
 |--------|----------------------|---------------------|---------------------------|----------------------------------|
@@ -386,12 +473,18 @@ None
 ## Test14
 ### Global Mobile Reviews Analysis
 
+### Scenario
+Customer review and marketing analytics
+
+### Category
+group reviews by country and brand; compute average rating and review counts; summarize in table
+
 ### Spreadsheet
 [spreadsheet29](Task14/tc14_input01.csv)
 
 
 ### Prompt
-Given a dataset of smartphone reviews containing customer information, brand, model, and overall ratings, generate a table that shows, for each country and brand, the average rating and the number of reviews. The output should be an Excel file with columns: country, brand, avg_rating, num_reviews. Focus only on the average rating metric and provide a clean summary suitable for analysis.
+Given a dataset of smartphone reviews containing customer information, brand, model, and overall ratings, generate a table that shows, for each country and brand, the average rating and the number of reviews. The output should be an Excel file with columns: country, brand, avg_rating, num_reviews. Focus only on the average rating metric and provide a clear summary suitable for analysis.
 
 
 ### Output
@@ -408,6 +501,12 @@ Some reviews may have missing ratings. Should I exclude them or treat them as ze
 ## Test15
 ### Brazilian E-Commerce Public Dataset Analysis
 
+### Scenario
+E-commerce data integration and analysis
+
+### Category
+merge multiple relational CSV tables; translate category names; report merged dataset size
+
 ### Spreadsheet
 [spreadsheet30](Task15/tc15_input01.csv)
 [spreadsheet31](Task15/tc15_input02.csv)
@@ -419,7 +518,7 @@ Some reviews may have missing ratings. Should I exclude them or treat them as ze
 [spreadsheet37](Task15/tc15_input08.csv)
 
 ### Prompt
-Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names to English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).
+Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names into English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).
 ### Answer
 rows : 118310, columns : 44
 
@@ -436,6 +535,12 @@ None
 ## Test 16
 
 ### Employee Performance & Salary Correlation
+
+### Scenario
+HR analytics and compensation analysis
+
+### Category
+compute correlation between performance and income; aggregate average income by rating; create scatter plot
 
 ### Spread Sheet
 
@@ -461,6 +566,12 @@ LLM: Should the scatter plot include a trendline?
 
 ### Store Feature Analysis
 
+### Scenario
+Retail store performance analysis
+
+### Category
+merge weekly store tables; compute average numeric features by store type; compare holiday vs non-holiday weeks
+
 ### Spread Sheet
 
 [spreadsheet39](Task17/tc17_input01.xlsx)
@@ -468,7 +579,7 @@ LLM: Should the scatter plot include a trendline?
 
 ### Prompt
 
-Here are two tables about weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.
+Here are two tables containing weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.
 
 ### Answer
 
@@ -486,13 +597,18 @@ LLM: Should holiday and non-holiday averages also be grouped by store type?
 
 ### University Course Enrollment Analysis
 
+### Scenario
+Education enrollment analytics
+
+### Category
+aggregate enrollment by department; calculate year-over-year growth; identify high-growth departments; create trend line chart
+
 ### Spread Sheet
 
 [spreadsheet41](Task18/tc18_input01.xlsx)
 
 ### Prompt
-
-Here is a dataset showing enrollment by college, department, and year. Please calculate the total enrollment for each department, determine year-over-year growth, identify departments with more than ten percent growth, and create a line chart showing enrollment trends for each college. Output the results in a new Excel file.
+Here is a dataset showing total enrollment by year and semester. Please calculate the total enrollment for each year, determine year-over-year growth in total enrollment, identify years with more than ten percent growth, and create a line chart showing overall enrollment trends over time. Highlight the high‑growth years clearly in the Excel output. Output the results in a new Excel file.
 
 ### Answer
 
@@ -510,13 +626,22 @@ LLM: Should growth be calculated only for the most recent year?
 
 ### Global Carbon Emissions Comparison
 
+### Scenario
+Environmental and climate data analysis
+
+### Category
+group emissions by continent; compute yearly totals and percentage changes; build 2022 ranking bar chart
+
 ### Spread Sheet
 
 [spreadsheet42](Task19/tc19_input01.xlsx)
 
 ### Prompt
+This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, and compute the percentage change from 2000 to 2022.
 
-This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, compute the percentage change from 2000 to 2022, and create a bar chart ranking continents by emissions in 2022. Output a new Excel file.
+If data for the year 2022 is missing, then instead use the latest available year (for example 2019) as the comparison endpoint, and clearly state this assumption in the output.
+
+Create a bar chart ranking continents by emissions in 2022; if 2022 is not available, rank by the latest available year used in your calculation. Output the results in a new Excel file.
 
 ### Answer
 
@@ -534,6 +659,12 @@ LLM: Should countries without a continent be grouped under “Unknown”?
 
 ### Hospital Resource Utilization Analysis
 
+### Scenario
+Healthcare operations and resource planning
+
+### Category
+combine staff, schedule, service, and patient tables; compute utilization metrics; highlight overutilized departments
+
 ### Spread Sheet
 
 [spreadsheet43](Task20/tc20_input01.xlsx)
@@ -543,7 +674,7 @@ LLM: Should countries without a continent be grouped under “Unknown”?
 
 ### Prompt
 
-Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results to a new Excel file.
+Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results in a new Excel file.
 
 ### Answer
 
@@ -561,6 +692,12 @@ LLM: Should the highlighting apply only to the utilisation value or the entire r
 ## Test 21
 
 ### Interviewee screening
+
+### Scenario
+HR candidate evaluation
+
+### Category
+aggregate candidate attributes from multiple files; compute weighted screening score; rank and filter candidates
 
 ### Spread Sheet
 [spreadsheet47](Task21/tc21_input01.xlsx)
@@ -585,10 +722,9 @@ LLM: Should the highlighting apply only to the utilisation value or the entire r
 [spreadsheet66](Task21/tc21_input20.xlsx)
 
 ### Prompt
-As an HR, I've received 20 spreadsheets about candidate information. You task is to rank the candidates based on the following 
-criteria :   
+As an HR professional, I have received 20 spreadsheets containing candidate information. Your task is to rank the candidates based on the following score:
 0.5 * working experience + 0.3 * number of skills + 0.2 * personality score
-Output a file with score, skills and other attributes of candidates.
+Output a file that includes each candidate’s score, skills, and other attributes.
 
 
 ### Answer
@@ -609,11 +745,17 @@ Some candidates did not fill in essential information. Should these fields be tr
 
 ### Missing Data (Simple)
 
+### Scenario
+Data quality checking
+
+### Category
+scan spreadsheet for missing cells; locate and report positions of missing values
+
 ### Spreadsheet
 [spreadsheet67](Task22/tc22_input01.xlsx)
 
 ### Prompt
-Check for missing data in the file
+Check the file for missing data and identify where values are missing.
 
 ### Answer
 Missing data on line 3 col 1
@@ -631,12 +773,18 @@ Can I help you fill the missing data with a default value?
 
 ### Fill Missing Data from Another File (Simple)
 
+### Scenario
+Data cleaning and imputation
+
+### Category
+align two files; fill missing values in primary file using secondary file; output completed table
+
 ### Spreadsheet
 [spreadsheet68](Task23/tc23_input01.xlsx)
 [spreadsheet69](Task23/tc23_input02.xlsx)
 
 ### Prompt
-Fill any missing data in tc23_input01 using info from file tc23_input02, output the file with complete data
+Fill any missing data in tc23_input01 using information from file tc23_input02, and output a file with complete data.
 
 ### Answer
 None
@@ -653,12 +801,18 @@ If both files have a value, which file should take priority when filling the mis
 
 ### Merge Two Files (Simple)
 
+### Scenario
+Basic data integration
+
+### Category
+merge two spreadsheets; resolve overlaps or conflicts; output combined table
+
 ### Spreadsheet
 [spreadsheet70](Task24/tc24_input01.xlsx)
 [spreadsheet71](Task24/tc24_input02.xlsx)
 
 ### Prompt 
-Merge the files
+Merge the two files into a single file.
 
 ### Answer
 None
@@ -675,13 +829,19 @@ When merging the two files, how should I handle rows with conflicting data?
 
 ### Merge Three Files (Simple)
 
+### Scenario
+Basic data integration
+
+### Category
+merge three spreadsheets; handle duplicate records; produce unified dataset
+
 ### Spreadsheet
 [spreadsheet72](Task25/tc25_input01.xlsx)
 [spreadsheet73](Task25/tc25_input02.xlsx)
 [spreadsheet74](Task25/tc25_input03.xlsx)
 
 ### Prompt
-Merge the files
+Merge the three files into a single file.
 
 ### Answer
 None
@@ -698,6 +858,12 @@ When merging three files, how should I resolve conflicts between different versi
 
 ### Merge Four Files (Simple)
 
+### Scenario
+Basic data integration
+
+### Category
+merge four spreadsheets; deduplicate or reconcile conflicting rows; output consolidated file
+
 ### Spreadsheet
 [spreadsheet75](Task26/tc26_input01.xlsx)
 [spreadsheet76](Task26/tc26_input02.xlsx)
@@ -705,7 +871,7 @@ When merging three files, how should I resolve conflicts between different versi
 [spreadsheet78](Task26/tc26_input04.xlsx)
 
 ### Prompt
-Merge the files
+Merge the four files into a single file.
 
 ### Answer
 None
@@ -722,17 +888,20 @@ When merging four files, do you want duplicate rows removed if the same record a
 
 ### Room Syntax Difference (Simple)
 
+### Scenario
+Data cleaning and standardization
+
+### Category
+detect inconsistent room identifiers; compare string formats; suggest standardized room notation
+
 ### Spreadsheet
 [spreadsheet79](Task27/tc27_input01.xlsx)
 
 ### Prompt 
-check for an errors
+Inspect the room identifiers in the spreadsheet and check for any inconsistencies in how the same room is written (for example: "C 80" vs "C80" vs "c80"). Do not modify the workbook. Instead, describe any inconsistencies you find in natural language, and, if appropriate, ask a clarifying question such as: "Should Room be C 80 or C80 or c80?"
 
 ### Answer
 Should Room be C 80 or C80 or c80
 
 ### Feedback
 Are "C 80", "C80", and "c80" all the same room, or should I treat them as different values?
-
-
-
