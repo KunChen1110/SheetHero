@@ -62,7 +62,24 @@ LLM : Are room number 'C80' and 'C 80' the same?
 [spreadsheet8](Task03/tc03_input01.xlsx)
 
 ### Prompt
+[INSTRUCTION FOR ANALYST:
+The Data sheet has a messy multi-row header. When you read it via inspector / inspector_multi:
+
+1. Do NOT assume data[0] is the header row.
+2. First, find the FIRST row whose first cell is a year (e.g. 2009, 2010, …).
+3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing "in %" or extra notes column.
+4. When building a DataFrame, always enforce that:
+   len(columns) == len(row)
+   If the header row is longer, slice it: columns = header[:len(row)].
+5. Only after normalizing header + rows to equal length, create the DataFrame once and reuse it.
+
+Follow these rules strictly to avoid “N columns passed, passed data had M columns” errors.
+END OF INSTRUCTION]
+
+
 Here is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate 
+
+
 ### Answer
 
 
@@ -92,6 +109,17 @@ Create a new Excel sheet showing the final schedule with columns:
 
 Also answer the question
 What's the duration of finishing all the tasks ?
+
+This is a scheduling-with-dependencies problem. You MUST:
+
+1. Treat the dependency table as a DAG:
+   - Missing/empty "Depends on" = ROOT task, do NOT drop these rows.
+2. Build a topological order:
+   - Every Task ID in the task table appears EXACTLY ONCE in the final schedule.
+   - Print all Task IDs vs scheduled Task IDs and ensure the sets match.
+3. Time:
+   - Start at 08:00, add numeric durations sequentially.
+   - Total duration = sum of all task durations when executed one after another.
 
 
 ### Answer
@@ -265,7 +293,17 @@ None
 
 
 ### Prompt
-Based on the provided inventory data, calculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost. Also, perform a sensitivity analysis to show how total cost changes with different order quantities, and evaluate a scenario where annual demand increases by 20%. Provide the results in a structured table.
+Here is an inventory dataset for a single product.
+Based on this data, please:
+
+Calculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost for the base scenario.
+Perform a sensitivity analysis by varying the order quantity (for example 50%, 75%, 100%, 125%, and 150% of the EOQ) and compute the total annual cost for each case.
+Evaluate a scenario where the annual demand increases by 20% and recompute EOQ, reorder point, number of orders per year, cycle time, and total annual cost.
+Output the results in a new Excel file organized in clear tables. At minimum:
+
+One table summarizing the base scenario metrics.
+One table for the sensitivity analysis (order quantity vs total annual cost).
+One table for the “demand +20%” scenario metrics.
 
 ### Answer
 
@@ -381,9 +419,9 @@ Some reviews may have missing ratings. Should I exclude them or treat them as ze
 [spreadsheet37](Task15/tc15_input08.csv)
 
 ### Prompt
-Can you merge the dataset, translating the product category name to english? And tell me the side of output in terms of rows and columns.
+Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names to English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).
 ### Answer
-rows : 118310, columns : 39 
+rows : 118310, columns : 44
 
 ### Output file
 [outputfile18](Task15/tc15_output01.xlsx)
@@ -401,7 +439,7 @@ None
 
 ### Spread Sheet
 
-[spreadsheet38](Task16/Employe_Performance_dataset.csv)
+[spreadsheet38](Task16/tc16_input01.xlsx)
 
 ### Prompt
 
@@ -425,8 +463,8 @@ LLM: Should the scatter plot include a trendline?
 
 ### Spread Sheet
 
-[spreadsheet39](Task17/stores.csv)
-[spreadsheet40](Task17/features.csv)
+[spreadsheet39](Task17/tc17_input01.xlsx)
+[spreadsheet40](Task17/tc17_input02.xlsx)
 
 ### Prompt
 
@@ -450,7 +488,7 @@ LLM: Should holiday and non-holiday averages also be grouped by store type?
 
 ### Spread Sheet
 
-[spreadsheet41](Task18/ISU Enrollment.csv)
+[spreadsheet41](Task18/tc18_input01.xlsx)
 
 ### Prompt
 
@@ -474,7 +512,7 @@ LLM: Should growth be calculated only for the most recent year?
 
 ### Spread Sheet
 
-[spreadsheet42](Task19/Carbon_%36CO2%29_Emissions_by_Country.csv)
+[spreadsheet42](Task19/tc19_input01.xlsx)
 
 ### Prompt
 
@@ -498,10 +536,10 @@ LLM: Should countries without a continent be grouped under “Unknown”?
 
 ### Spread Sheet
 
-[spreadsheet43](Task20/staff.csv)
-[spreadsheet44](Task20/staff_schedule.csv)
-[spreadsheet45](Task20/services_weekly.csv)
-[spreadsheet46](Task20/patients.csv)
+[spreadsheet43](Task20/tc20_input01.xlsx)
+[spreadsheet44](Task20/tc20_input02.xlsx)
+[spreadsheet45](Task20/tc20_input03.xlsx)
+[spreadsheet46](Task20/tc20_input04.xlsx)
 
 ### Prompt
 
@@ -564,6 +602,137 @@ None
 ### Feedback
 Some candidates did not fill in essential information. Should these fields be treated as null values? Additionally, a few candidates did not provide their names. In such cases, can we exclude them from the analysis?
 
+---
+
+
+## Test 22
+
+### Missing Data (Simple)
+
+### Spreadsheet
+[spreadsheet67](Task22/tc22_input01.xlsx)
+
+### Prompt
+Check for missing data in the file
+
+### Answer
+Missing data on line 3 col 1
+
+
+### Output
+None
+
+### Feedback
+Can I help you fill the missing data with a default value?
+
+---
+
+## Test 23
+
+### Fill Missing Data from Another File (Simple)
+
+### Spreadsheet
+[spreadsheet68](Task23/tc23_input01.xlsx)
+[spreadsheet69](Task23/tc23_input02.xlsx)
+
+### Prompt
+Fill any missing data in tc23_input01 using info from file tc23_input02, output the file with complete data
+
+### Answer
+None
+
+### Output
+[outputfile25](Task23/tc23_output01.xlsx)
+
+### Feedback
+If both files have a value, which file should take priority when filling the missing data?
+
+---
+
+## Test 24
+
+### Merge Two Files (Simple)
+
+### Spreadsheet
+[spreadsheet70](Task24/tc24_input01.xlsx)
+[spreadsheet71](Task24/tc24_input02.xlsx)
+
+### Prompt 
+Merge the files
+
+### Answer
+None
+
+### Output
+[outputfile26](Task24/tc24_output01.xlsx)
+
+### Feedback
+When merging the two files, how should I handle rows with conflicting data?
+
+---
+
+## Test 25
+
+### Merge Three Files (Simple)
+
+### Spreadsheet
+[spreadsheet72](Task25/tc25_input01.xlsx)
+[spreadsheet73](Task25/tc25_input02.xlsx)
+[spreadsheet74](Task25/tc25_input03.xlsx)
+
+### Prompt
+Merge the files
+
+### Answer
+None
+
+### Output
+[outputfile27](Task25/tc25_output01.xlsx)
+
+### Feedback
+When merging three files, how should I resolve conflicts between different versions of the same row?
+
+---
+
+## Test 26
+
+### Merge Four Files (Simple)
+
+### Spreadsheet
+[spreadsheet75](Task26/tc26_input01.xlsx)
+[spreadsheet76](Task26/tc26_input02.xlsx)
+[spreadsheet77](Task26/tc26_input03.xlsx)
+[spreadsheet78](Task26/tc26_input04.xlsx)
+
+### Prompt
+Merge the files
+
+### Answer
+None
+
+### Output
+[outputfile28](Task26/tc26_output01.xlsx)
+
+### Feedback
+When merging four files, do you want duplicate rows removed if the same record appears in multiple files?
+
+---
+
+## Test 27
+
+### Room Syntax Difference (Simple)
+
+### Spreadsheet
+[spreadsheet79](Task27/tc27_input01.xlsx)
+
+### Prompt 
+check for an errors
+
+### Answer
+Should Room be C 80 or C80 or c80
+
+### Feedback
+Are "C 80", "C80", and "c80" all the same room, or should I treat them as different values?
 
 
 

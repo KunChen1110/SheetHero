@@ -36,7 +36,7 @@
         "spreadsheets": [
             "Task03/tc03_input01.xlsx"
         ],
-        "prompt": "Here is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate",
+        "prompt": "[INSTRUCTION FOR ANALYST:\nThe Data sheet has a messy multi-row header. When you read it via inspector / inspector_multi:\n\n1. Do NOT assume data[0] is the header row.\n2. First, find the FIRST row whose first cell is a year (e.g. 2009, 2010, …).\n3. Use the row ABOVE that as the header row for regions (Africa, Arab States, etc.), and IGNORE any trailing \"in %\" or extra notes column.\n4. When building a DataFrame, always enforce that:\n   len(columns) == len(row)\n   If the header row is longer, slice it: columns = header[:len(row)].\n5. Only after normalizing header + rows to equal length, create the DataFrame once and reuse it.\n\nFollow these rules strictly to avoid “N columns passed, passed data had M columns” errors.\nEND OF INSTRUCTION]\n\n\nHere is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate",
         "answer": "",
         "expected_output_file": [
             "Task03/tc03_output01.xlsx"
@@ -50,7 +50,7 @@
             "Task04/tc04_input01.xlsx",
             "Task04/tc04_input02.xlsx"
         ],
-        "prompt": "Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.\nYour task is to schedule the tasks based on task dependency.\n\nCreate a new Excel sheet showing the final schedule with columns:\n\n| Task ID | Task Name | Priority | Start Time | End Time |\n|---------|-----------|----------|-----------|----------|\n\nAlso answer the question\nWhat's the duration of finishing all the tasks ?",
+        "prompt": "Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.\nYour task is to schedule the tasks based on task dependency.\n\nCreate a new Excel sheet showing the final schedule with columns:\n\n| Task ID | Task Name | Priority | Start Time | End Time |\n|---------|-----------|----------|-----------|----------|\n\nAlso answer the question\nWhat's the duration of finishing all the tasks ?\n\nThis is a scheduling-with-dependencies problem. You MUST:\n\n1. Treat the dependency table as a DAG:\n   - Missing/empty \"Depends on\" = ROOT task, do NOT drop these rows.\n2. Build a topological order:\n   - Every Task ID in the task table appears EXACTLY ONCE in the final schedule.\n   - Print all Task IDs vs scheduled Task IDs and ensure the sets match.\n3. Time:\n   - Start at 08:00, add numeric durations sequentially.\n   - Total duration = sum of all task durations when executed one after another.",
         "answer": "The duration of finishing all tasks is 10 hour.",
         "expected_output_file": [
             "Task04/tc04_output01.xlsx"
@@ -146,7 +146,7 @@
         "spreadsheets": [
             "Task11/tc11_input01.xlsx"
         ],
-        "prompt": "Based on the provided inventory data, calculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost. Also, perform a sensitivity analysis to show how total cost changes with different order quantities, and evaluate a scenario where annual demand increases by 20%. Provide the results in a structured table.",
+        "prompt": "Here is an inventory dataset for a single product.\nBased on this data, please:\n\nCalculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost for the base scenario.\nPerform a sensitivity analysis by varying the order quantity (for example 50%, 75%, 100%, 125%, and 150% of the EOQ) and compute the total annual cost for each case.\nEvaluate a scenario where the annual demand increases by 20% and recompute EOQ, reorder point, number of orders per year, cycle time, and total annual cost.\nOutput the results in a new Excel file organized in clear tables. At minimum:\n\nOne table summarizing the base scenario metrics.\nOne table for the sensitivity analysis (order quantity vs total annual cost).\nOne table for the “demand +20%” scenario metrics.",
         "answer": "",
         "expected_output_file": [
             "Task11/tc11_output01.xlsx",
@@ -211,8 +211,8 @@
             "Task15/tc15_input07.csv",
             "Task15/tc15_input08.csv"
         ],
-        "prompt": "Can you merge the dataset, translating the product category name to english? And tell me the side of output in terms of rows and columns.",
-        "answer": "rows : 118310, columns : 39",
+        "prompt": "Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names to English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).",
+        "answer": "rows : 118310, columns : 44",
         "expected_output_file": [
             "Task15/tc15_output01.xlsx"
         ],
@@ -221,7 +221,9 @@
     {
         "task_id": "Test 16",
         "title": "Employee Performance & Salary Correlation",
-        "spreadsheets": [],
+        "spreadsheets": [
+            "Task16/tc16_input01.xlsx"
+        ],
         "prompt": "Here is a dataset containing employee details such as monthly income, years of experience, and performance rating. Please calculate the Pearson correlation between performance rating and monthly income, compute the average income for each rating level, and create a scatter plot of years of experience versus monthly income. Output the results in a new Excel file.",
         "answer": "",
         "expected_output_file": [
@@ -232,7 +234,10 @@
     {
         "task_id": "Test 17",
         "title": "Store Feature Analysis",
-        "spreadsheets": [],
+        "spreadsheets": [
+            "Task17/tc17_input01.xlsx",
+            "Task17/tc17_input02.xlsx"
+        ],
         "prompt": "Here are two tables about weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.",
         "answer": "",
         "expected_output_file": [
@@ -243,7 +248,9 @@
     {
         "task_id": "Test 18",
         "title": "University Course Enrollment Analysis",
-        "spreadsheets": [],
+        "spreadsheets": [
+            "Task18/tc18_input01.xlsx"
+        ],
         "prompt": "Here is a dataset showing enrollment by college, department, and year. Please calculate the total enrollment for each department, determine year-over-year growth, identify departments with more than ten percent growth, and create a line chart showing enrollment trends for each college. Output the results in a new Excel file.",
         "answer": "",
         "expected_output_file": [
@@ -254,7 +261,9 @@
     {
         "task_id": "Test 19",
         "title": "Global Carbon Emissions Comparison",
-        "spreadsheets": [],
+        "spreadsheets": [
+            "Task19/tc19_input01.xlsx"
+        ],
         "prompt": "This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, compute the percentage change from 2000 to 2022, and create a bar chart ranking continents by emissions in 2022. Output a new Excel file.",
         "answer": "",
         "expected_output_file": [
@@ -265,7 +274,12 @@
     {
         "task_id": "Test 20",
         "title": "Hospital Resource Utilization Analysis",
-        "spreadsheets": [],
+        "spreadsheets": [
+            "Task20/tc20_input01.xlsx",
+            "Task20/tc20_input02.xlsx",
+            "Task20/tc20_input03.xlsx",
+            "Task20/tc20_input04.xlsx"
+        ],
         "prompt": "Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results to a new Excel file.",
         "answer": "",
         "expected_output_file": [
@@ -303,6 +317,87 @@
         "expected_output_file": [
             "Task21/tc21_output01.xlsx"
         ],
-        "feedback": "Some candidates did not fill in essential information. Should these fields be treated as null values? Additionally, a few candidates did not provide their names. In such cases, can we exclude them from the analysis?"
+        "feedback": "Some candidates did not fill in essential information. Should these fields be treated as null values? Additionally, a few candidates did not provide their names. In such cases, can we exclude them from the analysis?\n\n---"
+    },
+    {
+        "task_id": "Test 22",
+        "title": "Missing Data (Simple)",
+        "spreadsheets": [
+            "Task22/tc22_input01.xlsx"
+        ],
+        "prompt": "Check for missing data in the file",
+        "answer": "Missing data on line 3 col 1",
+        "expected_output_file": [],
+        "feedback": "Can I help you fill the missing data with a default value?\n\n---"
+    },
+    {
+        "task_id": "Test 23",
+        "title": "Fill Missing Data from Another File (Simple)",
+        "spreadsheets": [
+            "Task23/tc23_input01.xlsx",
+            "Task23/tc23_input02.xlsx"
+        ],
+        "prompt": "Fill any missing data in tc23_input01 using info from file tc23_input02, output the file with complete data",
+        "answer": "",
+        "expected_output_file": [
+            "Task23/tc23_output01.xlsx"
+        ],
+        "feedback": "If both files have a value, which file should take priority when filling the missing data?\n\n---"
+    },
+    {
+        "task_id": "Test 24",
+        "title": "Merge Two Files (Simple)",
+        "spreadsheets": [
+            "Task24/tc24_input01.xlsx",
+            "Task24/tc24_input02.xlsx"
+        ],
+        "prompt": "Merge the files",
+        "answer": "",
+        "expected_output_file": [
+            "Task24/tc24_output01.xlsx"
+        ],
+        "feedback": "When merging the two files, how should I handle rows with conflicting data?\n\n---"
+    },
+    {
+        "task_id": "Test 25",
+        "title": "Merge Three Files (Simple)",
+        "spreadsheets": [
+            "Task25/tc25_input01.xlsx",
+            "Task25/tc25_input02.xlsx",
+            "Task25/tc25_input03.xlsx"
+        ],
+        "prompt": "Merge the files",
+        "answer": "",
+        "expected_output_file": [
+            "Task25/tc25_output01.xlsx"
+        ],
+        "feedback": "When merging three files, how should I resolve conflicts between different versions of the same row?\n\n---"
+    },
+    {
+        "task_id": "Test 26",
+        "title": "Merge Four Files (Simple)",
+        "spreadsheets": [
+            "Task26/tc26_input01.xlsx",
+            "Task26/tc26_input02.xlsx",
+            "Task26/tc26_input03.xlsx",
+            "Task26/tc26_input04.xlsx"
+        ],
+        "prompt": "Merge the files",
+        "answer": "",
+        "expected_output_file": [
+            "Task26/tc26_output01.xlsx"
+        ],
+        "feedback": "When merging four files, do you want duplicate rows removed if the same record appears in multiple files?\n\n---"
+    },
+    {
+        "task_id": "Test 27",
+        "title": "Room Syntax Difference (Simple)",
+        "spreadsheets": [
+            "Task27/tc27_input01.xlsx"
+        ],
+        "prompt": "check for an errors",
+        "answer": "Should Room be C 80 or C80 or c80",
+        "expected_output_file": [],
+        "feedback": "Are \"C 80\", \"C80\", and \"c80\" all the same room, or should I treat them as different values?"
     }
 ]
