@@ -1,0 +1,317 @@
+import customtkinter as ctk
+import os
+
+from tkinter import filedialog, messagebox
+from tkinterdnd2 import DND_FILES, TkinterDnD
+from PIL import Image
+from importlib import resources
+
+from customtkinter import CTkImage
+
+# Load folder img
+with resources.path("frontend.resources","folder.png") as icon_path:
+    directory_img = Image.open(icon_path).resize((20,20))
+directory_icon = CTkImage(directory_img, size=(20,20))
+
+# Load add img
+with resources.path("frontend.resources","add.png") as icon_path:
+    add_img = Image.open(icon_path).resize((20,20))
+add_icon = CTkImage(add_img, size=(20,20))
+
+with resources.path("frontend.resources","xls.png") as icon_path:
+    excel_img = Image.open(icon_path).resize((20,20))
+excel_icon = CTkImage(excel_img, size=(20,20))
+
+home_dir = os.path.expanduser("~")
+export_path = os.path.join(home_dir, "Documents")
+selected_files = []
+
+def is_valid_file(file_path):
+    if not file_path.lower().endswith(('.xlsx', '.xls', '.ods')):
+        return f"{file_path} is not an Excel file."
+
+    if file_path in selected_files:
+        return f"{file_path} has already been uploaded."
+
+    return True
+
+
+def process_files(file_paths):
+    error_messages = []
+
+    for path in file_paths:
+        path = path.strip("{}")
+        result = is_valid_file(path)
+
+        if result is True:
+            selected_files.append(path)
+        else:
+            error_messages.append(result)
+
+    return error_messages
+
+
+class UploadPage(ctk.CTkFrame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+        self.pack(fill="both", expand=True)
+
+        self.export_path = os.path.join(os.path.expanduser("~"), "Documents")
+
+        # Header
+        self.header = None
+        self.header_text = None
+        self.export_button = None
+        self.file_button = None
+        self.directory_button = None
+        self.create_header()
+
+        # File List
+        self.file_list = None
+        self.scroll_frame = None
+        self.create_file_list()
+        self.update_file_list()
+
+        # Upload Button
+        self.upload_button = None
+        self.create_upload_button()
+
+
+    # Creates the header
+    def create_header(self):
+        # =-=-= Header =-=-=
+        self.header = ctk.CTkFrame(
+            self,
+            height=40,
+        )
+        self.header.pack(
+            fill="x",
+            side="top",
+            padx=30,
+            pady=(20,0),
+        )
+
+        # =-=-= File Button =-=-=
+        self.file_button = ctk.CTkButton(
+            master=self.header,
+            text="",
+            image=add_icon,
+            fg_color="green",
+            hover_color="gray25",
+            width=30,
+            command=self.browse_files
+        )
+        self.file_button.pack(
+            side="left",
+            fill="y",
+            padx=5,
+            pady=5,
+        )
+
+        # =-=-= Directory Button =-=-=
+        self.directory_button = ctk.CTkButton(
+            master=self.header,
+            text="",
+            image=directory_icon,
+            fg_color="green",
+            hover_color="gray25",
+            width=30,
+            command=self.choose_export_folder
+        )
+        self.directory_button.pack(
+            side="left",
+            fill="y",
+            padx=5,
+            pady=5,
+        )
+
+        # =-=-= Header Text =-=-=
+        self.header_text = ctk.CTkLabel(
+            master=self.header,
+            text=f"Saving to {export_path}",
+        )
+        self.header_text.pack(
+            side="left",
+            fill="x",
+            padx=5,
+            pady=5,
+        )
+
+        self.header.pack_propagate(False)
+
+
+    # Creates the file list
+    def create_file_list(self):
+        # =-=-= File List =-=-=
+        self.file_list = ctk.CTkFrame(
+            self,
+            width=450,
+            fg_color="gray30",
+        )
+        self.file_list.pack(
+            expand=True,
+            fill="both",
+            padx=30,
+            pady=(20,20),
+        )
+
+        # =-=-= Scroll Frame =-=-=
+        self.scroll_frame = ctk.CTkScrollableFrame(
+            master=self.file_list,
+            orientation="vertical"
+        )
+        self.scroll_frame.pack(
+            expand=True,
+            fill="both",
+            padx=5,
+            pady=5,
+        )
+
+
+        self.file_list.drop_target_register(DND_FILES)
+        self.file_list.dnd_bind('<<Drop>>',self.on_drop)
+
+
+    # Creates the upload button
+    def create_upload_button(self):
+        # =-=-= Upload Button =-=-=
+        self.upload_button = ctk.CTkButton(
+            master=self,
+            text="Upload",
+            fg_color="green",
+            hover_color="gray25",
+            height=40,
+            command=self.on_upload_pressed
+        )
+        self.upload_button.pack(
+            side="bottom",
+            anchor="se",
+            padx=30,
+            pady=(0,20),
+        )
+
+    # Removes a file from the selected files
+    def remove_file(self,index):
+        if index < len(selected_files):
+            selected_files.pop(index)
+            self.update_file_list()
+
+
+    # Browses OS file explorer for .xlsx files
+    def browse_files(self):
+        file_paths = filedialog.askopenfilenames(
+            title="Select Excel file(s)",
+            filetypes=[("Excel files", "*.xlsx *.xls *.ods")]
+        )
+
+        errors = process_files(file_paths)
+        if errors:
+            messagebox.showerror("Error adding files", "\n".join(errors))
+
+        self.update_file_list()
+
+
+    # Updates the file list
+    def update_file_list(self):
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+
+        if not selected_files:
+            placeholder = ctk.CTkLabel(
+                self.scroll_frame,
+                text="Drop files here or click + to add",
+                text_color="gray70",
+                font=("Arial", 16),
+            )
+            placeholder.pack(
+                expand=True,
+                fill="both",
+                pady=125
+            )
+            return
+
+        for i in range(len(selected_files)):
+            file_row = ctk.CTkFrame(
+                self.scroll_frame,
+                corner_radius=10,
+                height=45,
+                fg_color="gray14"
+            )
+            file_row.pack(
+                fill="x",
+                pady=2,
+                padx=2
+            )
+
+            file_row.pack_propagate(False)
+            file_name = os.path.basename(selected_files[i])
+
+            file_label = ctk.CTkLabel(
+                file_row,
+                anchor="w",
+                compound="left",
+                image=excel_icon,
+                text=f"#{i+1} {file_name}",
+                padx=10,
+            )
+            file_label.pack(
+                expand=True,
+                side="left",
+                fill="x",
+                padx=5,
+                pady=5
+            )
+
+            bin_button = ctk.CTkButton(
+                file_row,
+                text="🗑",
+                width=30,
+                height=30,
+                command=lambda index=i: self.remove_file(index)
+            )
+            bin_button.pack(
+                side="right",
+                padx=5
+            )
+
+    # Browses OS file-explorer for export directory folder
+    def choose_export_folder(self):
+        global export_path
+        folder = filedialog.askdirectory(title="Select Export Folder")
+        if folder:
+            export_path = folder
+            self.header_text.configure(text=f"Saving to {export_path}")
+
+
+    # Triggered when dropping a file in the file list
+    def on_drop(self,event):
+        dropped_items = self.controller.splitlist(event.data)
+        all_files = []
+
+        for path in dropped_items:
+            path = path.strip("{}")
+
+            if os.path.isdir(path):
+                for file_name in os.listdir(path):
+                    file_path = os.path.join(path, file_name)
+                    if os.path.isfile(file_path):
+                        all_files.append(file_path)
+
+            elif os.path.isfile(path):
+                all_files.append(path)
+
+        errors = process_files(all_files)
+        if errors:
+            messagebox.showerror("Error adding files", "\n".join(errors))
+
+        self.update_file_list()
+
+
+    # Triggered when the upload button is pressed
+    def on_upload_pressed(self):
+        if not selected_files:
+            messagebox.showwarning("Warning", "Please upload the files to query on")
+            return
+
+        self.controller.show_page("")
