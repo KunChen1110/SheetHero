@@ -10,8 +10,8 @@ from typing import Dict, Any, Optional
 from PIL import Image
 from openai import RateLimitError
 
-from utils.logger import setup_logger
-from modules.prompts import build_understanding_prompt
+from backend.utils.logger import setup_logger
+from backend.modules.prompts import build_understanding_prompt
 
 logger = setup_logger(__name__)
 
