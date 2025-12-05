@@ -222,6 +222,8 @@ class ConfigPage(ctk.CTkFrame):
             padx=(20,0)
         )
 
+
+    # Creates the button frame
     def create_button_frame(self):
         # =-=-= Button Frame =-=-=
         self.button_frame = ctk.CTkFrame(
@@ -261,6 +263,7 @@ class ConfigPage(ctk.CTkFrame):
             side="left",
         )
 
+    # Updates the turns amount number
     def update_turns_number(self):
         self.turns_number.configure(text=f"{self.controller.max_turns}")
 
