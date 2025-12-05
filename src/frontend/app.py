@@ -1,10 +1,6 @@
 import customtkinter as ctk
 import os
 
-from importlib import resources
-from PIL import Image
-
-from customtkinter import CTkImage
 from tkinterdnd2 import TkinterDnD
 from typing import Optional
 
@@ -15,11 +11,6 @@ from pages.prompt_page import PromptPage
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
-
-def load_icon(filename, size=(20, 20)):
-    with resources.path("frontend.resources", filename) as icon_path:
-        img = Image.open(icon_path).resize(size)
-    return CTkImage(img, size=size)
 
 class App(TkinterDnD.Tk):
     def __init__(self):
@@ -36,11 +27,6 @@ class App(TkinterDnD.Tk):
         self.base_url: Optional[str] = None
         self.deployment: str = "gpt-4o-mini"
         self.max_turns: int = 3
-
-        # Resources
-        self.excel_icon = load_icon("xls.png")
-        self.add_icon = load_icon("add.png")
-        self.directory_icon = load_icon("folder.png")
 
         container = ctk.CTkFrame(self)
         container.pack(fill="both", expand=True)
