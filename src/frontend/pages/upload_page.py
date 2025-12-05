@@ -24,6 +24,7 @@ class UploadPage(ctk.CTkFrame):
         self.create_header()
 
         # Scroll Frame
+        self.drop_frame = None
         self.scroll_frame = None
         self.create_scroll_frame()
 
@@ -103,10 +104,26 @@ class UploadPage(ctk.CTkFrame):
 
     # Creates the scroll frame
     def create_scroll_frame(self):
+        # =-=-= Drop Frame =-=-=
+        # Invisible drop frame to catch files
+        self.drop_frame = ctk.CTkFrame(
+            master=self,
+            height=450,
+            fg_color="transparent"
+        )
+        self.drop_frame.pack(
+            expand=True,
+            fill="both",
+            padx=30,
+            pady=20,
+        )
+
+        self.drop_frame.drop_target_register(DND_FILES)
+        self.drop_frame.dnd_bind('<<Drop>>',self.on_drop)
+
         # =-=-= Scroll Frame =-=-=
         self.scroll_frame = ctk.CTkScrollableFrame(
-            master=self,
-            width=450,
+            master=self.drop_frame,
             orientation="vertical",
             border_width=5,
             border_color=VERY_DARK_GREY,
@@ -114,12 +131,7 @@ class UploadPage(ctk.CTkFrame):
         self.scroll_frame.pack(
             expand=True,
             fill="both",
-            padx=30,
-            pady=20,
         )
-
-        self.scroll_frame.drop_target_register(DND_FILES)
-        self.scroll_frame.dnd_bind('<<Drop>>',self.on_drop)
 
 
     def create_footer(self):

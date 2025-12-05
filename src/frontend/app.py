@@ -41,7 +41,7 @@ class App(TkinterDnD.Tk):
             container.columnconfigure(0, weight=1)
             page.grid(row=0, column=0, sticky="nsew")
 
-        self.show_page("PromptPage") # TODO change this
+        self.show_page("UploadPage")
 
     def show_page(self, page_name: str):
         page = self.pages[page_name]
