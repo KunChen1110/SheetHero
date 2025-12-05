@@ -7,8 +7,6 @@ from typing import List, Optional
 import customtkinter as ctk
 import os
 
-from PIL.ImageOps import expand
-
 from backend.config import Config
 from backend.core import SheetHero
 
@@ -256,6 +254,7 @@ class PromptPage(ctk.CTkFrame):
         self.prompt_entry.delete("1.0", "end")
         self.finish_button.configure(state="disabled")
 
+        # Starts a threaded worker to allow the UI to be used during the agent running
         def worker():
             api_key: str = self.controller.api_key
             base_url: Optional[str] = self.controller.base_url
@@ -265,6 +264,7 @@ class PromptPage(ctk.CTkFrame):
             export_path: str = self.controller.export_path
 
             try:
+                # Create the config
                 config = Config()
                 config.api_key = api_key
                 config.base_url = base_url
@@ -281,6 +281,7 @@ class PromptPage(ctk.CTkFrame):
                     user_question=prompt
                 )
 
+                # Get the result from the agent
                 result_text = textwrap.dedent(
                 f"""
                 Success:{'✅' if result['success'] else '❌'}
@@ -289,12 +290,15 @@ class PromptPage(ctk.CTkFrame):
                 Duration: {result['total_duration']:.2f}s
                 """)
 
+                # Send if there are issues
                 if result['issues_found']:
                     result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
 
+                # Send if there is feedback
                 if result.get('improvement_feedback'):
                     result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
 
+                # If it succeeds, create buttons to link the markdown and excel
                 if result['success']:
                     buttons = []
 
@@ -314,11 +318,11 @@ class PromptPage(ctk.CTkFrame):
                 else:
                     self.add_chat_bubble(f"{result_text}", False)
 
-
-
+            # Send error if fails
             except Exception as error:
                 self.add_chat_bubble(f"Error: {error}",False)
 
             self.finish_button.configure(state="enabled")
 
+        # Start the worker on another thread
         threading.Thread(target=worker, daemon=True).start()
