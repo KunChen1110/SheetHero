@@ -1,4 +1,6 @@
 import customtkinter as ctk
+from PIL.ImageOps import expand
+from fontTools.ufoLib import anchorValidator
 
 MIN_TURNS = 1
 MAX_TURNS = 10
@@ -10,6 +12,10 @@ class ConfigPage(ctk.CTkFrame):
         super().__init__(parent)
         self.controller = controller
 
+        # Main Label
+        self.main_label = None
+        self.create_main_label()
+
         # Button Frame
         self.button_frame = None
         self.back_button = None
@@ -20,27 +26,47 @@ class ConfigPage(ctk.CTkFrame):
         self.api_frame = None
         self.api_label = None
         self.api_entry = None
+        self.api_description = None
         self.create_api_frame()
 
         # URL Frame
         self.url_frame = None
         self.url_label = None
         self.url_entry = None
+        self.url_description = None
         self.create_url_frame()
 
         # Deployment Frame
         self.deployment_frame = None
         self.deployment_label = None
         self.deployment_drop = None
+        self.deployment_description = None
         self.create_deployment_frame()
 
         # Turns Frame
         self.turns_frame = None
         self.turns_label = None
+        self.turns_spin = None
         self.turns_number = None
         self.turns_add = None
         self.turns_minus = None
+        self.turns_description = None
         self.create_turns_frame()
+
+    # Creates the main label
+    def create_main_label(self):
+        # =-=-= Main Label =-=-=
+        self.main_label = ctk.CTkLabel(
+            master=self,
+            text="Configuration Settings",
+            font=("tkDefaultFont",20)
+        )
+        self.main_label.pack(
+            side="top",
+            anchor="w",
+            padx=20,
+            pady=10,
+        )
 
 
     # Creates the api frame
@@ -49,24 +75,25 @@ class ConfigPage(ctk.CTkFrame):
         self.api_frame = ctk.CTkFrame(
             master=self,
             height=40,
+            fg_color="transparent",
         )
         self.api_frame.pack(
             side="top",
             fill="x",
             padx=30,
-            pady=(30,5),
+            pady=(5,2),
         )
 
         # =-=-= API Label =-=-=
         self.api_label = ctk.CTkLabel(
             master=self.api_frame,
-            text="API Key*",
+            text="API Key",
             anchor="w",
         )
         self.api_label.pack(
-            side="left",
+            side="top",
             anchor="w",
-            padx=(20,0),
+            padx=20,
         )
 
         # =-=-= API Entry =-=-=
@@ -75,9 +102,22 @@ class ConfigPage(ctk.CTkFrame):
             placeholder_text="Enter API key..."
         )
         self.api_entry.pack(
-            side="left",
+            side="top",
             fill="x",
             expand=True,
+            padx=20,
+        )
+
+        # =-=-= API Description =-=-=
+        self.api_description = ctk.CTkLabel(
+            master=self.api_frame,
+            text="Enter your api key for Open AI.",
+            text_color="gray",
+            anchor="w",
+        )
+        self.api_description.pack(
+            side="top",
+            fill="x",
             padx=20,
         )
 
@@ -87,12 +127,13 @@ class ConfigPage(ctk.CTkFrame):
         self.url_frame = ctk.CTkFrame(
             master=self,
             height=40,
+            fg_color="transparent",
         )
         self.url_frame.pack(
             side="top",
             fill="x",
             padx=30,
-            pady=5,
+            pady=2,
         )
 
         # =-=-= URL Label =-=-=
@@ -102,20 +143,33 @@ class ConfigPage(ctk.CTkFrame):
             anchor="w",
         )
         self.url_label.pack(
-            side="left",
+            side="top",
             anchor="w",
-            padx=(20,0),
+            padx=20,
         )
 
-        # =-=-= URL Entry =-=-=
+        # =-=-= API Entry =-=-=
         self.url_entry = ctk.CTkEntry(
             master=self.url_frame,
-            placeholder_text="Enter base URL..."
+            placeholder_text="Enter Base URL..."
         )
         self.url_entry.pack(
-            side="left",
+            side="top",
             fill="x",
             expand=True,
+            padx=20,
+        )
+
+        # =-=-= URL Description =-=-=
+        self.url_description = ctk.CTkLabel(
+            master=self.url_frame,
+            text="Enter your base URL (Optional).",
+            text_color="gray",
+            anchor="w",
+        )
+        self.url_description.pack(
+            side="top",
+            fill="x",
             padx=20,
         )
 
@@ -126,34 +180,51 @@ class ConfigPage(ctk.CTkFrame):
         self.deployment_frame = ctk.CTkFrame(
             master=self,
             height=40,
+            fg_color="transparent",
         )
         self.deployment_frame.pack(
             side="top",
             fill="x",
             padx=30,
-            pady=5,
+            pady=2,
         )
 
         # =-=-= Deployment Label =-=-=
         self.deployment_label = ctk.CTkLabel(
             master=self.deployment_frame,
-            text="Deployment*",
+            text="Deployment",
             anchor="w",
         )
         self.deployment_label.pack(
-            side="left",
+            side="top",
             anchor="w",
-            padx=(20,0),
+            padx=20,
         )
 
         # =-=-= Deployment Drop =-=-=
         self.deployment_drop = ctk.CTkOptionMenu(
             master=self.deployment_frame,
+            fg_color="gray20",
+            button_color="gray10",
             values=options,
         )
         self.deployment_drop.pack(
+            side="top",
             fill="x",
             expand=True,
+            padx=20,
+        )
+
+        # =-=-= Deployment Description =-=-=
+        self.deployment_description = ctk.CTkLabel(
+            master=self.deployment_frame,
+            text="Enter the Open AI model used to calculate results",
+            text_color="gray",
+            anchor="w",
+        )
+        self.deployment_description.pack(
+            side="top",
+            fill="x",
             padx=20,
         )
 
@@ -164,12 +235,13 @@ class ConfigPage(ctk.CTkFrame):
         self.turns_frame = ctk.CTkFrame(
             master=self,
             height=40,
+            fg_color="transparent",
         )
         self.turns_frame.pack(
             side="top",
             fill="x",
             padx=30,
-            pady=5,
+            pady=2,
         )
 
         # =-=-= Turns Label =-=-=
@@ -179,47 +251,77 @@ class ConfigPage(ctk.CTkFrame):
             anchor="w",
         )
         self.turns_label.pack(
-            side="left",
+            side="top",
             anchor="w",
-            padx=(20,0),
+            padx=20,
+        )
+
+        # =-=-= Turns Spin Box =-=-=
+        self.turns_spin = ctk.CTkFrame(
+            master=self.turns_frame,
+            fg_color="gray20",
+        )
+        self.turns_spin.pack(
+            expand=True,
+            side="top",
+            fill="x",
+            padx="20",
         )
 
         # =-=-= Turns Number =-=-=
         self.turns_number = ctk.CTkLabel(
-            master=self.turns_frame,
+            master=self.turns_spin,
             text=f"{self.controller.max_turns}",
             anchor="w",
         )
         self.turns_number.pack(
+            expand=True,
             side="left",
+            fill="x",
             anchor="w",
-            padx=(20,0)
-        )
-
-        # =-=-= Turns Add Button =-=-=
-        self.turns_add = ctk.CTkButton(
-            master=self.turns_frame,
-            text="+",
-            command=self.on_add_pressed,
-            anchor="w",
-        )
-        self.turns_add.pack(
-            side="left",
-            anchor="w",
-            padx=(20,0)
+            padx=10,
+            pady=2,
         )
 
         # =-=-= Turns Minus Button =-=-=
         self.turns_minus = ctk.CTkButton(
-            master=self.turns_frame,
+            master=self.turns_spin,
             text="-",
+            fg_color="gray10",
             command=self.on_minus_pressed,
-            anchor="w"
+            height=25,
+            width=25
         )
         self.turns_minus.pack(
-            side="left",
+            side="right",
+            padx=(2,20),
+        )
+
+        # =-=-= Turns Add Button =-=-=
+        self.turns_add = ctk.CTkButton(
+            master=self.turns_spin,
+            text="+",
+            fg_color="gray10",
+            command=self.on_add_pressed,
+            height=25,
+            width=25
+        )
+        self.turns_add.pack(
+            side="right",
+            padx=2,
+        )
+
+        # =-=-= Deployment Description =-=-=
+        self.deployment_description = ctk.CTkLabel(
+            master=self.turns_frame,
+            text="Enter the max-amount of interaction turns in the model",
+            text_color="gray",
             anchor="w",
-            padx=(20,0)
+        )
+        self.deployment_description.pack(
+            side="top",
+            fill="x",
+            padx=20,
         )
 
 
