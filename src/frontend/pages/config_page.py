@@ -1,3 +1,4 @@
+from tkinter import messagebox
 from typing import List
 
 import customtkinter as ctk
@@ -9,9 +10,10 @@ MIN_TURNS: int = 1
 MAX_TURNS: int = 10
 
 options: List[str] = [
-    "Op1",
-    "Op2",
-    "Op3",
+    "gpt-4o-mini",
+    "gpt-4-32k",
+    "gpt-4",
+    "gpt-4o",
 ]
 
 from frontend.components.colors import GREEN
@@ -392,7 +394,18 @@ class ConfigPage(ctk.CTkFrame):
     def on_back_pressed(self):
         self.controller.show_page("UploadPage")
 
+
      # Triggered when the confirm button is pressed
     def on_confirm_pressed(self):
-        # TODO, add checking for input boxes here
+        api_key = self.api_entry.get().strip()
+
+        if not api_key:
+            messagebox.showwarning("Warning","Please enter an API key.")
+            return
+
+
+        self.controller.api_key = api_key
+        self.controller.base_url = self.url_entry.get().strip()
+        self.controller.deployment = self.deployment_drop.get()
+
         self.controller.show_page("PromptPage")
