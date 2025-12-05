@@ -1,4 +1,10 @@
 import customtkinter as ctk
+import os
+
+from importlib import resources
+from PIL import Image
+
+from customtkinter import CTkImage
 from tkinterdnd2 import TkinterDnD
 from typing import Optional
 
@@ -6,10 +12,14 @@ from pages.upload_page import UploadPage
 from pages.config_page import ConfigPage
 from pages.prompt_page import PromptPage
 
-import os
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
+
+def load_icon(filename, size=(20, 20)):
+    with resources.path("frontend.resources", filename) as icon_path:
+        img = Image.open(icon_path).resize(size)
+    return CTkImage(img, size=size)
 
 class App(TkinterDnD.Tk):
     def __init__(self):
@@ -20,12 +30,17 @@ class App(TkinterDnD.Tk):
         self.resizable(False, False)
 
         # Backend Variables
-        self.export_path = os.path.join(os.path.expanduser("~"), "Documents")
+        self.export_path: str = os.path.join(os.path.expanduser("~"), "Documents")
         self.selected_files = []
+        self.api_key: str = ""
         self.base_url: Optional[str] = None
-        self.prompt = ""
-        self.deployment = "gpt-4o-mini"
-        self.max_turns = 3
+        self.deployment: str = "gpt-4o-mini"
+        self.max_turns: int = 3
+
+        # Resources
+        self.excel_icon = load_icon("xls.png")
+        self.add_icon = load_icon("add.png")
+        self.directory_icon = load_icon("folder.png")
 
         container = ctk.CTkFrame(self)
         container.pack(fill="both", expand=True)
@@ -40,7 +55,7 @@ class App(TkinterDnD.Tk):
             container.columnconfigure(0, weight=1)
             page.grid(row=0, column=0, sticky="nsew")
 
-        self.show_page("PromptPage") # TODO change this
+        self.show_page("ConfigPage") # TODO change this
 
     def show_page(self, page_name):
         page = self.pages[page_name]

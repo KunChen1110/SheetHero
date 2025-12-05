@@ -3,24 +3,6 @@ import os
 
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import DND_FILES
-from PIL import Image
-from importlib import resources
-
-from customtkinter import CTkImage
-
-# Load folder img
-with resources.path("frontend.resources","folder.png") as icon_path:
-    directory_img = Image.open(icon_path).resize((20,20))
-directory_icon = CTkImage(directory_img, size=(20,20))
-
-# Load add img
-with resources.path("frontend.resources","add.png") as icon_path:
-    add_img = Image.open(icon_path).resize((20,20))
-add_icon = CTkImage(add_img, size=(20,20))
-
-with resources.path("frontend.resources","xls.png") as icon_path:
-    excel_img = Image.open(icon_path).resize((20,20))
-excel_icon = CTkImage(excel_img, size=(20,20))
 
 class UploadPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -39,11 +21,14 @@ class UploadPage(ctk.CTkFrame):
         self.file_list = None
         self.scroll_frame = None
         self.create_file_list()
-        self.update_file_list()
 
         # Upload Button
         self.upload_button = None
         self.create_upload_button()
+
+    # Updates the file list when menu is visible
+    def on_show(self):
+        self.update_file_list()
 
 
     # Creates the header
@@ -64,7 +49,7 @@ class UploadPage(ctk.CTkFrame):
         self.file_button = ctk.CTkButton(
             master=self.header,
             text="",
-            image=add_icon,
+            image=self.controller.add_icon,
             fg_color="green",
             hover_color="gray25",
             width=30,
@@ -81,7 +66,7 @@ class UploadPage(ctk.CTkFrame):
         self.directory_button = ctk.CTkButton(
             master=self.header,
             text="",
-            image=directory_icon,
+            image=self.controller.directory_icon,
             fg_color="green",
             hover_color="gray25",
             width=30,
@@ -219,7 +204,7 @@ class UploadPage(ctk.CTkFrame):
                 file_row,
                 anchor="w",
                 compound="left",
-                image=excel_icon,
+                image=self.controller.excel_icon,
                 text=f"#{i+1} {file_name}",
                 padx=10,
             )

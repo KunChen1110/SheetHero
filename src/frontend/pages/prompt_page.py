@@ -1,9 +1,14 @@
+from tkinter import messagebox
+
 import customtkinter as ctk
 import os
 
 from importlib import resources
 from customtkinter import CTkImage
 from PIL import Image
+
+from backend.config import Config
+from backend.core import SheetHero
 
 with resources.path("frontend.resources","xls.png") as icon_path:
     excel_img = Image.open(icon_path).resize((20,20))
@@ -32,7 +37,7 @@ class PromptPage(ctk.CTkFrame):
         self.scroll_frame = None
         self.create_file_list_frame()
 
-
+    # Updates the file list when menu is visible
     def on_show(self):
         self.update_file_list()
 
@@ -150,7 +155,6 @@ class PromptPage(ctk.CTkFrame):
             widget.destroy()
 
         for i in range(len(self.controller.selected_files)):
-            print("test")
             file_row = ctk.CTkFrame(
                 self.scroll_frame,
                 corner_radius=10,
@@ -187,12 +191,19 @@ class PromptPage(ctk.CTkFrame):
                 text="🗑",
                 width=30,
                 height=30,
-                # command=lambda index=i: self.remove_file(index)
+                command=lambda index=i: self.remove_file(index)
             )
             bin_button.pack(
                 side="right",
                 padx=5
             )
+
+     # Removes a file from the selected files
+    def remove_file(self,index):
+        if index < len(self.controller.selected_files):
+            self.controller.selected_files.pop(index)
+            self.update_file_list()
+
 
     # Triggered when the back button is pressed
     def on_back_pressed(self):
@@ -201,5 +212,52 @@ class PromptPage(ctk.CTkFrame):
 
      # Triggered when the finish button is pressed
     def on_finish_pressed(self):
-        # TODO Link backend here
-        self.controller.show_page("UploadPage")
+        prompt = self.prompt_entry.get("1.0", "end-1c").strip()
+
+        if not prompt:
+            messagebox.showwarning("Warning", "Please enter a prompt.")
+            return
+
+        if not self.controller.selected_files:
+            messagebox.showwarning("Warning", "Please upload the files to query on")
+            return
+
+        self.start_query(prompt)
+
+
+    def start_query(self, prompt):
+        selected_files = self.controller.selected_files
+        export_path = self.controller.export_path
+
+
+        messagebox.showinfo("Submitted", f"Prompt: {prompt}\nFiles: {len(selected_files)} added.")
+
+        try:
+            config = Config()
+            config.output_mode = "file"
+            config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
+
+            agent = SheetHero(
+                excel_paths=selected_files,
+                config=config
+            )
+            result = agent.run(
+                user_question=prompt
+            )
+
+            result_text = f"""
+                Success: {'✅' if result['success'] else '❌'}
+                Answer: {result['answer']}
+                Confidence: {result['confidence_score']:.2f}/1.0
+                Iterations: {result['total_iterations']}
+                Duration: {result['total_duration']:.2f}s
+                """
+            if result['issues_found']:
+                result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
+            if result.get('improvement_feedback'):
+                result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+
+            self.feedback_label.configure(text=f"{result_text}")
+
+        except Exception as error:
+            self.feedback_label.configure(text=f"Error: {error}")
