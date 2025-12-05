@@ -1,15 +1,19 @@
+import textwrap
 from tkinter import messagebox
+
+import threading
+from typing import List
 
 import customtkinter as ctk
 import os
 
-from PIL.ImageOps import expand
-
 from backend.config import Config
 from backend.core import SheetHero
+
 from frontend.components.colors import *
 from frontend.components.file_display import FileDisplay
 from frontend.components.footer_frame import FooterFrame
+from frontend.components.chat_bubble import ChatBubble
 
 class PromptPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -22,34 +26,31 @@ class PromptPage(ctk.CTkFrame):
         self.back_button = None
         self.create_footer()
 
-        # Data Frame
-        self.data_segment = None
-        self.prompt_frame = None
+        # Conversation Frame
+        self.conversation_frame = None
         self.prompt_entry = None
-        self.prompt_label = None
-        self.feedback_frame = None
-        self.feedback_label = None
-        self.feedback_box = None
-        self.create_data_segment()
+        self.prompt_scroll = None
+        self.create_conversation_frame()
 
         # Scroll Frame
         self.scroll_frame = None
         self.create_scroll_frame()
+
+        self.chat_bubbles = []
 
     # Updates the file list when menu is visible
     def on_show(self):
         self.update_file_list()
 
 
-    # Creates the data segment
-    def create_data_segment(self):
-        # =-=-= Data Segment =-=-=
-        self.data_segment = ctk.CTkFrame(
+    # Creates the conversation frame
+    def create_conversation_frame(self):
+        # =-=-= Conversation Frame =-=-=
+        self.conversation_frame = ctk.CTkFrame(
             master=self,
             fg_color=VERY_DARK_GREY,
-            width=300,
         )
-        self.data_segment.pack(
+        self.conversation_frame.pack(
             side="left",
             fill="both",
             expand=True,
@@ -57,80 +58,29 @@ class PromptPage(ctk.CTkFrame):
             pady=20,
         )
 
-        # =-=-= Prompt Frame =-=-=
-        self.prompt_frame = ctk.CTkFrame(
-            master=self.data_segment,
-            height=100,
+        self.prompt_scroll = ctk.CTkScrollableFrame(
+            master=self.conversation_frame,
+            orientation="vertical",
+            fg_color=DARK_GREY,
+            border_width=5,
+            border_color=VERY_DARK_GREY,
         )
-        self.prompt_frame.pack(
-            expand=True,
+        self.prompt_scroll.pack(
             side="top",
             fill="both",
-            padx=5,
-            pady=(5,10),
+            expand=True,
         )
 
-        # =-=-= Prompt Label =-=-=
-        self.prompt_label = ctk.CTkLabel(
-            master=self.prompt_frame,
-            text="Enter Prompt",
-            anchor="w",
-        )
-        self.prompt_label.pack(
-            side="top",
-            fill="x",
-            padx=5,
-            pady=5,
-        )
-
-        # =-=-= Prompt Entry =-=-=
         self.prompt_entry = ctk.CTkTextbox(
-            master=self.prompt_frame,
-            fg_color=MID_GREY,
+            master=self.conversation_frame,
+            height=80,
+            wrap="word"
         )
         self.prompt_entry.pack(
-            expand=True,
-            side="top",
-            fill="both",
-        )
-
-        # =-=-= Feedback Frame =-=-=
-        self.feedback_frame = ctk.CTkFrame(
-            master=self.data_segment,
-            fg_color=DARK_GREY,
-        )
-        self.feedback_frame.pack(
-            side="bottom",
-            fill="both",
-            expand=True,
-            padx=5,
-            pady=5,
-        )
-
-        # =-=-= Feedback Label =-=-=
-        self.feedback_label = ctk.CTkLabel(
-            master=self.feedback_frame,
-            text="Feedback",
-            anchor="w",
-        )
-        self.feedback_label.pack(
             side="top",
             fill="x",
             padx=5,
             pady=5,
-        )
-
-        # =-=-= Feedback Box =-=-=
-        self.feedback_box = ctk.CTkLabel(
-            master=self.feedback_frame,
-            fg_color=MID_GREY,
-            text="",
-            anchor="nw",
-        )
-        self.feedback_box.pack(
-            expand=True,
-            side="top",
-            fill="both",
         )
 
 
@@ -186,6 +136,7 @@ class PromptPage(ctk.CTkFrame):
         )
 
 
+    # Updates the file list
     def update_file_list(self):
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
@@ -204,7 +155,8 @@ class PromptPage(ctk.CTkFrame):
                 padx=2
             )
 
-     # Removes a file from the selected files
+
+    # Removes a file from the selected files
     def remove_file(self,index):
         if index < len(self.controller.selected_files):
             self.controller.selected_files.pop(index)
@@ -216,7 +168,7 @@ class PromptPage(ctk.CTkFrame):
         self.controller.show_page("ConfigPage")
 
 
-     # Triggered when the finish button is pressed
+    # Triggered when the finish button is pressed
     def on_finish_pressed(self):
         prompt = self.prompt_entry.get("1.0", "end-1c").strip()
 
@@ -231,39 +183,78 @@ class PromptPage(ctk.CTkFrame):
         self.start_query(prompt)
 
 
+    # Updates all the chat bubbles in the conversation frame
+    def update_chat_bubbles(self):
+        for widget in self.prompt_scroll.winfo_children():
+            widget.destroy()
+
+        for bubble_data in self.chat_bubbles:
+            bubble = ChatBubble(
+                master=self.prompt_scroll,
+                text=bubble_data["text"],
+                color=bubble_data["color"]
+            )
+            bubble.pack(pady=5, padx=10, fill="x")
+
+
+    # Creates a conversation bubble to the conversation frame, different color if it's the users text
+    def add_chat_bubble(self, text: str, is_user: bool):
+        color = VERY_DARK_GREY
+
+        # If it's the user's text, use a different color
+        if is_user:
+            color = MID_GREY
+
+        self.chat_bubbles.append({
+            "text": text,
+            "color": color,
+        })
+        self.update_chat_bubbles()
+
+
+    # Starts the query, and sends the prompt to the model
     def start_query(self, prompt):
-        selected_files = self.controller.selected_files
-        export_path = self.controller.export_path
+        self.add_chat_bubble(f"{prompt}",True)
+        self.add_chat_bubble(f"Thinking...",False)
+        self.prompt_entry.delete("1.0", "end")
+        self.finish_button.configure(state="disabled")
 
+        def worker():
+            selected_files: List[str] = self.controller.selected_files
+            export_path: str = self.controller.export_path
 
-        messagebox.showinfo("Submitted", f"Prompt: {prompt}\nFiles: {len(selected_files)} added.")
+            try:
+                config = Config()
+                config.output_mode = "file"
+                config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
 
-        try:
-            config = Config()
-            config.output_mode = "file"
-            config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
+                agent = SheetHero(
+                    excel_paths=selected_files,
+                    config=config
+                )
+                result = agent.run(
+                    user_question=prompt
+                )
 
-            agent = SheetHero(
-                excel_paths=selected_files,
-                config=config
-            )
-            result = agent.run(
-                user_question=prompt
-            )
-
-            result_text = f"""
-                Success: {'✅' if result['success'] else '❌'}
-                Answer: {result['answer']}
+                result_text = textwrap.dedent(
+                f"""
+                Success:{'✅' if result['success'] else '❌'}
                 Confidence: {result['confidence_score']:.2f}/1.0
                 Iterations: {result['total_iterations']}
                 Duration: {result['total_duration']:.2f}s
-                """
-            if result['issues_found']:
-                result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
-            if result.get('improvement_feedback'):
-                result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+                """)
 
-            self.feedback_label.configure(text=f"{result_text}")
+                if result['issues_found']:
+                    result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
 
-        except Exception as error:
-            self.feedback_label.configure(text=f"Error: {error}")
+                if result.get('improvement_feedback'):
+                    result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+
+                self.add_chat_bubble(f"{result_text}",False)
+
+            except Exception as error:
+                self.add_chat_bubble(f"Error: {error}",False)
+
+            self.finish_button.configure(state="enabled")
+
+        threading.Thread(target=worker, daemon=True).start()
