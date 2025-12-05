@@ -103,7 +103,7 @@ class ConfigPage(ctk.CTkFrame):
         self.api_entry = ctk.CTkEntry(
             master=self.api_frame,
             placeholder_text="Enter API key...",
-            fg_color=LIGHT_GREY,
+            fg_color=MID_GREY,
             border_width=0,
         )
         self.api_entry.pack(
@@ -117,7 +117,7 @@ class ConfigPage(ctk.CTkFrame):
         self.api_description = ctk.CTkLabel(
             master=self.api_frame,
             text="Enter your api key for Open AI.",
-            text_color=MID_GREY,
+            text_color=VERY_LIGHT_GREY,
             anchor="w",
         )
         self.api_description.pack(
@@ -157,7 +157,7 @@ class ConfigPage(ctk.CTkFrame):
         self.url_entry = ctk.CTkEntry(
             master=self.url_frame,
             placeholder_text="Enter Base URL...",
-            fg_color=LIGHT_GREY,
+            fg_color=MID_GREY,
             border_width=0,
         )
         self.url_entry.pack(
@@ -171,7 +171,7 @@ class ConfigPage(ctk.CTkFrame):
         self.url_description = ctk.CTkLabel(
             master=self.url_frame,
             text="Enter your base URL (Optional).",
-            text_color=MID_GREY,
+            text_color=VERY_LIGHT_GREY,
             anchor="w",
         )
         self.url_description.pack(
@@ -211,7 +211,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= Deployment Drop =-=-=
         self.deployment_drop = ctk.CTkOptionMenu(
             master=self.deployment_frame,
-            fg_color=LIGHT_GREY,
+            fg_color=MID_GREY,
             button_color=VERY_DARK_GREY,
             values=options,
         )
@@ -226,7 +226,7 @@ class ConfigPage(ctk.CTkFrame):
         self.deployment_description = ctk.CTkLabel(
             master=self.deployment_frame,
             text="Enter the Open AI model used to calculate results",
-            text_color=MID_GREY,
+            text_color=VERY_LIGHT_GREY,
             anchor="w",
         )
         self.deployment_description.pack(
@@ -266,7 +266,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= Turns Spin Box =-=-=
         self.turns_spin = ctk.CTkFrame(
             master=self.turns_frame,
-            fg_color=LIGHT_GREY,
+            fg_color=MID_GREY,
         )
         self.turns_spin.pack(
             expand=True,
@@ -322,7 +322,7 @@ class ConfigPage(ctk.CTkFrame):
         self.deployment_description = ctk.CTkLabel(
             master=self.turns_frame,
             text="Enter the max-amount of interaction turns in the model",
-            text_color=MID_GREY,
+            text_color=VERY_LIGHT_GREY,
             anchor="w",
         )
         self.deployment_description.pack(

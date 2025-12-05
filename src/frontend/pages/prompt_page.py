@@ -3,6 +3,8 @@ from tkinter import messagebox
 import customtkinter as ctk
 import os
 
+from PIL.ImageOps import expand
+
 from backend.config import Config
 from backend.core import SheetHero
 from frontend.components.colors import *
@@ -21,10 +23,14 @@ class PromptPage(ctk.CTkFrame):
         self.create_footer()
 
         # Data Frame
-        self.data_display_frame = None
-        self.feedback_label = None
+        self.data_segment = None
+        self.prompt_frame = None
         self.prompt_entry = None
-        self.create_data_display_frame()
+        self.prompt_label = None
+        self.feedback_frame = None
+        self.feedback_label = None
+        self.feedback_box = None
+        self.create_data_segment()
 
         # Scroll Frame
         self.scroll_frame = None
@@ -35,15 +41,15 @@ class PromptPage(ctk.CTkFrame):
         self.update_file_list()
 
 
-    # Creates the data display frame
-    def create_data_display_frame(self):
-        # =-=-= Data Display Frame =-=-=
-        self.data_display_frame = ctk.CTkFrame(
+    # Creates the data segment
+    def create_data_segment(self):
+        # =-=-= Data Segment =-=-=
+        self.data_segment = ctk.CTkFrame(
             master=self,
             fg_color=VERY_DARK_GREY,
             width=300,
         )
-        self.data_display_frame.pack(
+        self.data_segment.pack(
             side="left",
             fill="both",
             expand=True,
@@ -51,32 +57,80 @@ class PromptPage(ctk.CTkFrame):
             pady=20,
         )
 
-        # =-=-= Prompt Entry =-=-=
-        self.prompt_entry = ctk.CTkTextbox(
-            master=self.data_display_frame,
+        # =-=-= Prompt Frame =-=-=
+        self.prompt_frame = ctk.CTkFrame(
+            master=self.data_segment,
             height=100,
-            wrap="word",
         )
-        self.prompt_entry.pack(
+        self.prompt_frame.pack(
+            expand=True,
             side="top",
             fill="both",
             padx=5,
             pady=(5,10),
         )
 
-        # =-=-= Feedback Label =-=-=
-        self.feedback_label = ctk.CTkLabel(
-            master=self.data_display_frame,
-            fg_color=DARK_GREY,
-            text="Feedback",
-            anchor="nw",
+        # =-=-= Prompt Label =-=-=
+        self.prompt_label = ctk.CTkLabel(
+            master=self.prompt_frame,
+            text="Enter Prompt",
+            anchor="w",
         )
-        self.feedback_label.pack(
+        self.prompt_label.pack(
+            side="top",
+            fill="x",
+            padx=5,
+            pady=5,
+        )
+
+        # =-=-= Prompt Entry =-=-=
+        self.prompt_entry = ctk.CTkTextbox(
+            master=self.prompt_frame,
+            fg_color=MID_GREY,
+        )
+        self.prompt_entry.pack(
+            expand=True,
+            side="top",
+            fill="both",
+        )
+
+        # =-=-= Feedback Frame =-=-=
+        self.feedback_frame = ctk.CTkFrame(
+            master=self.data_segment,
+            fg_color=DARK_GREY,
+        )
+        self.feedback_frame.pack(
             side="bottom",
             fill="both",
             expand=True,
             padx=5,
             pady=5,
+        )
+
+        # =-=-= Feedback Label =-=-=
+        self.feedback_label = ctk.CTkLabel(
+            master=self.feedback_frame,
+            text="Feedback",
+            anchor="w",
+        )
+        self.feedback_label.pack(
+            side="top",
+            fill="x",
+            padx=5,
+            pady=5,
+        )
+
+        # =-=-= Feedback Box =-=-=
+        self.feedback_box = ctk.CTkLabel(
+            master=self.feedback_frame,
+            fg_color=MID_GREY,
+            text="",
+            anchor="nw",
+        )
+        self.feedback_box.pack(
+            expand=True,
+            side="top",
+            fill="both",
         )
 
 
@@ -87,6 +141,7 @@ class PromptPage(ctk.CTkFrame):
             master=self,
             orientation="vertical",
             border_width=5,
+            fg_color=DARK_GREY,
             border_color=VERY_DARK_GREY,
         )
         self.scroll_frame.pack(
