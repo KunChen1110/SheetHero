@@ -4,6 +4,12 @@ import os
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import DND_FILES
 
+from frontend.components.colors import *
+from frontend.components.file_display import FileDisplay
+from frontend.components.images import ADD_ICON, DIRECTORY_ICON
+from frontend.components.footer_frame import FooterFrame
+
+
 class UploadPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -17,14 +23,14 @@ class UploadPage(ctk.CTkFrame):
         self.directory_button = None
         self.create_header()
 
-        # File List
-        self.file_list = None
+        # Scroll Frame
         self.scroll_frame = None
-        self.create_file_list()
+        self.create_scroll_frame()
 
-        # Upload Button
+        # Footer
+        self.footer = None
         self.upload_button = None
-        self.create_upload_button()
+        self.create_footer()
 
     # Updates the file list when menu is visible
     def on_show(self):
@@ -35,8 +41,9 @@ class UploadPage(ctk.CTkFrame):
     def create_header(self):
         # =-=-= Header =-=-=
         self.header = ctk.CTkFrame(
-            self,
+            master=self,
             height=40,
+            fg_color=DARK_GREY,
         )
         self.header.pack(
             fill="x",
@@ -49,9 +56,9 @@ class UploadPage(ctk.CTkFrame):
         self.file_button = ctk.CTkButton(
             master=self.header,
             text="",
-            image=self.controller.add_icon,
-            fg_color="green",
-            hover_color="gray25",
+            image=ADD_ICON,
+            fg_color=GREEN,
+            hover_color=HOVER_GREEN,
             width=30,
             command=self.browse_files
         )
@@ -66,9 +73,9 @@ class UploadPage(ctk.CTkFrame):
         self.directory_button = ctk.CTkButton(
             master=self.header,
             text="",
-            image=self.controller.directory_icon,
-            fg_color="green",
-            hover_color="gray25",
+            image=DIRECTORY_ICON,
+            fg_color=GREEN,
+            hover_color=HOVER_GREEN,
             width=30,
             command=self.choose_export_folder
         )
@@ -94,54 +101,43 @@ class UploadPage(ctk.CTkFrame):
         self.header.pack_propagate(False)
 
 
-    # Creates the file list
-    def create_file_list(self):
-        # =-=-= File List =-=-=
-        self.file_list = ctk.CTkFrame(
-            master=self,
-            width=450,
-            fg_color="gray30",
-        )
-        self.file_list.pack(
-            expand=True,
-            fill="both",
-            padx=30,
-            pady=(20,20),
-        )
-
+    # Creates the scroll frame
+    def create_scroll_frame(self):
         # =-=-= Scroll Frame =-=-=
         self.scroll_frame = ctk.CTkScrollableFrame(
-            master=self.file_list,
-            orientation="vertical"
+            master=self,
+            width=450,
+            orientation="vertical",
+            border_width=5,
+            border_color=VERY_DARK_GREY
         )
         self.scroll_frame.pack(
             expand=True,
             fill="both",
-            padx=5,
-            pady=5,
+            padx=30,
+            pady=20,
         )
 
+        self.scroll_frame.drop_target_register(DND_FILES)
+        self.scroll_frame.dnd_bind('<<Drop>>',self.on_drop)
 
-        self.file_list.drop_target_register(DND_FILES)
-        self.file_list.dnd_bind('<<Drop>>',self.on_drop)
 
+    def create_footer(self):
+        # =-=-= Footer =-=-=
+        self.footer = FooterFrame(master=self)
 
-    # Creates the upload button
-    def create_upload_button(self):
         # =-=-= Upload Button =-=-=
         self.upload_button = ctk.CTkButton(
-            master=self,
+            master=self.footer,
             text="Upload",
-            fg_color="green",
-            hover_color="gray25",
+            fg_color=GREEN,
+            hover_color=HOVER_GREEN,
             height=40,
             command=self.on_upload_pressed
         )
         self.upload_button.pack(
-            side="bottom",
-            anchor="se",
-            padx=30,
-            pady=(0,20),
+            side="right",
+            padx=20,
         )
 
     # Removes a file from the selected files
@@ -174,7 +170,7 @@ class UploadPage(ctk.CTkFrame):
             placeholder = ctk.CTkLabel(
                 self.scroll_frame,
                 text="Drop files here or click + to add",
-                text_color="gray70",
+                text_color=WHITE,
                 font=("Arial", 16),
             )
             placeholder.pack(
@@ -185,47 +181,17 @@ class UploadPage(ctk.CTkFrame):
             return
 
         for i in range(len(self.controller.selected_files)):
-            file_row = ctk.CTkFrame(
+            file_name = os.path.basename(self.controller.selected_files[i])
+
+            file_display = FileDisplay(
                 self.scroll_frame,
-                corner_radius=10,
-                height=45,
-                fg_color="gray14"
+                text=f"#{i+1} {file_name}",
+                command=lambda index=i: self.remove_file(index)
             )
-            file_row.pack(
+            file_display.pack(
                 fill="x",
                 pady=2,
                 padx=2
-            )
-
-            file_row.pack_propagate(False)
-            file_name = os.path.basename(self.controller.selected_files[i])
-
-            file_label = ctk.CTkLabel(
-                file_row,
-                anchor="w",
-                compound="left",
-                image=self.controller.excel_icon,
-                text=f"#{i+1} {file_name}",
-                padx=10,
-            )
-            file_label.pack(
-                expand=True,
-                side="left",
-                fill="x",
-                padx=5,
-                pady=5
-            )
-
-            bin_button = ctk.CTkButton(
-                file_row,
-                text="🗑",
-                width=30,
-                height=30,
-                command=lambda index=i: self.remove_file(index)
-            )
-            bin_button.pack(
-                side="right",
-                padx=5
             )
 
     # Browses OS file-explorer for export directory folder

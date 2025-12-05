@@ -1,11 +1,14 @@
 import customtkinter as ctk
-from PIL.ImageOps import expand
-from fontTools.ufoLib import anchorValidator
+
+from frontend.components.colors import *
+from frontend.components.footer_frame import FooterFrame
 
 MIN_TURNS = 1
 MAX_TURNS = 10
 
 options = ["Op1","Op2","Op3"]
+
+from frontend.components.colors import GREEN
 
 class ConfigPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -16,11 +19,11 @@ class ConfigPage(ctk.CTkFrame):
         self.main_label = None
         self.create_main_label()
 
-        # Button Frame
-        self.button_frame = None
+        # Footer
+        self.footer = None
         self.back_button = None
         self.confirm_button = None
-        self.create_button_frame()
+        self.create_footer()
 
         # API Frame
         self.api_frame = None
@@ -65,7 +68,7 @@ class ConfigPage(ctk.CTkFrame):
             side="top",
             anchor="w",
             padx=20,
-            pady=10,
+            pady=(10,5),
         )
 
 
@@ -99,7 +102,9 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= API Entry =-=-=
         self.api_entry = ctk.CTkEntry(
             master=self.api_frame,
-            placeholder_text="Enter API key..."
+            placeholder_text="Enter API key...",
+            fg_color=LIGHT_GREY,
+            border_width=0,
         )
         self.api_entry.pack(
             side="top",
@@ -112,7 +117,7 @@ class ConfigPage(ctk.CTkFrame):
         self.api_description = ctk.CTkLabel(
             master=self.api_frame,
             text="Enter your api key for Open AI.",
-            text_color="gray",
+            text_color=MID_GREY,
             anchor="w",
         )
         self.api_description.pack(
@@ -148,10 +153,12 @@ class ConfigPage(ctk.CTkFrame):
             padx=20,
         )
 
-        # =-=-= API Entry =-=-=
+        # =-=-= URL Entry =-=-=
         self.url_entry = ctk.CTkEntry(
             master=self.url_frame,
-            placeholder_text="Enter Base URL..."
+            placeholder_text="Enter Base URL...",
+            fg_color=LIGHT_GREY,
+            border_width=0,
         )
         self.url_entry.pack(
             side="top",
@@ -164,7 +171,7 @@ class ConfigPage(ctk.CTkFrame):
         self.url_description = ctk.CTkLabel(
             master=self.url_frame,
             text="Enter your base URL (Optional).",
-            text_color="gray",
+            text_color=MID_GREY,
             anchor="w",
         )
         self.url_description.pack(
@@ -204,8 +211,8 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= Deployment Drop =-=-=
         self.deployment_drop = ctk.CTkOptionMenu(
             master=self.deployment_frame,
-            fg_color="gray20",
-            button_color="gray10",
+            fg_color=LIGHT_GREY,
+            button_color=VERY_DARK_GREY,
             values=options,
         )
         self.deployment_drop.pack(
@@ -219,7 +226,7 @@ class ConfigPage(ctk.CTkFrame):
         self.deployment_description = ctk.CTkLabel(
             master=self.deployment_frame,
             text="Enter the Open AI model used to calculate results",
-            text_color="gray",
+            text_color=MID_GREY,
             anchor="w",
         )
         self.deployment_description.pack(
@@ -247,7 +254,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= Turns Label =-=-=
         self.turns_label = ctk.CTkLabel(
             master=self.turns_frame,
-            text="Max Turns*",
+            text="Max Turns",
             anchor="w",
         )
         self.turns_label.pack(
@@ -259,7 +266,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= Turns Spin Box =-=-=
         self.turns_spin = ctk.CTkFrame(
             master=self.turns_frame,
-            fg_color="gray20",
+            fg_color=LIGHT_GREY,
         )
         self.turns_spin.pack(
             expand=True,
@@ -287,7 +294,7 @@ class ConfigPage(ctk.CTkFrame):
         self.turns_minus = ctk.CTkButton(
             master=self.turns_spin,
             text="-",
-            fg_color="gray10",
+            fg_color=VERY_DARK_GREY,
             command=self.on_minus_pressed,
             height=25,
             width=25
@@ -301,7 +308,7 @@ class ConfigPage(ctk.CTkFrame):
         self.turns_add = ctk.CTkButton(
             master=self.turns_spin,
             text="+",
-            fg_color="gray10",
+            fg_color=VERY_DARK_GREY,
             command=self.on_add_pressed,
             height=25,
             width=25
@@ -315,7 +322,7 @@ class ConfigPage(ctk.CTkFrame):
         self.deployment_description = ctk.CTkLabel(
             master=self.turns_frame,
             text="Enter the max-amount of interaction turns in the model",
-            text_color="gray",
+            text_color=MID_GREY,
             anchor="w",
         )
         self.deployment_description.pack(
@@ -325,44 +332,37 @@ class ConfigPage(ctk.CTkFrame):
         )
 
 
-    # Creates the button frame
-    def create_button_frame(self):
-        # =-=-= Button Frame =-=-=
-        self.button_frame = ctk.CTkFrame(
-            master=self,
-            fg_color="transparent"
-        )
-        self.button_frame.pack(
-            side="bottom",
-            fill="x",
-            pady=(0,20),
-            padx=30
-        )
+    # Creates the footer
+    def create_footer(self):
+        # =-=-= Footer =-=-=
+        self.footer = FooterFrame(master=self)
 
         # =-=-= Confirm Button =-=-=
         self.confirm_button = ctk.CTkButton(
-            master=self.button_frame,
+            master=self.footer,
             text="Confirm",
-            fg_color="green",
-            hover_color="gray25",
+            fg_color=GREEN,
+            hover_color=HOVER_GREEN,
             height=40,
             command=self.on_confirm_pressed
         )
         self.confirm_button.pack(
             side="right",
+            padx=20,
         )
 
         # =-=-= Confirm Button =-=-=
         self.back_button = ctk.CTkButton(
-            master=self.button_frame,
+            master=self.footer,
             text="Back",
-            fg_color="green",
-            hover_color="gray25",
+            fg_color=GREEN,
+            hover_color=HOVER_GREEN,
             height=40,
             command=self.on_back_pressed
         )
         self.back_button.pack(
             side="left",
+            padx=20,
         )
 
     # Updates the turns amount number
