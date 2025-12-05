@@ -2,10 +2,12 @@ import textwrap
 from tkinter import messagebox
 
 import threading
-from typing import List
+from typing import List, Optional
 
 import customtkinter as ctk
 import os
+
+from PIL.ImageOps import expand
 
 from backend.config import Config
 from backend.core import SheetHero
@@ -194,11 +196,45 @@ class PromptPage(ctk.CTkFrame):
                 text=bubble_data["text"],
                 color=bubble_data["color"]
             )
-            bubble.pack(pady=5, padx=10, fill="x")
+            bubble.pack(
+                side="top",
+                pady=5,
+                padx=10,
+                fill="x"
+            )
+
+            # If the bubble has buttons, add them into a frame
+            if bubble_data.get("buttons"):
+                button_frame = ctk.CTkFrame(
+                    master=self.prompt_scroll,
+                    fg_color="transparent",
+                    corner_radius=0,
+                    height=40
+                )
+                button_frame.pack(
+                    side="top",
+                    pady=(2, 5),
+                    fill="x"
+                )
+
+                for label, command in bubble_data["buttons"]:
+                    button = ctk.CTkButton(
+                        master=button_frame,
+                        text=label,
+                        height=30,
+                        fg_color=GREEN,
+                        hover_color=HOVER_GREEN,
+                        command=command
+                    )
+                    button.pack(
+                        expand=True,
+                        side="left",
+                        padx=2
+                    )
 
 
     # Creates a conversation bubble to the conversation frame, different color if it's the users text
-    def add_chat_bubble(self, text: str, is_user: bool):
+    def add_chat_bubble(self, text: str, is_user: bool, buttons: Optional[list] = None):
         color = VERY_DARK_GREY
 
         # If it's the user's text, use a different color
@@ -208,6 +244,7 @@ class PromptPage(ctk.CTkFrame):
         self.chat_bubbles.append({
             "text": text,
             "color": color,
+            "buttons": buttons or []
         })
         self.update_chat_bubbles()
 
@@ -220,11 +257,19 @@ class PromptPage(ctk.CTkFrame):
         self.finish_button.configure(state="disabled")
 
         def worker():
+            api_key: str = self.controller.api_key
+            base_url: Optional[str] = self.controller.base_url
+            deployment: str = self.controller.deployment
+            max_turns: int = self.controller.max_turns
             selected_files: List[str] = self.controller.selected_files
             export_path: str = self.controller.export_path
 
             try:
                 config = Config()
+                config.api_key = api_key
+                config.base_url = base_url
+                config.deployment = deployment
+                config.max_turns = max_turns
                 config.output_mode = "file"
                 config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
 
@@ -250,7 +295,26 @@ class PromptPage(ctk.CTkFrame):
                 if result.get('improvement_feedback'):
                     result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
 
-                self.add_chat_bubble(f"{result_text}",False)
+                if result['success']:
+                    buttons = []
+
+                    if result.get("verbose_log_path"):
+                        buttons.append((
+                            "Open Markdown Log",
+                            lambda path=result["verbose_log_path"]: os.startfile(path)
+                        ))
+
+                    if config.output_file and os.path.exists(config.output_file):
+                        buttons.append((
+                            "Open Excel Output",
+                            lambda path=config.output_file: os.startfile(path)
+                        ))
+
+                    self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
+                else:
+                    self.add_chat_bubble(f"{result_text}", False)
+
+
 
             except Exception as error:
                 self.add_chat_bubble(f"Error: {error}",False)
