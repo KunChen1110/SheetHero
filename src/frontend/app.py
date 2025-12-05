@@ -40,10 +40,12 @@ class App(TkinterDnD.Tk):
             container.columnconfigure(0, weight=1)
             page.grid(row=0, column=0, sticky="nsew")
 
-        self.show_page("ConfigPage") # TODO change this
+        self.show_page("PromptPage") # TODO change this
 
     def show_page(self, page_name):
         page = self.pages[page_name]
+        if hasattr(page, "on_show"):
+            page.on_show()
         page.tkraise()
 
 

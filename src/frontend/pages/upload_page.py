@@ -113,7 +113,7 @@ class UploadPage(ctk.CTkFrame):
     def create_file_list(self):
         # =-=-= File List =-=-=
         self.file_list = ctk.CTkFrame(
-            self,
+            master=self,
             width=450,
             fg_color="gray30",
         )
