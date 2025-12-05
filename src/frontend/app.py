@@ -2,7 +2,7 @@ import customtkinter as ctk
 import os
 
 from tkinterdnd2 import TkinterDnD
-from typing import Optional
+from typing import Optional, List
 
 from pages.upload_page import UploadPage
 from pages.config_page import ConfigPage
@@ -22,7 +22,7 @@ class App(TkinterDnD.Tk):
 
         # Backend Variables
         self.export_path: str = os.path.join(os.path.expanduser("~"), "Documents")
-        self.selected_files = []
+        self.selected_files: List[str] = []
         self.api_key: str = ""
         self.base_url: Optional[str] = None
         self.deployment: str = "gpt-4o-mini"
@@ -43,7 +43,7 @@ class App(TkinterDnD.Tk):
 
         self.show_page("PromptPage") # TODO change this
 
-    def show_page(self, page_name):
+    def show_page(self, page_name: str):
         page = self.pages[page_name]
         if hasattr(page, "on_show"):
             page.on_show()

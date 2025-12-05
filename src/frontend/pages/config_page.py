@@ -1,12 +1,18 @@
+from typing import List
+
 import customtkinter as ctk
 
 from frontend.components.colors import *
 from frontend.components.footer_frame import FooterFrame
 
-MIN_TURNS = 1
-MAX_TURNS = 10
+MIN_TURNS: int = 1
+MAX_TURNS: int = 10
 
-options = ["Op1","Op2","Op3"]
+options: List[str] = [
+    "Op1",
+    "Op2",
+    "Op3",
+]
 
 from frontend.components.colors import GREEN
 
@@ -116,7 +122,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= API Description =-=-=
         self.api_description = ctk.CTkLabel(
             master=self.api_frame,
-            text="Enter your api key for Open AI.",
+            text="Enter your api key for Open AI",
             text_color=VERY_LIGHT_GREY,
             anchor="w",
         )
@@ -144,7 +150,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= URL Label =-=-=
         self.url_label = ctk.CTkLabel(
             master=self.url_frame,
-            text="Base URL",
+            text="Base URL (Optional)",
             anchor="w",
         )
         self.url_label.pack(
@@ -170,7 +176,7 @@ class ConfigPage(ctk.CTkFrame):
         # =-=-= URL Description =-=-=
         self.url_description = ctk.CTkLabel(
             master=self.url_frame,
-            text="Enter your base URL (Optional).",
+            text="Enter your base URL",
             text_color=VERY_LIGHT_GREY,
             anchor="w",
         )

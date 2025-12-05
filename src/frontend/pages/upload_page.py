@@ -109,7 +109,7 @@ class UploadPage(ctk.CTkFrame):
             width=450,
             orientation="vertical",
             border_width=5,
-            border_color=VERY_DARK_GREY
+            border_color=VERY_DARK_GREY,
         )
         self.scroll_frame.pack(
             expand=True,
