@@ -1,8 +1,12 @@
 import customtkinter as ctk
 from tkinterdnd2 import TkinterDnD
+from typing import Optional
 
 from pages.upload_page import UploadPage
 from pages.config_page import ConfigPage
+from pages.prompt_page import PromptPage
+
+import os
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -11,16 +15,24 @@ class App(TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("SheetHero UI")
+        self.title("SheetHero")
         self.geometry("720x480")
         self.resizable(False, False)
+
+        # Backend Variables
+        self.export_path = os.path.join(os.path.expanduser("~"), "Documents")
+        self.selected_files = []
+        self.base_url: Optional[str] = None
+        self.prompt = ""
+        self.deployment = "gpt-4o-mini"
+        self.max_turns = 3
 
         container = ctk.CTkFrame(self)
         container.pack(fill="both", expand=True)
 
         self.pages = {}
 
-        for page in (UploadPage,ConfigPage):
+        for page in (UploadPage,ConfigPage,PromptPage):
             page_name = page.__name__
             page = page(container, self)
             self.pages[page_name] = page
@@ -28,7 +40,7 @@ class App(TkinterDnD.Tk):
             container.columnconfigure(0, weight=1)
             page.grid(row=0, column=0, sticky="nsew")
 
-        self.show_page("UploadPage")
+        self.show_page("ConfigPage") # TODO change this
 
     def show_page(self, page_name):
         page = self.pages[page_name]
@@ -36,7 +48,4 @@ class App(TkinterDnD.Tk):
 
 
 if __name__ == "__main__":
-    try:
-        App().mainloop()
-    except KeyboardInterrupt:
-        pass
+    App().mainloop()

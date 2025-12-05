@@ -2,7 +2,7 @@ import customtkinter as ctk
 import os
 
 from tkinter import filedialog, messagebox
-from tkinterdnd2 import DND_FILES, TkinterDnD
+from tkinterdnd2 import DND_FILES
 from PIL import Image
 from importlib import resources
 
@@ -22,42 +22,10 @@ with resources.path("frontend.resources","xls.png") as icon_path:
     excel_img = Image.open(icon_path).resize((20,20))
 excel_icon = CTkImage(excel_img, size=(20,20))
 
-home_dir = os.path.expanduser("~")
-export_path = os.path.join(home_dir, "Documents")
-selected_files = []
-
-def is_valid_file(file_path):
-    if not file_path.lower().endswith(('.xlsx', '.xls', '.ods')):
-        return f"{file_path} is not an Excel file."
-
-    if file_path in selected_files:
-        return f"{file_path} has already been uploaded."
-
-    return True
-
-
-def process_files(file_paths):
-    error_messages = []
-
-    for path in file_paths:
-        path = path.strip("{}")
-        result = is_valid_file(path)
-
-        if result is True:
-            selected_files.append(path)
-        else:
-            error_messages.append(result)
-
-    return error_messages
-
-
 class UploadPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.pack(fill="both", expand=True)
-
-        self.export_path = os.path.join(os.path.expanduser("~"), "Documents")
 
         # Header
         self.header = None
@@ -129,7 +97,7 @@ class UploadPage(ctk.CTkFrame):
         # =-=-= Header Text =-=-=
         self.header_text = ctk.CTkLabel(
             master=self.header,
-            text=f"Saving to {export_path}",
+            text=f"Saving to {self.controller.export_path}",
         )
         self.header_text.pack(
             side="left",
@@ -193,8 +161,8 @@ class UploadPage(ctk.CTkFrame):
 
     # Removes a file from the selected files
     def remove_file(self,index):
-        if index < len(selected_files):
-            selected_files.pop(index)
+        if index < len(self.controller.selected_files):
+            self.controller.selected_files.pop(index)
             self.update_file_list()
 
 
@@ -205,7 +173,7 @@ class UploadPage(ctk.CTkFrame):
             filetypes=[("Excel files", "*.xlsx *.xls *.ods")]
         )
 
-        errors = process_files(file_paths)
+        errors = self.process_files(file_paths)
         if errors:
             messagebox.showerror("Error adding files", "\n".join(errors))
 
@@ -217,7 +185,7 @@ class UploadPage(ctk.CTkFrame):
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
 
-        if not selected_files:
+        if not self.controller.selected_files:
             placeholder = ctk.CTkLabel(
                 self.scroll_frame,
                 text="Drop files here or click + to add",
@@ -231,7 +199,7 @@ class UploadPage(ctk.CTkFrame):
             )
             return
 
-        for i in range(len(selected_files)):
+        for i in range(len(self.controller.selected_files)):
             file_row = ctk.CTkFrame(
                 self.scroll_frame,
                 corner_radius=10,
@@ -245,7 +213,7 @@ class UploadPage(ctk.CTkFrame):
             )
 
             file_row.pack_propagate(False)
-            file_name = os.path.basename(selected_files[i])
+            file_name = os.path.basename(self.controller.selected_files[i])
 
             file_label = ctk.CTkLabel(
                 file_row,
@@ -277,11 +245,10 @@ class UploadPage(ctk.CTkFrame):
 
     # Browses OS file-explorer for export directory folder
     def choose_export_folder(self):
-        global export_path
         folder = filedialog.askdirectory(title="Select Export Folder")
         if folder:
-            export_path = folder
-            self.header_text.configure(text=f"Saving to {export_path}")
+            self.controller.export_path = folder
+            self.header_text.configure(text=f"Saving to {self.controller.export_path}")
 
 
     # Triggered when dropping a file in the file list
@@ -301,7 +268,7 @@ class UploadPage(ctk.CTkFrame):
             elif os.path.isfile(path):
                 all_files.append(path)
 
-        errors = process_files(all_files)
+        errors = self.process_files(all_files)
         if errors:
             messagebox.showerror("Error adding files", "\n".join(errors))
 
@@ -310,8 +277,33 @@ class UploadPage(ctk.CTkFrame):
 
     # Triggered when the upload button is pressed
     def on_upload_pressed(self):
-        if not selected_files:
+        if not self.controller.selected_files:
             messagebox.showwarning("Warning", "Please upload the files to query on")
             return
 
-        self.controller.show_page("")
+        self.controller.show_page("ConfigPage")
+
+
+    def is_valid_file(self,file_path):
+        if not file_path.lower().endswith(('.xlsx', '.xls', '.ods')):
+            return f"{file_path} is not an Excel file."
+
+        if file_path in self.controller.selected_files:
+            return f"{file_path} has already been uploaded."
+
+        return True
+
+
+    def process_files(self,file_paths):
+        error_messages = []
+
+        for path in file_paths:
+            path = path.strip("{}")
+            result = self.is_valid_file(path)
+
+            if result is True:
+                self.controller.selected_files.append(path)
+            else:
+                error_messages.append(result)
+
+        return error_messages
