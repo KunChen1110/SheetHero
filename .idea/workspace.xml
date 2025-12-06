@@ -5,19 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="Simplified understanding.py and validation.py">
-      <change afterPath="$PROJECT_DIR$/src/frontend/resources/file.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/frontend/resources/remove.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/components/colors.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/components/colors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/components/file_display.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/components/file_display.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/components/images.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/components/images.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/pages/config_page.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/pages/config_page.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/frontend/pages/prompt_page.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/pages/prompt_page.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/pages/upload_page.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/pages/upload_page.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/resources/add.png" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/resources/add.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/resources/folder.png" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/resources/folder.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/frontend/resources/xls.png" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -182,6 +172,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/TeamProject$Menu.coverage" NAME="Menu Coverage Results" MODIFIED="1764982447963" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:\team29_project\src" />
-    <SUITE FILE_PATH="coverage/TeamProject$Main.coverage" NAME="Main Coverage Results" MODIFIED="1765042913219" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:\team29_project" />
+    <SUITE FILE_PATH="coverage/TeamProject$Main.coverage" NAME="Main Coverage Results" MODIFIED="1765043759651" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:\team29_project" />
   </component>
 </project>

@@ -297,8 +297,9 @@ class PromptPage(ctk.CTkFrame):
                 config.deployment = deployment
                 config.max_turns = max_turns
                 config.output_mode = "file"
-                config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
+                config.output_file = export_path
 
+                # Create and run the agent
                 agent = SheetHero(
                     excel_paths=selected_files,
                     config=config
