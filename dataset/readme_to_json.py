@@ -99,17 +99,17 @@ def parse_readme_to_tasks(readme_text):
 
 
 # === Example usage ===
-if __name__ == "__main__":
-    # Load the Markdown specification
-    with open("DatasetV1.md", "r", encoding="utf-8") as f:
-        readme_text = f.read()
-
-    # Convert into structured dataset
-    tasks_json = parse_readme_to_tasks(readme_text)
-
-    # Write to dataset.json
-    with open("dataset.json", "w", encoding="utf-8") as f:
-        json.dump(tasks_json, f, indent=4, ensure_ascii=False)
-
-    print("JSON has been created successfully!")
-
+# if __name__ == "__main__":
+#     # Load the Markdown specification
+#     with open("DatasetV1.md", "r", encoding="utf-8") as f:
+#         readme_text = f.read()
+#
+#     # Convert into structured dataset
+#     tasks_json = parse_readme_to_tasks(readme_text)
+#
+#     # Write to dataset.json
+#     with open("dataset.json", "w", encoding="utf-8") as f:
+#         json.dump(tasks_json, f, indent=4, ensure_ascii=False)
+#
+#     print("JSON has been created successfully!")
+#
