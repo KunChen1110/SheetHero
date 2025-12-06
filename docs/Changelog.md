@@ -97,6 +97,12 @@
     - `UploadPage` used to upload the data files into the GUI and specify the output file directory
     - `ConfigPage` used to specify configurations for the model
     - `PromptPage` used to interact with SheetHero, providing prompts and feedback to requests.
+  - Configurations are now able to be made via the user-interface, this includes:
+    - `API Key`, to specify the api key for the OpenAI model.
+    - `Base URl`, to customise if the user wants to use a private server.
+    - `Deployment`, to specify which model deployment wants to use.
+    - `Max Turns`, to specify how many iterations the model can perform during analysis.
+  - Buttons to open the generated log `.md` files as well as generated `.xlsx` file are now presented to the user.
 
 ## 6/11/2025
 ### --- Changed ---
