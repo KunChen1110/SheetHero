@@ -4,8 +4,8 @@ import re
 import time
 from typing import Dict, Any, Optional
 
-from utils.logger import setup_logger
-from modules.prompts import build_validation_prompt
+from backend.utils.logger import setup_logger
+from backend.modules.prompts import build_validation_prompt
 
 logger = setup_logger(__name__)
 
