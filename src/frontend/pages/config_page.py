@@ -18,6 +18,8 @@ options: List[str] = [
 
 from frontend.components.colors import GREEN
 
+
+# Page for setting up the configuration files for the model
 class ConfigPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)

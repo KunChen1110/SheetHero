@@ -10,6 +10,7 @@ from frontend.components.images import ADD_ICON, DIRECTORY_ICON
 from frontend.components.footer_frame import FooterFrame
 
 
+# Page for uploading input files and changing export directory folder
 class UploadPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -134,6 +135,7 @@ class UploadPage(ctk.CTkFrame):
         )
 
 
+    # Creates the footer
     def create_footer(self):
         # =-=-= Footer =-=-=
         self.footer = FooterFrame(master=self)
@@ -163,7 +165,7 @@ class UploadPage(ctk.CTkFrame):
     def browse_files(self):
         file_paths = filedialog.askopenfilenames(
             title="Select Excel file(s)",
-            filetypes=[("Excel files", "*.xlsx *.xls *.ods")]
+            filetypes=[("Excel files", "*.xlsx *.xlsm *.xltx *xltm *.csv")]
         )
 
         errors = self.process_files(file_paths)
@@ -178,12 +180,12 @@ class UploadPage(ctk.CTkFrame):
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
 
+        # If there are no files, make placeholder text
         if not self.controller.selected_files:
             placeholder = ctk.CTkLabel(
                 self.scroll_frame,
                 text="Drop files here or click + to add",
                 text_color=WHITE,
-                font=("Arial", 16),
             )
             placeholder.pack(
                 expand=True,
@@ -192,6 +194,7 @@ class UploadPage(ctk.CTkFrame):
             )
             return
 
+        # Create a file display for each file in the selected files
         for i in range(len(self.controller.selected_files)):
             file_name = os.path.basename(self.controller.selected_files[i])
 
@@ -247,8 +250,9 @@ class UploadPage(ctk.CTkFrame):
         self.controller.show_page("ConfigPage")
 
 
+    # Check if the file is a valid input file
     def is_valid_file(self,file_path):
-        if not file_path.lower().endswith(('.xlsx', '.xls', '.ods')):
+        if not file_path.lower().endswith(('.xlsx', '.xlsm', '.xltx','xltm','.csv')):
             return f"{file_path} is not an Excel file."
 
         if file_path in self.controller.selected_files:
@@ -257,6 +261,7 @@ class UploadPage(ctk.CTkFrame):
         return True
 
 
+    # Processes all files, checking if they are a valid input format, then appends to selected_files list
     def process_files(self,file_paths):
         error_messages = []
 
