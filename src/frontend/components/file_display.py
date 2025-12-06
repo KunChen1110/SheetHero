@@ -1,7 +1,8 @@
 import customtkinter as ctk
 
 from frontend.components.colors import *
-from frontend.components.images import EXCEL_ICON
+from frontend.components.images import FILE_ICON, REMOVE_ICON
+
 
 class FileDisplay(ctk.CTkFrame):
     def __init__(self, master, text, command):
@@ -12,32 +13,39 @@ class FileDisplay(ctk.CTkFrame):
             fg_color=VERY_DARK_GREY
         )
 
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0)
+
         self.file_label = ctk.CTkLabel(
             master=self,
             anchor="w",
             compound="left",
-            image=EXCEL_ICON,
+            image=FILE_ICON,
             text=text,
             padx=10,
         )
-        self.file_label.pack(
-            expand=True,
-            side="left",
-            fill="x",
+        self.file_label.grid(
+            row=0,
+            column=0,
+            sticky="ew",
             padx=5,
-            pady=5
+            pady=5,
         )
 
         self.remove_button = ctk.CTkButton(
             master=self,
-            text="🗑",
-            width=30,
-            height=30,
+            image=REMOVE_ICON,
+            text="",
+            width=25,
+            height=25,
+            fg_color=RED,
+            hover_color=HOVER_RED,
             command=command
         )
-        self.remove_button.pack(
-            side="right",
-            padx=5
+        self.remove_button.grid(
+            row=0,
+            column=1,
+            padx=5,
         )
 
         self.pack_propagate(False)
