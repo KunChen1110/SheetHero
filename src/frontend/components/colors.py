@@ -1,0 +1,7 @@
+VERY_DARK_GREY: str = "#1A1A1A"
+DARK_GREY: str = "#212121"
+MID_GREY: str = "#333333"
+VERY_LIGHT_GREY: str = "#808080"
+WHITE: str = "#f5f5f5"
+GREEN: str = "#047d44"
+HOVER_GREEN: str = "#04703d"
