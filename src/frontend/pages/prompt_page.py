@@ -1,3 +1,5 @@
+import platform
+import subprocess
 import textwrap
 from tkinter import messagebox
 
@@ -14,6 +16,22 @@ from frontend.components.colors import *
 from frontend.components.file_display import FileDisplay
 from frontend.components.footer_frame import FooterFrame
 from frontend.components.chat_bubble import ChatBubble
+
+# Opens a file specific to user's operating system
+def open_file(path: str):
+    system = platform.system()
+    # Windows open file
+    if system == "Windows":
+        os.startfile(path)
+
+    # macOS open file
+    elif system == "Darwin":
+        subprocess.run(["open", path])
+
+    # Linux / other open file
+    else:
+        subprocess.run(["xdg-open", path])
+
 
 class PromptPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -305,13 +323,13 @@ class PromptPage(ctk.CTkFrame):
                     if result.get("verbose_log_path"):
                         buttons.append((
                             "Open Markdown Log",
-                            lambda path=result["verbose_log_path"]: os.startfile(path)
+                            lambda path=result["verbose_log_path"]: open_file(path)
                         ))
 
                     if config.output_file and os.path.exists(config.output_file):
                         buttons.append((
                             "Open Excel Output",
-                            lambda path=config.output_file: os.startfile(path)
+                            lambda path=config.output_file: open_file(path)
                         ))
 
                     self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
@@ -326,3 +344,4 @@ class PromptPage(ctk.CTkFrame):
 
         # Start the worker on another thread
         threading.Thread(target=worker, daemon=True).start()
+
