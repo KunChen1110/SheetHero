@@ -265,11 +265,14 @@ class PromptPage(ctk.CTkFrame):
         if is_user:
             color = MID_GREY
 
+        # Add the bubble to the list
         self.chat_bubbles.append({
             "text": text,
             "color": color,
             "buttons": buttons or []
         })
+
+        # Update the bubble list
         self.update_chat_bubbles()
 
 
@@ -338,11 +341,14 @@ class PromptPage(ctk.CTkFrame):
                     if config.output_file and os.path.exists(config.output_file):
                         buttons.append((
                             "Open Excel Output",
-                            lambda path=config.output_file: open_file(path)
+                            lambda path=config.output_file: open_file(result['answer'])
                         ))
 
+                    # Send the result, with the buttons if there are any.
                     self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
                 else:
+
+                    # Send the error
                     self.add_chat_bubble(f"{result_text}", False)
 
             # Send error if fails
