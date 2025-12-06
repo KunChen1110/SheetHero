@@ -1,0 +1,6 @@
+,
+Node From,Node To
+/home,"/products, /about, /contact, /blog"
+/products,"/products/widget-a, /products/widget-b, /cart"
+/about,"/team, /mission, /contact"
+/blog,"/blog/post-1, /blog/post-2"
