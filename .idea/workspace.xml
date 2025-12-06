@@ -4,15 +4,53 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="" />
+    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="Simplified understanding.py and validation.py">
+      <change beforePath="$PROJECT_DIR$/.idea/team29_project.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/team29_project.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/config/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/config/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/core/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/core/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/core/agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/core/agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/datasetRun.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/datasetRun.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/modules/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/modules/execution.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/execution.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/modules/prompts.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/prompts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/modules/understanding.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/understanding.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/modules/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/modules/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/utils/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/utils/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/utils/excel_toolkit.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/utils/excel_toolkit.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/utils/logger.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/utils/logger.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/utils/output_formatter.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/utils/output_formatter.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="backend_branch" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitLabMergeRequestFiltersHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPENED&quot;,
+    &quot;assignee&quot;: {
+      &quot;type&quot;: &quot;org.jetbrains.plugins.gitlab.mergerequest.ui.filters.GitLabMergeRequestsFiltersValue.MergeRequestsMemberFilterValue.MergeRequestsAssigneeFilterValue&quot;,
+      &quot;username&quot;: &quot;psyxl12&quot;,
+      &quot;fullname&quot;: &quot;Xianze Lu Wu&quot;
+    }
+  }
+}</component>
+  <component name="GitLabMergeRequestsSettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;first&quot;: &quot;https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git&quot;,
+    &quot;second&quot;: &quot;92c180d9-5c6a-4690-ad1f-377eaa0702ad&quot;
+  }
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 5
 }</component>
@@ -21,34 +59,30 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "D:/team29_project/src/backend/data_washing",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.validation.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;backend__branch__comments&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/team29_project/src/backend/data_washing&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Modules&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\team29_project\assets" />
     </key>
-  </component>
-  <component name="SharedIndexes">
-    <attachedChunks>
-      <set>
-        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.26830.84" />
-        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-IU-252.26830.84" />
-      </set>
-    </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -65,9 +99,42 @@
       <workItem from="1762994895390" duration="1568000" />
       <workItem from="1763034697677" duration="309000" />
     </task>
+    <task id="LOCAL-00001" summary="Simplified understanding.py">
+      <option name="closed" value="true" />
+      <created>1764095408067</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1764095408067</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Simplified understanding.py and validation.py">
+      <option name="closed" value="true" />
+      <created>1764101784263</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1764101784263</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Simplified understanding.py" />
+    <MESSAGE value="Simplified understanding.py and validation.py" />
+    <option name="LAST_COMMIT_MESSAGE" value="Simplified understanding.py and validation.py" />
   </component>
 </project>

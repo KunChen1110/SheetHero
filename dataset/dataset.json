@@ -1,0 +1,308 @@
+[
+    {
+        "task_id": "Test 1",
+        "title": "Budget calculating",
+        "spreadsheets": [
+            "Task01/tc01_input01.xlsx",
+            "Task01/tc01_input02.xlsx"
+        ],
+        "prompt": "Here are two tables about my daily spending. Could you create a new sheet that merges the two forms together and calculates the average daily spending, total spending in Novemeber? Also, indicate whcih day(s) I spend most in red.",
+        "answer": "",
+        "expected_output_file": [
+            "Task01/tc01_output01.xlsx"
+        ],
+        "feedback": "LLM: Do you spend 0 pound for gift on Nov 4th and 0 pound for coffee on Nov 14th?\n\n---"
+    },
+    {
+        "task_id": "Test 2",
+        "title": "Meeting schdeuling",
+        "spreadsheets": [
+            "Task02/tc02_input01.csv",
+            "Task02/tc02_input02.csv",
+            "Task02/tc02_input03.csv",
+            "Task02/tc02_input04.csv",
+            "Task02/tc02_input05.csv"
+        ],
+        "prompt": "Hello, here are tables about students and their tutors. You task is to output a new form listing each tutor’s name, the time and location of their tutor meeting, as well as the students attending the meeting.",
+        "answer": "",
+        "expected_output_file": [
+            "Task2/tc02_output01.xlsx"
+        ],
+        "feedback": "LLM : Are room number 'C80' and 'C 80' the same? \n\n---"
+    },
+    {
+        "task_id": "Test 3",
+        "title": "Internet Penetration Rate Analysis (visualization)",
+        "spreadsheets": [
+            "Task03/tc03_input01.xlsx"
+        ],
+        "prompt": "Here is the form detailing the internet_penetration rate from 2009 to 2024. Could you calculates the average Internet Penetration rate for each region over the years 2020–2024 ? Identifies the region with the fastest growth rate and sort the region by growth rate. Also, provide a line chart, use different color to represent region, vertical is year (from 2020 to 2024), horizontal represents penetration rate",
+        "answer": "",
+        "expected_output_file": [
+            "Task03/tc03_output01.xlsx"
+        ],
+        "feedback": "I find that the data in 2020 is missing.\n\n---"
+    },
+    {
+        "task_id": "Test 4",
+        "title": "Task scheduling table",
+        "spreadsheets": [
+            "Task04/tc04_input01.xlsx",
+            "Task04/tc04_input02.xlsx"
+        ],
+        "prompt": "Hello, here is a table containing tasks, their durations, priorities. Here is also a table about task dependencies (which task needs to be finished before other tasks). All machine starts at 8:00 am.\nYour task is to schedule the tasks based on task dependency.\n\nCreate a new Excel sheet showing the final schedule with columns:\n\n| Task ID | Task Name | Priority | Start Time | End Time |\n|---------|-----------|----------|-----------|----------|\n\nAlso answer the question\nWhat's the duration of finishing all the tasks ?",
+        "answer": "The duration of finishing all tasks is 10 hour.",
+        "expected_output_file": [
+            "Task04/tc04_output01.xlsx"
+        ],
+        "feedback": "Can I assume that there is no time between switching from one task to another? \n\n\n---"
+    },
+    {
+        "task_id": "Test 5",
+        "title": "Indian Smartphone shipment and market share",
+        "spreadsheets": [
+            "Task05/tc05_input01.xlsx",
+            "Task05/tc05_input02.xlsx"
+        ],
+        "prompt": "Here are two forms, one is the number of unit smartphones in india from 2012 to 2025, the other is \nthe marketshare of 2017 to 2025 in india. You task is two find the overlap between 2 timelines, then compute the estimation of number of smartphones of each brand in india. That is market_share * shipment.\nOutput a form in the following format :\n\n| Time | Vivo (Unit shipment) | SamSung | ... |  \n|------|----------------------|---------|-----|",
+        "answer": "",
+        "expected_output_file": [
+            "Task05/tc05_output01.xlsx"
+        ],
+        "feedback": "Is market_share * shipment a good estimation?\n\n---"
+    },
+    {
+        "task_id": "Test 6",
+        "title": "Titanic survivor dataset analysis",
+        "spreadsheets": [
+            "Task06/tc06_input01.csv"
+        ],
+        "prompt": "Your task is to calculate the correlation coefficient between survivor and other factors (sex, age, ...) given the titantic dataset.\nPearson correlation coefficient :\nr_xy = cov(X, Y) / (σ_X * σ_Y)\nOutput an excel with format\n| Sex | Age | Fare | Carbin | Emabarked | \n|-----|-----|------|--------|-----------|",
+        "answer": "",
+        "expected_output_file": [
+            "Task06/tc6_output01.xlsx"
+        ],
+        "feedback": "I found missing values — how would you like me to handle them? Can I treat them as NULL?\n\n---"
+    },
+    {
+        "task_id": "Test 7",
+        "title": "Ice-cream sales vs temperature, rain, price",
+        "spreadsheets": [
+            "Task07/tc07_input01.csv"
+        ],
+        "prompt": "Assume a linear relationship between ice-cream sales and the factors — temperature, price, and number of tourists. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting sales. Output the learned weights to an Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task07/tc07_output01.xlsx"
+        ],
+        "feedback": "In this case, I treat rains as 1 and not rains as 0.\n\n---"
+    },
+    {
+        "task_id": "Test 8",
+        "title": "Iris datasets",
+        "spreadsheets": [
+            "Task08/tc08_input01.csv"
+        ],
+        "prompt": "Calculate the correlation matrix for all numeric columns in the Iris dataset separately for species Iris-setosa.\nOutput a 4×4 table with both rows and columns as:\n|Sepal_Length | Sepal_Width | Petal_Length | Petal_Width |\n|-------------|-------------|--------------|-------------|\nRound all correlation values to two decimals, and label each table clearly with the species name.",
+        "answer": "",
+        "expected_output_file": [
+            "Task08/tc08_output01.xlsx"
+        ],
+        "feedback": "Would you like me to include species names as table titles, or as part of the header row?\n\n---"
+    },
+    {
+        "task_id": "Test 9",
+        "title": "Business Analysis of Coca cola company",
+        "spreadsheets": [
+            "Task09/tc09_input01.xlsx"
+        ],
+        "prompt": "Evaluate cash flow efficiency of coca cola company from 2009 to 2018 by calculating:\n\n* Operating Cash Flow to Net Income\n\n* Free Cash Flow (Operating Cash Flow minus Capital Expenditures)",
+        "answer": "",
+        "expected_output_file": [
+            "Task09/tc09_output01.xlsx"
+        ],
+        "feedback": "Should I exclude the 2017 one-time tax expense when calculating the OCF/Net Income ratio?\nDo you want the OCF/Net Income ratio averaged across all years or shown year by year?\n\n---"
+    },
+    {
+        "task_id": "Test 10",
+        "title": "Cycle detection in graphs",
+        "spreadsheets": [
+            "Task10/tc10_input01.csv",
+            "Task10/tc10_input02.csv",
+            "Task10/tc10_input03.csv",
+            "Task10/tc10_input04.csv",
+            "Task10/tc10_input05.csv"
+        ],
+        "prompt": "Given 5 excel representing the adjacent list of the directed graph , could you tell which graph contains a cycle and which graph not? Output an excel, containing columns in the format\n| Graph ID| Contains Cycle (True / False)|\n|---------|------------------------------|",
+        "answer": "",
+        "expected_output_file": [
+            "Task10/tc10_output01.xlsx"
+        ],
+        "feedback": "None\n\n\n---"
+    },
+    {
+        "task_id": "Test 11",
+        "title": "Inventory Management problem",
+        "spreadsheets": [
+            "Task11/tc11_input01.xlsx"
+        ],
+        "prompt": "Based on the provided inventory data, calculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost. Also, perform a sensitivity analysis to show how total cost changes with different order quantities, and evaluate a scenario where annual demand increases by 20%. Provide the results in a structured table.",
+        "answer": "",
+        "expected_output_file": [
+            "Task11/tc11_output01.xlsx",
+            "Task11/tc11_output02.xlsx",
+            "Task11/tc11_output03.xlsx"
+        ],
+        "feedback": "Clarification on Assumptions: The EOQ model assumes constant demand, no stockouts, and fixed costs. The holding cost (H) is often derived as a percentage of the unit cost (e.g., 16.67% of $15 = $2.5). If these assumptions change, the results may need adjustment.\n\n---"
+    },
+    {
+        "task_id": "Test 12",
+        "title": "Multi-Source Financial Performance Dashboard",
+        "spreadsheets": [
+            "Task12/tc12_input01.xlsx",
+            "Task12/tc12_input02.xlsx",
+            "Task12/tc12_input03.xlsx"
+        ],
+        "prompt": "Calculate the following metrics for each month and for the total quarter:\nGross Profit (Revenue - Cost of Goods Sold)\n\nNet Profit (Gross Profit - Operating Expenses - Interest Paid)\n\nGross Profit Margin (Gross Profit / Revenue)\n\nNet Profit Margin (Net Profit / Revenue)\n\nCustomer Acquisition Cost - CAC (Marketing Spend / New Customers)\n\nMarketing Efficiency Ratio (Revenue / Marketing Spend)",
+        "answer": "",
+        "expected_output_file": [
+            "Task12/tc12_output01.xlsx"
+        ],
+        "feedback": "The dashboard was generated by first consolidating the monthly P&L and Sales data. Key ratios like Gross Profit Margin and CAC were calculated for each month, then aggregated to Q1 totals (for profit values) or averages (for ratios) for a holistic view. The variance was calculated as Actual - Target.\n\n---"
+    },
+    {
+        "task_id": "Test 13",
+        "title": "Global Diabetes Population Analysis",
+        "spreadsheets": [
+            "Task13/tc13_input01.xlsx",
+            "Task13/tc13_input02.xlsx",
+            "Task13/tc13_input03.xlsx"
+        ],
+        "prompt": "Given three spreadsheets showing:\n* Diabetes prevalence among adults by country (2024)\n* Number of diabetics worldwide by region (in millions, 2024)\n* Diabetes-related health expenditure by region (in billion USD, 2024)\n\nCalculate for each region:\n* The share of global diabetic population (%)\n* The average expenditure per diabetic (USD per person)\n\nOutput an Excel file containing:\n\n| Region | Diabetics (millions) | Share of Global (%) | Expenditure (billion USD) | Avg Expenditure per Person (USD) |\n|--------|----------------------|---------------------|---------------------------|----------------------------------|",
+        "answer": "",
+        "expected_output_file": [
+            "Task13/tc13_output01.xlsx"
+        ],
+        "feedback": "---"
+    },
+    {
+        "task_id": "Test 14",
+        "title": "Global Mobile Reviews Analysis",
+        "spreadsheets": [
+            "Task14/tc14_input01.csv"
+        ],
+        "prompt": "Given a dataset of smartphone reviews containing customer information, brand, model, and overall ratings, generate a table that shows, for each country and brand, the average rating and the number of reviews. The output should be an Excel file with columns: country, brand, avg_rating, num_reviews. Focus only on the average rating metric and provide a clean summary suitable for analysis.",
+        "answer": "",
+        "expected_output_file": [
+            "Task14/tc14_output01.xlsx"
+        ],
+        "feedback": "Some reviews may have missing ratings. Should I exclude them or treat them as zero?\"\n\n---"
+    },
+    {
+        "task_id": "Test 15",
+        "title": "Brazilian E-Commerce Public Dataset Analysis",
+        "spreadsheets": [
+            "Task15/tc15_input01.csv",
+            "Task15/tc15_input02.csv",
+            "Task15/tc15_input03.csv",
+            "Task15/tc15_input04.csv",
+            "Task15/tc15_input05.csv",
+            "Task15/tc15_input06.csv",
+            "Task15/tc15_input07.csv",
+            "Task15/tc15_input08.csv"
+        ],
+        "prompt": "Can you merge the dataset, translating the product category name to english? And tell me the side of output in terms of rows and columns.",
+        "answer": "rows : 118310, columns : 39",
+        "expected_output_file": [
+            "Task15/tc15_output01.xlsx"
+        ],
+        "feedback": "None\n\n\n---"
+    },
+    {
+        "task_id": "Test 16",
+        "title": "Employee Performance & Salary Correlation",
+        "spreadsheets": [],
+        "prompt": "Here is a dataset containing employee details such as monthly income, years of experience, and performance rating. Please calculate the Pearson correlation between performance rating and monthly income, compute the average income for each rating level, and create a scatter plot of years of experience versus monthly income. Output the results in a new Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task16/tc16_output01.xlsx"
+        ],
+        "feedback": "LLM: Should the scatter plot include a trendline?\n\n---"
+    },
+    {
+        "task_id": "Test 17",
+        "title": "Store Feature Analysis",
+        "spreadsheets": [],
+        "prompt": "Here are two tables about weekly store information. Please merge them by store, then calculate the average temperature, fuel price, consumer price index, and unemployment rate for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task17/tc17_output01.xlsx"
+        ],
+        "feedback": "LLM: Should holiday and non-holiday averages also be grouped by store type?\n\n---"
+    },
+    {
+        "task_id": "Test 18",
+        "title": "University Course Enrollment Analysis",
+        "spreadsheets": [],
+        "prompt": "Here is a dataset showing enrollment by college, department, and year. Please calculate the total enrollment for each department, determine year-over-year growth, identify departments with more than ten percent growth, and create a line chart showing enrollment trends for each college. Output the results in a new Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task18/tc18_output01.xlsx"
+        ],
+        "feedback": "LLM: Should growth be calculated only for the most recent year?\n\n---"
+    },
+    {
+        "task_id": "Test 19",
+        "title": "Global Carbon Emissions Comparison",
+        "spreadsheets": [],
+        "prompt": "This dataset lists annual carbon dioxide emissions by country. Please group countries by continent, calculate the total emissions per continent for each year, compute the percentage change from 2000 to 2022, and create a bar chart ranking continents by emissions in 2022. Output a new Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task19/tc19_output01.xlsx"
+        ],
+        "feedback": "LLM: Should countries without a continent be grouped under “Unknown”?\n\n---"
+    },
+    {
+        "task_id": "Test 20",
+        "title": "Hospital Resource Utilization Analysis",
+        "spreadsheets": [],
+        "prompt": "Here are four hospital tables containing staff, schedules, services, and patient information. Please compute staff utilisation, service utilisation, and patient load for each department. Identify departments with utilisation above ninety percent and highlight these values in red. Output all results to a new Excel file.",
+        "answer": "",
+        "expected_output_file": [
+            "Task20/tc20_output01.xlsx"
+        ],
+        "feedback": "LLM: Should the highlighting apply only to the utilisation value or the entire row?\n\n\n---"
+    },
+    {
+        "task_id": "Test 21",
+        "title": "Interviewee screening",
+        "spreadsheets": [
+            "Task21/tc21_input01.xlsx",
+            "Task21/tc21_input02.xlsx",
+            "Task21/tc21_input03.xlsx",
+            "Task21/tc21_input04.xlsx",
+            "Task21/tc21_input05.xlsx",
+            "Task21/tc21_input06.xlsx",
+            "Task21/tc21_input07.xlsx",
+            "Task21/tc21_input08.xlsx",
+            "Task21/tc21_input09.xlsx",
+            "Task21/tc21_input10.xlsx",
+            "Task21/tc21_input11.xlsx",
+            "Task21/tc21_input12.xlsx",
+            "Task21/tc21_input13.xlsx",
+            "Task21/tc21_input14.xlsx",
+            "Task21/tc21_input15.xlsx",
+            "Task21/tc21_input16.xlsx",
+            "Task21/tc21_input17.xlsx",
+            "Task21/tc21_input18.xlsx",
+            "Task21/tc21_input19.xlsx",
+            "Task21/tc21_input20.xlsx"
+        ],
+        "prompt": "As an HR, I've received 20 spreadsheets about candidate information. You task is to rank the candidates based on the following \ncriteria :   \n0.5 * working experience + 0.3 * number of skills + 0.2 * personality score\nOutput a file with score, skills and other attributes of candidates.",
+        "answer": "",
+        "expected_output_file": [
+            "Task21/tc21_output01.xlsx"
+        ],
+        "feedback": "Some candidates did not fill in essential information. Should these fields be treated as null values? Additionally, a few candidates did not provide their names. In such cases, can we exclude them from the analysis?"
+    }
+]

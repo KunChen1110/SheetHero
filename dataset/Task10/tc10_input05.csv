@@ -1,0 +1,13 @@
+,
+Node From,Node To
+A,B
+A,C
+B,A
+B,D
+C,A
+C,D
+D,B
+D,C
+D,E
+E,D
+,

@@ -1,0 +1,6 @@
+,
+Node From,Node To
+JFK,"LHR, CDG, NRT, LAX, SFO"
+LHR,"JFK, CDG, FRA, DXB"
+CDG,"JFK, LHR, FRA, SIN"
+SFO,"JFK, LAX, NRT, LHR"
