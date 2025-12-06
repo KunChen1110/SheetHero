@@ -83,8 +83,8 @@ class ReadmeStandardizer:
         return new_content
 
 
-if __name__ == "__main__":
-    std = ReadmeStandardizer("DatasetV1.md")
-    std.standardize_indexes("outputfile")
-    std.standardize_indexes("spreadsheet")
+# if __name__ == "__main__":
+#     std = ReadmeStandardizer("DatasetV1.md")
+#     std.standardize_indexes("outputfile")
+#     std.standardize_indexes("spreadsheet")
     # std.rewrite()
