@@ -89,3 +89,18 @@
 - Simplified code structure
   - Removed verbose comments from `core/__init__.py`
   - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
+
+## 4/11/2025
+### --- Added ---
+- New modern GUI interface that provides a better user-experience
+  - Split menu functionality into three separate pages, `UploadPage`, `ConfigPage` and `PromptPage`.
+    - `UploadPage` used to upload the data files into the GUI and specify the output file directory
+    - `ConfigPage` used to specify configurations for the model
+    - `PromptPage` used to interact with SheetHero, providing prompts and feedback to requests.
+
+## 6/11/2025
+### --- Changed ---
+- Updated [README.md](../README.md) with new content
+  - Documented features that displays the software's current features
+  - Documented preview that displays the software's user-interface as well as how to use it properly
+  - Documented download instructions, including for different operating-systems
