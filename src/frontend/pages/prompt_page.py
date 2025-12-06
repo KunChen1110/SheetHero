@@ -338,7 +338,7 @@ class PromptPage(ctk.CTkFrame):
                     if config.output_file and os.path.exists(config.output_file):
                         buttons.append((
                             "Open Excel Output",
-                            lambda path=config.output_file: open_file(path)
+                            lambda path=config.output_file: open_file(result['answer'])
                         ))
 
                     self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
