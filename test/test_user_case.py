@@ -128,15 +128,22 @@ def run_single_test(test_n: int, output_mode: str) -> Dict[str, Any]:
     result["answer"] = stdout
 
     # Best-effort extraction of an Excel output path from stdout.
-    # Prefer the LAST .xlsx token (usually the "Result file saved to" line),
-    # so we don't accidentally pick up input files like tc01_input01.xlsx.
-    path_candidates = [
-        token
-        for token in stdout.split()
-        if token.endswith(".xlsx") and "/" in token
-    ]
-    if path_candidates:
-        result["output_file_path"] = path_candidates[-1]
+    # 1) Prefer the explicit "Result file saved to:" line, stripping backticks.
+    # 2) Fallback: LAST .xlsx token with a '/' in it (may hit inputs).
+    import re
+
+    m = re.search(r"Result file saved to:\s*`?(.+?\.xlsx)`?", stdout)
+    if m:
+        result["output_file_path"] = m.group(1)
+    else:
+        path_candidates = [
+            token.strip("`',\"()")
+            for token in stdout.split()
+            if token.strip("`',\"()").endswith(".xlsx")
+            and "/" in token.strip("`',\"()")
+        ]
+        if path_candidates:
+            result["output_file_path"] = path_candidates[-1]
 
     # Fallback: if stdout does not contain a usable .xlsx path,
     # reconstruct the expected path from dataset.json.
