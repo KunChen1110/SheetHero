@@ -9,8 +9,8 @@ from typing import Dict, Any, Optional, Tuple
 
 from openai import RateLimitError
 
-from utils.logger import setup_logger
-from modules.prompts import EXECUTION_SYSTEM_INTRO, EXECUTION_HELPER_SECTIONS, build_execution_user_prompt
+from backend.utils.logger import setup_logger
+from backend.modules.prompts import EXECUTION_SYSTEM_INTRO, EXECUTION_HELPER_SECTIONS, build_execution_user_prompt
 
 logger = setup_logger(__name__)
 
