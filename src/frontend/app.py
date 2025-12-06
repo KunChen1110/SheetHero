@@ -4,9 +4,9 @@ import os
 from tkinterdnd2 import TkinterDnD
 from typing import Optional, List
 
-from pages.upload_page import UploadPage
-from pages.config_page import ConfigPage
-from pages.prompt_page import PromptPage
+from frontend.pages.upload_page import UploadPage
+from frontend.pages.config_page import ConfigPage
+from frontend.pages.prompt_page import PromptPage
 
 
 ctk.set_appearance_mode("dark")
@@ -48,7 +48,3 @@ class App(TkinterDnD.Tk):
         if hasattr(page, "on_show"):
             page.on_show()
         page.tkraise()
-
-
-if __name__ == "__main__":
-    App().mainloop()

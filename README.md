@@ -12,6 +12,28 @@ TO-DO
 TO-DO
 
 ## Installation
-TO-DO
+TO-DO remove dev branch on release
+
+### Clone Repository (All)
+```
+git clone --branch dev https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git
+cd team29_project
+```
+
+### Linux / macOS Installation
+```
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+### Windows Installation
+```
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
 
 - [Changelog](docs/Changelog.md)
