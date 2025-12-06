@@ -33,9 +33,7 @@ To upload files with SheetHero, either select manually or use the drag & drop su
 your files into the menu. Additionally, you can customise the export directory here, to specify where generated files
 are located after analysis.
 
-![Screenshot of upload preview 1](assets/Preview/preview_upload_1.png)
-
-![Screenshot of upload preview 2](assets/Preview/preview_upload_2.png)
+![Gif of upload preview](assets/Preview/preview_upload.gif)
 
 ### Configure
 
@@ -52,11 +50,8 @@ To prompt with SheetHero, simply type in your prompt to the model, specifying wh
 you would like to perform on the previously selected files. After analysis, you can view the logs of the operation or 
 open the generated file through the menu buttons.
 
-![Screenshot of prompt preview 1](assets/Preview/preview_prompt_1.png)
+![Gif of prompt preview](assets/Preview/preview_prompt.gif)
 
-![Screenshot of prompt preview 2](assets/Preview/preview_prompt_2.png)
-
-![Screenshot of prompt preview 3](assets/Preview/preview_prompt_3.png)
 
 ### Log Generation
 
