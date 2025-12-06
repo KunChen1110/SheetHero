@@ -30,9 +30,13 @@ def open_file(path: str):
 
     # Linux / other open file
     else:
-        subprocess.run(["xdg-open", path])
+        try:
+            subprocess.run(["xdg-open", path], check=True)
+        except FileNotFoundError:
+            subprocess.run(["less",path])
 
 
+# Page for prompting the model with selected files and config settings
 class PromptPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -55,6 +59,8 @@ class PromptPage(ctk.CTkFrame):
         self.create_scroll_frame()
 
         self.chat_bubbles = []
+
+        self.add_chat_bubble(f"Hello! Ask me anything.",False)
 
     # Updates the file list when menu is visible
     def on_show(self):
@@ -223,13 +229,13 @@ class PromptPage(ctk.CTkFrame):
             if bubble_data.get("buttons"):
                 button_frame = ctk.CTkFrame(
                     master=self.prompt_scroll,
-                    fg_color="transparent",
+                    fg_color=VERY_DARK_GREY,
                     corner_radius=0,
                     height=40
                 )
                 button_frame.pack(
                     side="top",
-                    pady=(2, 5),
+                    padx=10,
                     fill="x"
                 )
 
@@ -244,8 +250,10 @@ class PromptPage(ctk.CTkFrame):
                     )
                     button.pack(
                         expand=True,
+                        fill="x",
                         side="left",
-                        padx=2
+                        pady=5,
+                        padx=5,
                     )
 
 
@@ -289,8 +297,9 @@ class PromptPage(ctk.CTkFrame):
                 config.deployment = deployment
                 config.max_turns = max_turns
                 config.output_mode = "file"
-                config.output_file = os.path.join(export_path, "REPLACE_FILENAME.xlsx")
+                config.output_file = export_path
 
+                # Create and run the agent
                 agent = SheetHero(
                     excel_paths=selected_files,
                     config=config

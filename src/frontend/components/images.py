@@ -8,6 +8,7 @@ def load_icon(filename, size=(20, 20)):
     return CTkImage(img, size=size)
 
 
-EXCEL_ICON = load_icon("xls.png")
+FILE_ICON = load_icon("file.png")
 ADD_ICON = load_icon("add.png")
 DIRECTORY_ICON = load_icon("folder.png")
+REMOVE_ICON = load_icon("remove.png")
