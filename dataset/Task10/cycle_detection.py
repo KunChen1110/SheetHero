@@ -27,7 +27,7 @@ def read_graph(csv_path):
     for _, row in df.iterrows():
         node_from = str(row["Node From"]).strip()
         node_to_raw = str(row["Node To"])
-        # 按逗号分割 + 去除空格
+        # split with ,
         node_to_list = [n.strip() for n in node_to_raw.split(",") if n.strip()]
         graph[node_from] = node_to_list
     return graph
@@ -37,7 +37,7 @@ results = []
 base_path = ""
 
 for i in range(1, 6):  # graph_1.csv ~ graph_5.csv
-    file_path = os.path.join(base_path, f"graph_{i}.csv")
+    file_path = os.path.join(base_path, f"tc10_input0{i}.csv")
     graph = read_graph(file_path)
     contains_cycle = has_cycle(graph)
     results.append({
