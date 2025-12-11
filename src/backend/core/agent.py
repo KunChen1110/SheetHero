@@ -6,13 +6,13 @@ from openai import OpenAI
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
 
-from config.settings import Config
-from modules.understanding import UnderstandingModule
-from modules.execution import ExecutionModule
-from modules.validation import ValidationModule
-from utils.excel_toolkit import ExcelToolkit, calculate_token_cost_line
-from utils.logger import setup_logger
-from modules.prompts import build_enhanced_understanding_prompt
+from backend.config.settings import Config
+from backend.modules.understanding import UnderstandingModule
+from backend.modules.execution import ExecutionModule
+from backend.modules.validation import ValidationModule
+from backend.utils.excel_toolkit import ExcelToolkit, calculate_token_cost_line
+from backend.utils.logger import setup_logger
+from backend.modules.prompts import build_enhanced_understanding_prompt
 
 logger = setup_logger(__name__)
 

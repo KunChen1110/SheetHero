@@ -2,12 +2,8 @@
 """
 Dataset Runner - Unified Test Execution Script
 
-Basic usage:
+Usage:
     python3 datasetRun.py --test-n 1
-
-Optional arguments:
-    --dataset-dir PATH     # Custom dataset folder (default: ./dataset)
-    --output-mode MODE     # 'file' (default) to save Excel, or 'text' for text-only answers
 """
 
 import sys
@@ -101,28 +97,6 @@ def determine_output_path(dataset_dir: Path, spreadsheets: List[str], task_id: s
     return str(output_path.absolute())
 
 
-def build_task_prompt(task: Dict[str, Any]) -> str:
-    """
-    Build the final prompt by combining scenario, category and the original prompt.
-    """
-    base_prompt = (task.get("prompt") or "").strip()
-    scenario = (task.get("scenario") or "").strip()
-    category = (task.get("category") or "").strip()
-
-    parts: List[str] = []
-    if scenario:
-        parts.append(f"Scenario: {scenario}")
-    if category:
-        parts.append(f"Category: {category}")
-    if base_prompt:
-        if parts:
-            parts.append("")  # blank line between meta info and original prompt
-        parts.append(base_prompt)
-
-    final_prompt = "\n".join(parts).strip()
-    return final_prompt
-
-
 def main():
     parser = argparse.ArgumentParser(description="Dataset Runner - Unified Test Execution Script")
     
@@ -130,15 +104,6 @@ def main():
                         help="Test task number (e.g., 1, 2, 3...)")
     parser.add_argument("--dataset-dir", type=str, default=None,
                         help="Dataset directory path (default: dataset folder in project root)")
-    parser.add_argument(
-        "--output-mode",
-        type=str,
-        choices=["file", "text"],
-        default=None,
-        help="Output delivery mode: 'file' to save an Excel file, "
-             "'text' to return only a textual answer. "
-             "If not provided, the mode is chosen automatically based on expected_output_file in dataset.json.",
-    )
     
     args = parser.parse_args()
     
@@ -170,33 +135,20 @@ def main():
         output_path = determine_output_path(
             dataset_dir, spreadsheets, task['task_id'], expected_output_file
         )
-
-        # Build enriched prompt including scenario & category
-        task_prompt = build_task_prompt(task)
         
         # Configure and run
         config = Config()
-        # Decide output mode:
-        # - If caller specifies --output-mode, honor it.
-        # - Otherwise, use 'file' when expected_output_file is non-empty,
-        #   and 'text' when it is empty.
-        if args.output_mode:
-            output_mode = args.output_mode
-        else:
-            output_mode = "file" if expected_output_file else "text"
-
-        config.output_mode = output_mode
-        # Only set an explicit output file when in file mode
-        config.output_file = output_path if output_mode == "file" else None
+        config.output_mode = "file"
+        config.output_file = output_path
         
         agent = SheetHero(excel_paths=input_paths, config=config)
-        result = agent.run(user_question=task_prompt)
+        result = agent.run(user_question=task.get("prompt", ""))
         
         # Display Results (always user mode, verbose logs are in file)
         output = format_output_user_mode(
             result,
             input_paths,
-            task_prompt,
+            task.get("prompt", ""),
             output_mode=config.output_mode
         )
         
@@ -207,7 +159,3 @@ def main():
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
