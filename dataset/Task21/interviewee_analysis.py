@@ -88,7 +88,7 @@ def main():
     print(f"\nRanking saved to {OUTPUT_EXCEL}\n")
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
 
 

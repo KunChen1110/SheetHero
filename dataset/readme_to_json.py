@@ -1,5 +1,6 @@
 import re
 import json
+from pathlib import Path
 
 def parse_readme_to_tasks(readme_text):
     """
@@ -22,6 +23,8 @@ def parse_readme_to_tasks(readme_text):
     This parser extracts:
     - task_id
     - title
+    - scenario
+    - category
     - spreadsheets (input files)
     - prompt
     - answer (empty string if missing)
@@ -40,6 +43,8 @@ def parse_readme_to_tasks(readme_text):
         task_data = {
             "task_id": f"Test {task_id}",
             "title": None,
+            "scenario": "",
+            "category": "",
             "spreadsheets": [],
             "prompt": None,
             "answer": "",
@@ -51,6 +56,16 @@ def parse_readme_to_tasks(readme_text):
         title_match = re.search(r"###\s*(.*?)\n", block)
         if title_match:
             task_data["title"] = title_match.group(1).strip()
+
+        # --- Extract Scenario ---
+        scenario_match = re.search(r"###\s*Scenario\s*(.*?)(?=###|\Z)", block, re.S)
+        if scenario_match:
+            task_data["scenario"] = scenario_match.group(1).strip()
+
+        # --- Extract Category ---
+        category_match = re.search(r"###\s*Category\s*(.*?)(?=###|\Z)", block, re.S)
+        if category_match:
+            task_data["category"] = category_match.group(1).strip()
 
         # --- Extract file links (spreadsheets & output files) ---
         links = re.findall(r"\[(.*?)\]\((.*?)\)", block)
@@ -99,17 +114,21 @@ def parse_readme_to_tasks(readme_text):
 
 
 # === Example usage ===
-# if __name__ == "__main__":
-#     # Load the Markdown specification
-#     with open("DatasetV1.md", "r", encoding="utf-8") as f:
-#         readme_text = f.read()
-#
-#     # Convert into structured dataset
-#     tasks_json = parse_readme_to_tasks(readme_text)
-#
-#     # Write to dataset.json
-#     with open("dataset.json", "w", encoding="utf-8") as f:
-#         json.dump(tasks_json, f, indent=4, ensure_ascii=False)
-#
-#     print("JSON has been created successfully!")
-#
+if __name__ == "__main__":
+    # Resolve dataset directory relative to this script
+    dataset_dir = Path(__file__).resolve().parent
+
+    # Load the Markdown specification
+    readme_path = dataset_dir / "DatasetV1.md"
+    with open(readme_path, "r", encoding="utf-8") as f:
+        readme_text = f.read()
+
+    # Convert into structured dataset
+    tasks_json = parse_readme_to_tasks(readme_text)
+
+    # Write to dataset.json in the same directory
+    output_path = dataset_dir / "dataset.json"
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(tasks_json, f, indent=4, ensure_ascii=False)
+
+    print("JSON has been created successfully!")

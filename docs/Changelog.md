@@ -5,6 +5,28 @@
 ### --- Added ---
 - Added 4 user cases to dataset (See [dataset](/dataset))
 
+
+## 4/11/2025
+### --- Added ---
+- New modern GUI interface that provides a better user-experience
+  - Split menu functionality into three separate pages, `UploadPage`, `ConfigPage` and `PromptPage`.
+    - `UploadPage` used to upload the data files into the GUI and specify the output file directory
+    - `ConfigPage` used to specify configurations for the model
+    - `PromptPage` used to interact with SheetHero, providing prompts and feedback to requests.
+  - Configurations are now able to be made via the user-interface, this includes:
+    - `API Key`, to specify the api key for the OpenAI model.
+    - `Base URl`, to customise if the user wants to use a private server.
+    - `Deployment`, to specify which model deployment wants to use.
+    - `Max Turns`, to specify how many iterations the model can perform during analysis.
+  - Buttons to open the generated log `.md` files as well as generated `.xlsx` file are now presented to the user.
+
+## 6/11/2025
+### --- Changed ---
+- Updated [README.md](../README.md) with new content
+  - Documented features that displays the software's current features
+  - Documented preview that displays the software's user-interface as well as how to use it properly
+  - Documented download instructions, including for different operating-systems
+
 ## 10/11/2025
 ### --- Added ---
 - Added two wireframes for the software's user interface (See [SoftwareDesign](SoftwareDesign.md))
@@ -90,23 +112,3 @@
   - Removed verbose comments from `core/__init__.py`
   - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
 
-## 4/11/2025
-### --- Added ---
-- New modern GUI interface that provides a better user-experience
-  - Split menu functionality into three separate pages, `UploadPage`, `ConfigPage` and `PromptPage`.
-    - `UploadPage` used to upload the data files into the GUI and specify the output file directory
-    - `ConfigPage` used to specify configurations for the model
-    - `PromptPage` used to interact with SheetHero, providing prompts and feedback to requests.
-  - Configurations are now able to be made via the user-interface, this includes:
-    - `API Key`, to specify the api key for the OpenAI model.
-    - `Base URl`, to customise if the user wants to use a private server.
-    - `Deployment`, to specify which model deployment wants to use.
-    - `Max Turns`, to specify how many iterations the model can perform during analysis.
-  - Buttons to open the generated log `.md` files as well as generated `.xlsx` file are now presented to the user.
-
-## 6/11/2025
-### --- Changed ---
-- Updated [README.md](../README.md) with new content
-  - Documented features that displays the software's current features
-  - Documented preview that displays the software's user-interface as well as how to use it properly
-  - Documented download instructions, including for different operating-systems
