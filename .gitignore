@@ -2,4 +2,3 @@
 .idea/inspectionProfiles/Project_Default.xml
 *.xml
 __pycache__/
-*.pyc
