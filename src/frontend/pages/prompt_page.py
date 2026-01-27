@@ -9,8 +9,8 @@ from typing import List, Optional
 import customtkinter as ctk
 import os
 
-from backend.config import Config
-from backend.core import SheetHero
+from backend import Config
+from backend import SheetHero
 
 from frontend.components.colors import *
 from frontend.components.file_display import FileDisplay

@@ -14,7 +14,7 @@ class Config:
     total_token_budget: int = 5000
 
     # === Output ===
-    output_mode: str = "text" # "text" or "file"
+    output_mode: str = "text"  # "text" or "file"
     output_file: Optional[str] = None
 
     # === Timeouts and Retries ===
@@ -22,11 +22,11 @@ class Config:
     timeout: int = 30
 
     def to_dict(self) -> Dict[str, Any]:
-        """Conver this specific config instance to dictionary for UI rendering."""
+        """Convert this config instance to dictionary for UI rendering."""
         return asdict(self)
 
     def update(self, updates: Dict[str, Any]) -> None:
-        """Update this specific config instance with values from a dictionary."""
+        """Update this config instance with values from a dictionary."""
         if not updates:
             return
 
@@ -48,15 +48,18 @@ class Config:
                         pass
 
 
-def create_config(settings_dict: Optional[Dict[str, Any]] = None) -> Config:
-    """Create a NEW independent Config instance."""
-    new_config = Config()
+class ConfigFactory:
+    """Constructs Config instances and default settings."""
 
-    if settings_dict:
-        new_config.update(settings_dict)
+    @staticmethod
+    def create(settings_dict: Optional[Dict[str, Any]] = None) -> Config:
+        new_config = Config()
 
-    return new_config
+        if settings_dict:
+            new_config.update(settings_dict)
 
-def get_default_settings_dict() -> Dict[str, Any]:
-    """Get the default settings."""
-    return Config().to_dict()
+        return new_config
+
+    @staticmethod
+    def get_default_settings_dict() -> Dict[str, Any]:
+        return Config().to_dict()
