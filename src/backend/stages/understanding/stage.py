@@ -3,12 +3,13 @@
 import re
 import time
 import random
-from typing import Dict, Any, Optional
+from typing import Optional
 from openai import RateLimitError
 
 from ...log.logger_registry import LoggerRegistry
 from ..base.stage import Stage
 from ...prompt.prompt_builder import PromptBuilder
+from .context_builder import ExcelContextBuilder
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -18,12 +19,32 @@ class UnderstandingStage(Stage):
     Module responsible for generating initial analysis and understanding from Excel context and user questions.
     """
 
-    def __init__(self, client, deployment: str, excel_context_understanding: str):
+    def __init__(self,
+                 client,
+                 deployment: str,
+                 excel_paths,
+                 workbooks,
+                 total_token_budget: int,
+                 load_excel: bool = True):
         """Initialize the UnderstandingStage."""
 
         self.client = client
         self.deployment = deployment
-        self.excel_context_understanding = excel_context_understanding
+        if load_excel:
+            context_builder = ExcelContextBuilder(excel_paths, workbooks)
+            self.excel_context_understanding = context_builder.build(
+                total_token_budget * 2
+            )
+            self.excel_context_execution = context_builder.build(
+                total_token_budget
+            )
+        else:
+            self.excel_context_understanding = (
+                "Excel file not loaded. Working with provided context only."
+            )
+            self.excel_context_execution = (
+                "Excel file not loaded. Working with provided context only."
+            )
 
     def run(self, user_question: str) -> str:
         """

@@ -8,7 +8,6 @@ from openai import OpenAI
 from .runner import AgentRunner
 from ..io.output_policy import OutputPolicy
 from ...config.settings import Config
-from ..io.context_builder import ExcelContextBuilder
 from ...environment import Sandbox
 from ...log.progress_logger import ProgressLogger
 from ...stages.execution.stage import ExecutionStage
@@ -57,40 +56,27 @@ class SheetHero:
         )
         self.workbooks = self.sandbox.workbooks
 
-        if load_excel:
-            context_builder = ExcelContextBuilder(self.excel_paths, self.workbooks)
-            self.excel_context_understanding = context_builder.build(
-                self.config.total_token_budget * 2
-            )
-            self.excel_context_execution = context_builder.build(
-                self.config.total_token_budget
-            )
-        else:
-            self.excel_context_understanding = (
-                "Excel file not loaded. Working with provided context only."
-            )
-            self.excel_context_execution = (
-                "Excel file not loaded. Working with provided context only."
-            )
-        
         # initialize modules
         self.understanding_module = UnderstandingStage(
             self.client,
             self.config.deployment,
-            self.excel_context_understanding
+            self.excel_paths,
+            self.workbooks,
+            self.config.total_token_budget,
+            load_excel=load_excel
         )
         self.execution_module = ExecutionStage(
             self.client,
             self.config.deployment,
             self.sandbox,
-            self.excel_context_execution,
+            self.understanding_module.excel_context_execution,
             self.output_instruction,
             progress_log_file=self.progress_logger.file
         )
         self.validation_module = ValidationStage(
             self.client,
             self.config.deployment,
-            self.excel_context_understanding,
+            self.understanding_module.excel_context_understanding,
             progress_log_file=self.progress_logger.file
         )
     
