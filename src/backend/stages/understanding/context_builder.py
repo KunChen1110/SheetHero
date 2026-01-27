@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from openpyxl.utils import get_column_letter
 
-from ..utils.token_cost import calculate_token_cost_line
+from ...agent.utils.token_cost import calculate_token_cost_line
 from ...log.logger_registry import LoggerRegistry
 
 logger = LoggerRegistry.setup_logger(__name__)
