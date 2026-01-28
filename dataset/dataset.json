@@ -345,7 +345,7 @@
             "Task11/tc11_input01.xlsx"
         ],
         "prompt": "Here is an inventory dataset for a single product.\nBased on this data, please:\n\nCalculate the Economic Order Quantity (EOQ), reorder point, number of orders per year, cycle time, and total annual cost for the base scenario.\nPerform a sensitivity analysis by varying the order quantity (for example 50%, 75%, 100%, 125%, and 150% of the EOQ) and compute the total annual cost for each case.\nEvaluate a scenario where the annual demand increases by 20% and recompute EOQ, reorder point, number of orders per year, cycle time, and total annual cost.\nOutput the results in a new Excel file organized in clear tables. At minimum:\n\nOne table summarizing the base scenario metrics.\nOne table for the sensitivity analysis (order quantity vs total annual cost).\nOne table for the “demand +20%” scenario metrics.",
-        "answer": "",
+        "answer": "a",
         "expected_output_file": [
             "Task11/tc11_output01.xlsx",
             "Task11/tc11_output02.xlsx",
