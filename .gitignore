@@ -1,0 +1,9 @@
+.idea/workspace.xml
+.idea/inspectionProfiles/Project_Default.xml
+*.xml
+__pycache__/
+venv/
+.venv/
+env/
+.env/
+.DS_Store
