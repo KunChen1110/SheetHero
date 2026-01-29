@@ -10,7 +10,7 @@ class ProgressLogger:
 
     def __init__(self, excel_paths, base_dir: Optional[Path] = None):
         if base_dir is None:
-            log_dir = Path("/home/scygl3/GRP/team29_project/artifects/logger")
+            log_dir = Path("artifacts/loggers").resolve()
         else:
             log_dir = Path(base_dir)
         log_dir.mkdir(parents=True, exist_ok=True)

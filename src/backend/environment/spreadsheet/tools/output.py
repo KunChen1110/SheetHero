@@ -24,11 +24,12 @@ class ExcelOutputWriter:
         Save OUTPUT workbook to new file (input files remain unchanged).
         """
         if self.output_path:
-            filename = self.output_path
+            filename = self._normalize_output_path(self.output_path)
         else:
             dir_path = os.path.dirname(self.excel_path)
             base_name = os.path.splitext(os.path.basename(self.excel_path))[0]
             filename = os.path.join(dir_path, f"{base_name}_output.xlsx")
+            filename = self._normalize_output_path(filename)
 
         output_wb = self._get_output_workbook()
 
@@ -164,6 +165,7 @@ class ExcelOutputWriter:
             if len(output_wb.sheetnames) == 0:
                 output_wb.create_sheet("Output")
 
+            output_path = self._normalize_output_path(output_path)
             output_wb.save(output_path)
 
             for temp_file in self._temp_files:
@@ -220,3 +222,12 @@ class ExcelOutputWriter:
         if color.lower() in color_names:
             return color_names[color.lower()]
         return color
+
+    def _normalize_output_path(self, output_path: str) -> str:
+        if not output_path:
+            return output_path
+        expanded = os.path.expanduser(output_path)
+        if os.path.isdir(expanded):
+            expanded = os.path.join(expanded, "output.xlsx")
+        os.makedirs(os.path.dirname(expanded), exist_ok=True)
+        return expanded
