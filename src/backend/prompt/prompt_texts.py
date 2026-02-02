@@ -53,6 +53,29 @@ Provide a comprehensive overview including:
 - **Hierarchical Data Considerations**: Note any parent-child relationships, subtotals, or nested categories
 """)
 
+_QUALITY_DIAG_PROMPT = textwrap.dedent("""\
+You are an Excel data quality inspector. Use ONLY the provided Excel context to identify data quality problems.
+
+Rules:
+- Output MUST be a plain bullet list only (no extra text, no markdown code fences, no explanations).
+- Each line MUST start with "- " and contain exactly one problem description.
+- Do NOT include numbering, headings, or blank lines.
+- Keep each description under 160 characters (count characters, not words).
+- If you find no issues, output nothing (empty response).
+- Do NOT use the user question or infer business intent. Be purely data-driven.
+
+Allowed problem types (only these):
+- Table-level: empty table, too few rows, very high missing rate.
+- Column-level: high missing rate, constant column, inconsistent data types, high date parse failure rate.
+
+Example output:
+- Sheet 'Sheet1' in 'file.xlsx' is empty.
+- Column B in sheet 'Sheet1' of 'file.xlsx' has a high missing rate (75%).
+
+Excel Context:
+<<excel_context_understanding>>
+""")
+
 _ENHANCED_UNDERSTANDING_PROMPT = textwrap.dedent("""\
 <<understanding_output>>
 
@@ -81,6 +104,344 @@ You have access to a Python environment with the following pre-loaded:
 - The workbook(s) are already loaded:
   * `workbooks`: Dictionary mapping file paths to workbooks (for multi-file access)
   * `excel_paths`: List of all file paths
+""")
+
+_QA_PROMPT = textwrap.dedent("""\
+You are a QA agent for data cleaning decisions.
+
+Detected data issues:
+<<quality_table>>
+
+User task:
+<<original_question>>
+
+User preference (if any):
+<<user_reply>>
+
+Instructions:
+- If any cleaning decisions are unclear, ask ONE clarification question only.
+- If decisions are clear, call the tool `set_constraints` with ONLY supported fields.
+- Do NOT propose cleaning steps outside the supported constraints.
+""")
+
+_QA_QUESTION_PROMPT = textwrap.dedent("""\
+You are a QA agent. Your job is to ask ONE clarification question for the given data issue.
+
+Detected data issues:
+<<quality_table>>
+
+Current issue to clarify:
+<<current_problem>>
+
+Rules:
+- Output a single question only.
+- Do NOT include any extra text.
+- You MUST preserve the decision space of the original question.
+- Do NOT introduce new choices like drop/remove/ignore unless the issue explicitly asks that.
+- For normalization issues, ask “what standard/format should be applied,” not “should we drop/keep.”
+- Only paraphrase; do not reinterpret.
+""")
+
+_QA_ACTIONS_PROMPT = textwrap.dedent("""\
+You are a QA agent. Produce a list of cleaning actions to apply to the spreadsheets.
+
+[DATA QUALITY ISSUES DETECTED]
+<<quality_table>>
+
+[USER CLARIFICATIONS / PREFERENCES]
+<<answers_summary>>
+
+Rules:
+- Output ONLY a bullet list of actions. Each line MUST start with "- ".
+- Actions should be clear and directly executable by a cleaning module.
+- Do NOT include analysis tasks or output requirements.
+- If no cleaning is needed, output an empty response.
+""")
+
+_DIAGNOSE_CODE_PROMPT = textwrap.dedent("""\
+You are a data quality and task-readiness inspector.
+
+Your job is to analyze spreadsheet data and identify problems that may
+prevent correct execution of the user's task.
+
+You are given:
+- A read-only view of Excel workbooks: `workbook_view`
+- The user's task description
+
+User task:
+<<user_task>>
+
+Schema summary:
+<<schema_summary>>
+
+Your task:
+- Write Python code that inspects the data.
+- Detect data issues that may affect correctness of the task, including:
+  * Missing values in columns that appear to be numeric or used for calculation
+  * Missing or invalid values in columns that appear to be dates or used for ordering
+  * Inconsistent data types within the same column
+  * Empty sheets or tables with very few rows
+  * Columns that are constant or meaningless
+
+Important:
+- Even a small number of missing values can be critical if the column is used in
+  aggregations (average, sum, max, min, sorting, grouping).
+- Prefer to report potential risks rather than ignoring them.
+
+Output format (STRICT):
+- Print ONLY a JSON array of strings to stdout using json.dumps(...).
+- Each string must describe exactly one problem.
+- If no problems are found, print [].
+
+Rules:
+- Do not print anything except JSON.
+- Do not explain your code.
+- Do not print debug info.
+- Write Python code ONLY (no markdown, no backticks).
+- Do NOT import libraries; use what is already available (json is preloaded).
+- Do not modify any data.
+- Skip header rows when analyzing data values.
+- Treat empty strings and whitespace as missing values.
+- Do not assume column semantics by index.
+
+Begin writing Python code below:
+""")
+
+_DIAGNOSE_PROMPT = textwrap.dedent("""\
+You are a data quality and task-readiness inspector.
+
+Input:
+- A user task describing required operations (e.g., merge, aggregate, compute totals).
+- A sampled view of spreadsheet data formatted as plain text.
+
+Your job:
+Identify potential data issues that may affect correctness of the task.
+
+User task:
+<<user_task>>
+
+Sampled data report:
+<<scan_report>>
+
+Notes on representation:
+- Cells are delimited by " | ".
+- Literal spaces inside a cell value are shown as "| |".
+
+Rules:
+- Report risks, not fixes.
+- Base findings ONLY on what you can infer from the sampled data and task.
+- Only report issues in these two categories:
+  1) Missing or non-numeric values in columns used for numeric aggregation.
+  2) ID format inconsistency (including key columns for joins/grouping).
+- Do NOT report any other issue types.
+- If a column used for numeric aggregation appears to include blanks or non-numeric values,
+  you MUST include a risk about aggregation correctness.
+
+Output format (STRICT):
+- Output ONLY a JSON array of strings.
+- Each string is ONE potential data issue (not a question) and MUST include:
+  - sheet name,
+  - column name,
+  - the row anchor (value from the leftmost column of that row, if available).
+- Each string MUST be a full sentence.
+- If no issues are found, output [].
+- Do NOT include explanations, priorities, or examples.
+""")
+
+_DIAGNOSE_PRIORITIZE_PROMPT = textwrap.dedent("""\
+You are a data quality triage agent.
+
+Input:
+- The user task.
+- A list of candidate data issues already identified from the sample.
+
+Your job:
+Rank and filter the issues so that only the MINIMAL SET of blocking issues remains.
+
+User task:
+<<user_task>>
+
+Candidate issues:
+<<candidate_questions>>
+
+Strict rules:
+- You MUST NOT add new issues.
+- You MUST NOT re-interpret the sampled data report.
+- Keep ONLY these issue types:
+  1) Missing or non-numeric values in columns used for numeric aggregation.
+  2) ID format inconsistency (including key columns for joins/grouping).
+- Exclude every other issue type.
+- Decision Granularity Rule (MANDATORY):
+  If multiple candidate issues refer to the same column
+  and require the same type of cleaning decision,
+  you MUST merge them into a SINGLE clarification issue
+  at the column level.
+  Do NOT list issues separately by row.
+
+Ranking principles (highest priority first):
+1) Aggregation correctness (sum, average, total, grouping scope)
+2) Join correctness (row matching, duplicate handling, key alignment)
+
+Selection rules:
+- Return at most 6 issues.
+
+Output format (STRICT):
+- Output ONLY a JSON array of strings.
+- Issues must be ordered by priority.
+- If no issues remain, output [].
+""")
+
+_QA_MATCH_PROMPT = textwrap.dedent("""\
+You are checking whether a user's reply matches a specific data-cleaning question.
+
+Question:
+<<question>>
+
+User reply:
+<<reply>>
+
+Rules:
+- Output exactly two lines.
+- Line 1: MATCH: YES or NO
+- Line 2: ACTION: <one clear cleaning instruction sentence>, NO_OP, or ACTION:
+- If the reply indicates no change is needed, treat as MATCH = YES and ACTION = NO_OP.
+- If YES and ACTION is not NO_OP, it must specify file, sheet, column(s), and operation.
+- If NO, ACTION should be empty.
+""")
+
+_QA_INSTRUCTION_PROMPT = textwrap.dedent("""\
+You are a data cleaning planner.
+
+Data issue:
+<<problem>>
+
+User reply:
+<<reply>>
+
+Your task:
+- Convert the reply into ONE clear spreadsheet cleaning instruction.
+
+The instruction MUST specify:
+- which file (if multiple)
+- which sheet
+- which column(s)
+- what operation to perform
+
+Rules:
+- Output ONE sentence only.
+- Do not explain.
+- Do not ask questions.
+- Do not output anything else.
+""")
+
+_QA_DECISION_PROMPT = textwrap.dedent("""\
+You are an expert data analyst agent.
+
+Your job is to produce:
+1) A final TASK SPECIFICATION that clearly describes what analysis or transformation should be performed on the cleaned spreadsheet data.
+2) Structured CLEANING CONSTRAINTS using the provided tool.
+
+Important:
+- The task specification must describe the FINAL analytical goal, not the data cleaning actions.
+- Do NOT restate cleaning steps in the task specification.
+- Assume data has already been cleaned according to the constraints.
+- The task specification should be executable by a data analysis agent.
+- Do NOT reference original file paths unless necessary for disambiguation.
+
+You are given:
+
+[ORIGINAL USER REQUEST]
+<<original_question>>
+
+[DATA QUALITY ISSUES DETECTED]
+<<quality_table>>
+
+[USER CLARIFICATIONS / PREFERENCES]
+<<answers_summary>>
+
+Your tasks:
+
+Step 1 — Decide CLEANING CONSTRAINTS
+Based on the issues and user preferences, decide structured data cleaning rules
+(e.g. drop columns, fill missing values, cast types).
+You MUST output these using the tool call `set_constraints`.
+Constraints MUST use actual column headers from the sheet (exact text).
+Do NOT include sheet names, file names, or "Column C" style labels.
+Use ONLY these keys: fill_missing, cast_type, drop_columns.
+Do NOT invent alternative key names (e.g., fill_missing_values).
+
+Step 2 — Write FINAL TASK SPECIFICATION
+Write a clear and complete description of what should be done with the cleaned data.
+
+The task specification should include:
+- What analysis or transformation to perform
+- What output to produce (table, aggregation, comparison, etc.)
+- What dimensions or groups to use if applicable
+
+The task specification must NOT include:
+- Any data cleaning steps
+- Any references to missing values, type casting, or column dropping
+- Any assumptions about corrupted or raw data
+- Any claims that cleaning has already happened or its results
+
+Important:
+- You are only deciding cleaning constraints. The deterministic cleaning module will execute them later.
+- Do NOT mention cleaning results in the task specification.
+
+Output format:
+- Use the tool call to set constraints.
+- Put the TASK SPECIFICATION in normal message text.
+- You MUST output TASK SPECIFICATION in message content even when calling tools.
+""")
+
+_CLEANING_CODE_PROMPT = textwrap.dedent("""\
+You are a data cleaning engineer.
+
+You are given spreadsheet context and a list of cleaning actions.
+
+[CLEANING ACTIONS]
+<<actions>>
+
+[SPREADSHEET CONTEXT]
+<<schema_summary>>
+
+Notes about the environment:
+- `workbooks` is a dict: {path: openpyxl.Workbook}
+- Iterate: for path, wb in workbooks.items():
+- Sheets: wb.sheetnames, wb[sheet_name]
+- Cells: sheet.cell(row=i, column=j).value
+- Range: sheet.max_row, sheet.max_column
+
+Rules:
+- Write Python code ONLY (no markdown, no backticks).
+- Use the provided `workbooks` dict (path -> openpyxl Workbook).
+- Modify the workbooks IN PLACE according to the actions.
+- Use only Python and openpyxl APIs. Do not import new libraries.
+- DO NOT load files from disk.
+- DO NOT call openpyxl.load_workbook.
+- DO NOT create or overwrite the `workbooks` variable.
+- Do not write files to disk.
+- If an action is unclear, skip it and add a note in the report.
+- Do not invent new cleaning steps beyond the actions.
+- Do not delete entire sheets or clear full tables unless explicitly instructed.
+
+Execution rules:
+- For each action, you must either apply it or list it in "skipped_actions".
+- Use try/except around each action to avoid stopping the whole process.
+- If an action is unclear or fails, skip it and record the reason in "notes".
+
+Output format (STRICT):
+- Print ONLY one JSON object to stdout.
+- Do not print anything else.
+- Use json.dumps(...) to print the JSON.
+- JSON must contain exactly:
+  {
+    "applied_actions": [...],
+    "skipped_actions": [...],
+    "notes": [...]
+  }
+
+Begin code below:
 """)
 
 _EXECUTION_HELPER_SECTIONS_PART1 = textwrap.dedent("""\
@@ -448,28 +809,32 @@ Start by exploring the data structure to understand what you're working with.
 """)
 
 _EXECUTION_USER_PROMPT = textwrap.dedent("""\
-**Sheet Content:**
-<<excel_context_execution>>
+**USER QUERY:**
+<<user_query>>
 
-**Understanding Context:**
+**UNDERSTANDING CONTEXT:**
 <<understanding_output>>
 
-**USER QUESTION:**
-<<user_question>>
+**Sheet Content:**
+<<execution_context>>
 
-Please start by exploring the data structure and then work toward answering the question step by step.
+Please start by exploring the data structure and then work toward answering the task step by step.
 """)
 
 _VALIDATION_PROMPT = textwrap.dedent("""\
 You are an expert Excel data analysis validator. Your task is to thoroughly review and validate the execution process and final answer for an Excel analysis question.
 
-**ORIGINAL USER QUESTION:**
-<<user_question>>
-**ORIGINAL USER QUESTION END:**
+**USER QUERY:**
+<<user_query>>
+**USER QUERY END:**
 
 **EXCEL DATA CONTEXT:**
 <<excel_context_understanding>>
 **EXCEL DATA CONTEXT END:**
+
+**EXECUTION CONTEXT (READ-ONLY):**
+<<execution_context>>
+**EXECUTION CONTEXT END:**
 
 **EXECUTION RESULTS:**
 - Success: <<execution_success>>
@@ -484,9 +849,9 @@ You are an expert Excel data analysis validator. Your task is to thoroughly revi
 <<conversation_history_text>>
 **FULL CONVERSATION HISTORY END:**
 
-**ORIGINAL USER QUESTION:**
-<<user_question>>
-**ORIGINAL USER QUESTION END:**
+**USER QUERY:**
+<<user_query>>
+**USER QUERY END:**
 
 **YOUR VALIDATION TASKS:**
 
@@ -536,4 +901,3 @@ If VALIDATION_STATUS is PASSED, write "No improvement needed - solution is valid
 
 Please be thorough and objective in your assessment. If issues are found, focus on providing clear, actionable feedback for improvement.
 """)
-

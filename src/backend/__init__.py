@@ -33,12 +33,16 @@ Multi-turn interactive session (QA loop)
 
     response = agent.step(session)
 
-    while response["type"] == "clarification":
-        print("Agent:", response["message"])
-        user_reply = input("You: ")
-        response = agent.step(session, user_reply)
+    while response["type"] in ("clarification", "progress"):
+        if response["type"] == "clarification":
+            print("Agent:", response["message"])
+            user_reply = input("You: ")
+            response = agent.step(session, user_reply)
+        else:
+            # progress: let agent continue autonomously
+            response = agent.step(session)
 
-    print("Final result:", response["result"])
+    print("Final answer:", response["result"]["final_answer"])
 
 -----------------------
 Main public APIs
@@ -52,6 +56,8 @@ Main public APIs
 
 - SheetHero.step(session, user_input=None) -> AgentResponse
     Perform one interaction step in an ongoing session.
+    Validation may finalize without re-execution when it returns
+    requires_reexecution=False.
 
 """
 
