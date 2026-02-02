@@ -44,11 +44,23 @@ def _build_input_paths(dataset_dir: Path, spreadsheets: list[str]) -> list[str]:
 
 
 class _CliProgressLogger:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
     def log(self, message: str, to_terminal: bool = False) -> None:
         print(message)
+        self.lines.append(message)
 
     def log_raw(self, message: str) -> None:
         print(message)
+        self.lines.append(message)
+
+    def write_report(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = "\n".join(self.lines).strip()
+        if not content:
+            content = "(empty)"
+        path.write_text(content + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -104,13 +116,14 @@ def main() -> int:
         load_excel=True,
     )
 
+    progress_logger = _CliProgressLogger()
     diagnose = DiagnoseStage(
         client,
         config.deployment,
         input_paths,
         sandbox=sandbox,
         token_budget=config.total_token_budget,
-        progress_logger=_CliProgressLogger(),
+        progress_logger=progress_logger,
     )
 
     workbook_view = sandbox.get_workbook_view()
@@ -118,6 +131,13 @@ def main() -> int:
         workbooks=workbook_view,
         user_task=task.get("prompt", ""),
     )
+    report_path = repo_root / "artifacts" / "test_report" / "diagnose" / "diagnose_test_report.md"
+    progress_logger.write_report(report_path)
+
+    if diagnose.progress_logger is None and hasattr(diagnose, "_last_diagnose_code"):
+        code = getattr(diagnose, "_last_diagnose_code") or ""
+        if code:
+            print("\n[DIAGNOSE CODE]\n" + code)
 
     print(f"Task: {task.get('task_id', 'Unknown')} - {task.get('title', '')}".strip())
     print("Question list:")

@@ -1,9 +1,7 @@
 """Spreadsheet domain world representation."""
 
-from ..base.world import World
 
-
-class SpreadsheetWorld(World):
+class SpreadsheetWorld:
     """Represents the spreadsheet domain data and metadata."""
 
     def __init__(self, workbooks: dict, output_path: str, primary_path: str):

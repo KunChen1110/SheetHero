@@ -78,6 +78,8 @@ def main():
                         help="Override OpenAI API key (default: config)")
     parser.add_argument("--max-turns", type=int,
                         help="Override max iteration turns (default: config)")
+    parser.add_argument("--max-qa-rounds", type=int,
+                        help="Override max QA rounds (default: config)")
     parser.add_argument("--token-budget", type=int,
                         help="Override total token budget (default: config)")
     parser.add_argument("--no-load-excel", action="store_true",
@@ -133,6 +135,8 @@ def main():
             config.api_key = args.api_key
         if args.max_turns is not None:
             config.max_turns = args.max_turns
+        if args.max_qa_rounds is not None:
+            config.max_qa_rounds = args.max_qa_rounds
         if args.token_budget is not None:
             config.total_token_budget = args.token_budget
 
@@ -142,7 +146,56 @@ def main():
             load_excel=not args.no_load_excel
         )
 
-        result = agent.run(user_question=question)
+        session = agent.start_session(question)
+        response = agent.step(session)
+
+        progress_steps = 0
+        while response.get("type") in {"clarification", "progress"}:
+            if response.get("type") == "clarification":
+                print(f"Agent: {response.get('message')}")
+                user_reply = input("You: ").strip()
+                if not user_reply:
+                    print("Error: empty reply is not allowed.", file=sys.stderr)
+                    sys.exit(1)
+                response = agent.step(session, user_reply)
+                continue
+
+            progress_steps += 1
+            if progress_steps > config.max_turns:
+                print("Error: progress loop exceeded max turns.", file=sys.stderr)
+                sys.exit(1)
+            response = agent.step(session)
+
+        if response.get("type") == "error":
+            print(f"Error: {response.get('message')}", file=sys.stderr)
+            sys.exit(1)
+        if response.get("type") != "final":
+            print(f"Error: unexpected response type {response.get('type')}", file=sys.stderr)
+            sys.exit(1)
+
+        result = response.get("result")
+        if result and "execution_result" in result:
+            exec_result = result.get("execution_result", {})
+            val_result = result.get("validation_result", {})
+            final_answer = result.get(
+                "final_answer",
+                exec_result.get("answer", "")
+            )
+            result = {
+                "success": exec_result.get("success", False),
+                "answer": final_answer,
+                "confidence_score": val_result.get("confidence_score", 0.0),
+                "validation_passed": val_result.get("validation_passed", False),
+                "total_iterations": exec_result.get("total_turns", 0),
+                "all_execution_results": [exec_result],
+                "all_validation_results": [val_result] if val_result else [],
+                "conversation_history": exec_result.get("conversation_history", []),
+                "issues_found": val_result.get("issues_found", []),
+                "improvement_feedback": val_result.get("improvement_feedback", ""),
+                "total_duration": exec_result.get("total_duration", 0.0),
+            }
+        if not question:
+            print("Warning: empty question provided; results may be unreliable.", file=sys.stderr)
 
         output = OutputFormatter().format_user_mode(
             result,
@@ -153,7 +206,7 @@ def main():
 
         print(output)
 
-        sys.exit(0 if result['success'] else 1)
+        sys.exit(0 if result and result.get('success') else 1)
 
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
