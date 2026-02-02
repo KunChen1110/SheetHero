@@ -1,5 +1,6 @@
 .idea/workspace.xml
 .idea/inspectionProfiles/Project_Default.xml
+.venv
 *.xml
 __pycache__/
 venv/
