@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import os
 from typing import Dict, Optional, Tuple
 
 import matplotlib
@@ -13,7 +14,7 @@ from openpyxl.utils import column_index_from_string, get_column_letter, range_bo
 
 from .runner import SandboxRunner
 from ..spreadsheet.loader import load_world
-from ..spreadsheet.namespace import SpreadsheetNamespace
+from ..namespace.namespace import SpreadsheetNamespace
 
 
 class Sandbox:
@@ -83,6 +84,53 @@ class Sandbox:
 
         raise ValueError(f"Unknown namespace: {name}")
 
-    def run(self, code: str) -> dict:
+    def get_workbook_view(self):
+        """Return a read-only view of loaded workbooks."""
+        return self.workbooks
+
+    def _build_workbook_view(self):
+        """Build a read-only view as a dict of pandas DataFrames keyed by file/sheet."""
+        view = {}
+        for path, workbook in self.workbooks.items():
+            file_key = os.path.basename(path)
+            for sheet in workbook.worksheets:
+                rows = list(sheet.values)
+                if not rows:
+                    df = pd.DataFrame()
+                else:
+                    header = list(rows[0])
+                    if not any(h is not None and str(h).strip() != "" for h in header):
+                        header = [f"col_{i + 1}" for i in range(len(header))]
+                    else:
+                        header = [
+                            (str(h).strip() if h is not None and str(h).strip() != "" else f"col_{i + 1}")
+                            for i, h in enumerate(header)
+                        ]
+                    data = rows[1:]
+                    df = pd.DataFrame(data, columns=header)
+
+                base_key = f"{file_key}::{sheet.title}"
+                key = base_key
+                suffix = 2
+                while key in view:
+                    key = f"{base_key}#{suffix}"
+                    suffix += 1
+                view[key] = df
+        return view
+
+    def run(self, code: str, extra_globals: Optional[dict] = None) -> dict:
         """Execute code in the sandbox and return the runner result."""
+        if extra_globals:
+            original = {}
+            for key, value in extra_globals.items():
+                original[key] = self.code_globals.get(key, None)
+                self.code_globals[key] = value
+            try:
+                return self.runner.run(code, self.code_globals, self.code_locals)
+            finally:
+                for key, value in original.items():
+                    if value is None and key in self.code_globals:
+                        del self.code_globals[key]
+                    else:
+                        self.code_globals[key] = value
         return self.runner.run(code, self.code_globals, self.code_locals)

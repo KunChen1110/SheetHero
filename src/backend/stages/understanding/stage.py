@@ -9,7 +9,6 @@ from openai import RateLimitError
 from ...log.logger_registry import LoggerRegistry
 from ..base.stage import Stage
 from ...prompt.prompt_builder import PromptBuilder
-from .context_builder import ExcelContextBuilder
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -22,45 +21,47 @@ class UnderstandingStage(Stage):
     def __init__(self,
                  client,
                  deployment: str,
-                 excel_paths,
-                 workbooks,
-                 total_token_budget: int,
-                 load_excel: bool = True):
+                 progress_logger=None):
         """Initialize the UnderstandingStage."""
 
         self.client = client
         self.deployment = deployment
-        if load_excel:
-            context_builder = ExcelContextBuilder(excel_paths, workbooks)
-            self.excel_context_understanding = context_builder.build(
-                total_token_budget * 2
-            )
-            self.excel_context_execution = context_builder.build(
-                total_token_budget
-            )
-        else:
-            self.excel_context_understanding = (
-                "Excel file not loaded. Working with provided context only."
-            )
-            self.excel_context_execution = (
-                "Excel file not loaded. Working with provided context only."
-            )
+        self.progress_logger = progress_logger
 
-    def run(self, user_question: str) -> str:
+    def run(self, user_question: str, spreadsheet_context: str) -> str:
         """
         Generate comprehensive understanding of the user's question in context.
 
         Combines Excel data context with the user's question to create an analysis plan that guides the execution module.
         """
         logger.info("Starting understanding analysis")
+        if self.progress_logger:
+            self.progress_logger.log("[UNDERSTANDING] start", to_terminal=False)
 
         # Build prompt and get LLM response
-        messages = self._create_multimodal_prompt(user_question, self.excel_context_understanding)
+        messages = self._create_multimodal_prompt(user_question, spreadsheet_context)
         understanding_output = self._get_llm_response(messages)
 
         logger.info("Understanding analysis completed")
+        if self.progress_logger:
+            self.progress_logger.log("[UNDERSTANDING] completed", to_terminal=False)
         return understanding_output
 
+    def enhance(self, understanding_output: str, last_validation: dict) -> str:
+        """Refine understanding output based on validation feedback."""
+        if not last_validation:
+            return understanding_output
+        if not last_validation.get("improvement_feedback"):
+            return understanding_output
+        if self.progress_logger:
+            self.progress_logger.log("[UNDERSTANDING] enhance from validation", to_terminal=False)
+
+        prompt_text = PromptBuilder().build_enhanced_understanding_prompt(
+            understanding_output,
+            last_validation
+        )
+        messages = [{"role": "user", "content": prompt_text}]
+        return self._get_llm_response(messages)
 
     def _create_multimodal_prompt(self, user_question: str, excel_context_understanding: str) -> list:
         """Build prompt combining user question with Excel context."""
