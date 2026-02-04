@@ -22,9 +22,9 @@ def build_diagnose_report(sampled: Dict[str, Tuple[List[str], List[List[str]]]])
             lines.append("- (no rows)")
             lines.append("")
             continue
-        for idx, row in enumerate(rows, start=1):
+        for row in rows:
             row_text = " | ".join(_truncate(cell) for cell in row) + " |"
-            lines.append(f"{idx}) {row_text}")
+            lines.append(f"- {row_text}")
         lines.append("")
     return "\n".join(lines).strip()
 
