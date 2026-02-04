@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from openai import OpenAI
@@ -131,7 +132,14 @@ def main() -> int:
         workbooks=workbook_view,
         user_task=task.get("prompt", ""),
     )
-    report_path = repo_root / "artifacts" / "test_report" / "diagnose" / "diagnose_test_report.md"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = (
+        repo_root
+        / "artifacts"
+        / "test_report"
+        / "diagnose"
+        / f"diagnose_{timestamp}.md"
+    )
     progress_logger.write_report(report_path)
 
     if diagnose.progress_logger is None and hasattr(diagnose, "_last_diagnose_code"):

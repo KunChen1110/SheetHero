@@ -40,7 +40,19 @@ class UnderstandingStage(Stage):
 
         # Build prompt and get LLM response
         messages = self._create_multimodal_prompt(user_question, spreadsheet_context)
+        if self.progress_logger:
+            prompt_text = messages[0].get("content", "") if messages else ""
+            self.progress_logger.log_raw(
+                "\n".join(["### [UNDERSTANDING EXCEL CONTEXT]", spreadsheet_context])
+            )
+            self.progress_logger.log_raw(
+                "\n".join(["### [UNDERSTANDING PROMPT]", prompt_text])
+            )
         understanding_output = self._get_llm_response(messages)
+        if self.progress_logger:
+            self.progress_logger.log_raw(
+                "\n".join(["### [UNDERSTANDING OUTPUT]", understanding_output or ""])
+            )
 
         logger.info("Understanding analysis completed")
         if self.progress_logger:
