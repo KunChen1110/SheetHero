@@ -35,7 +35,7 @@ class DiagnoseStage:
         if self.progress_logger:
             self.progress_logger.log("[DIAGNOSE] Generating diagnostic issues", to_terminal=False)
             self.progress_logger.log_raw(
-                "\n".join(["### [DIAGNOSE SAMPLE REPORT]", scan_report])
+                "\n".join(["### [DIAGNOSE PROMPT]", prompt_text])
             )
 
         try:
@@ -48,19 +48,13 @@ class DiagnoseStage:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE ERROR]\nLLM request failed.")
             return []
-        if self.progress_logger:
-            raw_content = content if content.strip() else "<empty>"
-            self.progress_logger.log_raw(
-                "\n".join(["### [RAW LLM CONTENT]", raw_content])
-            )
+
 
         content = self._strip_code_fences(content)
         self._last_diagnose_code = content
         questions = self._parse_json_list(content) or []
         if self.progress_logger:
-            self.progress_logger.log_raw(
-                "\n".join(["### [DIAGNOSE RAW LLM CONTENT]", content if content.strip() else "<empty>"])
-            )
+
             self.progress_logger.log_raw(
                 "\n".join(["### [QUESTION LIST]", f"Count: {len(questions)}"] + [f"- {q}" for q in questions])
             )
@@ -96,11 +90,11 @@ class DiagnoseStage:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE PRIORITIZE ERROR]\nLLM request failed.")
             return None
-        if self.progress_logger:
-            raw_content = content if content.strip() else "<empty>"
-            self.progress_logger.log_raw(
-                "\n".join(["### [DIAGNOSE PRIORITIZE RAW LLM CONTENT]", raw_content])
-            )
+        # if self.progress_logger:
+        #     raw_content = content if content.strip() else "<empty>"
+        #     self.progress_logger.log_raw(
+        #         "\n".join(["### [DIAGNOSE PRIORITIZE RAW LLM CONTENT]", raw_content])
+        #     )
         content = self._strip_code_fences(content)
         prioritized = self._parse_json_list(content)
         if prioritized is None:

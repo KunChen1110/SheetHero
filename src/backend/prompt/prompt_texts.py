@@ -140,6 +140,10 @@ Rules:
 - Do NOT introduce new choices like drop/remove/ignore unless the issue explicitly asks that.
 - For normalization issues, ask “what standard/format should be applied,” not “should we drop/keep.”
 - Only paraphrase; do not reinterpret.
+- Use plain, natural language that a non-technical user can answer.
+- Avoid technical phrases like “numeric validity,” “validity standard,” or “data quality.”
+- If the issue is about missing/blank values, ask directly what to do (e.g., fill, leave blank),
+  without adding new choices beyond the issue itself.
 """)
 
 _QA_ACTIONS_PROMPT = textwrap.dedent("""\
@@ -210,12 +214,44 @@ Begin writing Python code below:
 _DIAGNOSE_PROMPT = textwrap.dedent("""\
 You are a data quality and task-readiness inspector.
 
-Input:
-- A user task describing required operations (e.g., merge, aggregate, compute totals).
-- A sampled view of spreadsheet data formatted as plain text.
+You MUST reason in the following order.
 
-Your job:
-Identify potential data issues that may affect correctness of the task.
+STEP 1 — Task framing
+Read the user task and determine:
+- The primary operation(s) involved (e.g., merge, lookup, fill missing values, aggregate).
+- Which data conditions are EXPECTED given the task.
+- Which data conditions would BLOCK correctness of the task.
+
+Your interpretation of the task determines which diagnostic rules are activated.
+
+STEP 2 — Rule activation (task-driven)
+Activate rules ONLY if their conditions are met:
+
+- IF the task involves numeric aggregation (e.g., sum, average, total),
+  THEN numeric validity becomes relevant.
+
+- IF the task involves joins, lookups, or grouping by identifiers,
+  THEN the following ID-related checks become relevant:
+  a) ID consistency (format/type consistency across files)
+  b) ID completeness (missing or blank identifiers that prevent joining)
+
+- IF the task explicitly aims to fill, complete, or enrich missing values,
+  THEN missing values in the target columns are EXPECTED and should not be treated
+  as blocking risks.
+
+Rules that are not activated MUST be ignored.
+
+STEP 3 — Evidence-based inspection
+Inspect the sampled data ONLY for issues that are:
+- Directly supported by the samples, AND
+- Blocking under the activated rules above.
+
+Do not report conditions that correspond to the intended transformation
+target of the task.
+
+Input:
+- A user task describing required operations.
+- A sampled view of spreadsheet data formatted as plain text.
 
 User task:
 <<user_task>>
@@ -227,36 +263,44 @@ Notes on representation:
 - Cells are delimited by " | ".
 - Literal spaces inside a cell value are shown as "| |".
 
-Rules:
+Issue scope:
 - Report risks, not fixes.
-- Base findings ONLY on what you can infer from the sampled data and task.
-- Only report issues in these two categories:
-  1) Missing or non-numeric values in columns used for numeric aggregation.
-  2) ID format inconsistency (including key columns for joins/grouping).
-- Do NOT report any other issue types.
-- If a column used for numeric aggregation appears to include blanks or non-numeric values,
-  you MUST include a risk about aggregation correctness.
+- Only consider the following issue categories when their rules are activated:
+  1) Numeric validity risks in columns used for aggregation.
+  2) Identifier consistency risks affecting joins, lookups, or grouping.
+  3) Identifier completeness risks (missing/blank join keys).
+  4) Identity-related critical information required to answer the task.
+  
+Identifier-related issues (e.g., missing or blank join keys)
+must be reported as ID integrity risks, NOT as numeric validity risks,
+even if the identifier values are numeric.
+
+Numeric interpretation:
+- Pure numbers (e.g., 30, 150, 102) are valid numeric values.
+- Numeric validity risk exists ONLY if a sample value clearly contains
+  non-numeric characters (letters, units, symbols) or is empty/"N/A".
 
 Output format (STRICT):
 - Output ONLY a JSON array of strings.
-- Each string is ONE potential data issue (not a question) and MUST include:
+- Each string represents ONE blocking risk.
+- Each string MUST be a natural-language full sentence.
+- Each string MUST include:
   - sheet name,
   - column name,
-  - the row anchor (value from the leftmost column of that row, if available).
-- Each string MUST be a full sentence.
-- If no issues are found, output [].
-- Do NOT include explanations, priorities, or examples.
+  - a row anchor phrased as:
+    "where <leftmost column name> = <leftmost cell value>".
+- If the leftmost column value is missing, use this format instead:
+  "where <leftmost column name> is blank; row = \"<row snapshot>\"".
+- The row snapshot must be a short cell-level string like: " | Ian Petal |".
+- If no blocking risks are found, output [].
 """)
 
 _DIAGNOSE_PRIORITIZE_PROMPT = textwrap.dedent("""\
 You are a data quality triage agent.
 
-Input:
-- The user task.
-- A list of candidate data issues already identified from the sample.
-
 Your job:
-Rank and filter the issues so that only the MINIMAL SET of blocking issues remains.
+Given a list of candidate data issues, return the MINIMAL SET of
+blocking issues relevant to the user task.
 
 User task:
 <<user_task>>
@@ -264,31 +308,33 @@ User task:
 Candidate issues:
 <<candidate_questions>>
 
-Strict rules:
-- You MUST NOT add new issues.
-- You MUST NOT re-interpret the sampled data report.
-- Keep ONLY these issue types:
-  1) Missing or non-numeric values in columns used for numeric aggregation.
-  2) ID format inconsistency (including key columns for joins/grouping).
-- Exclude every other issue type.
-- Decision Granularity Rule (MANDATORY):
-  If multiple candidate issues refer to the same column
-  and require the same type of cleaning decision,
-  you MUST merge them into a SINGLE clarification issue
-  at the column level.
-  Do NOT list issues separately by row.
+Triage logic (task-aware):
 
-Ranking principles (highest priority first):
-1) Aggregation correctness (sum, average, total, grouping scope)
-2) Join correctness (row matching, duplicate handling, key alignment)
+- IF the task does NOT involve numeric aggregation,
+  THEN remove numeric validity issues.
+
+- IF the task does NOT involve joins, lookups, or grouping by identifiers,
+  THEN remove identifier consistency issues.
+
+- Identity-related critical information required to answer the task
+  must always be kept.
+
+Granularity rule (MANDATORY):
+- If multiple issues refer to the same column and require the same
+  cleaning decision, merge them into a SINGLE column-level issue.
+- Do not keep separate row-level variants of the same issue.
+
+Ranking principles:
+1) Aggregation correctness
+2) Join correctness
 
 Selection rules:
-- Return at most 6 issues.
+- Keep at most 6 issues.
+- Preserve priority order.
+- If no issues remain, output [].
 
 Output format (STRICT):
 - Output ONLY a JSON array of strings.
-- Issues must be ordered by priority.
-- If no issues remain, output [].
 """)
 
 _QA_MATCH_PROMPT = textwrap.dedent("""\
