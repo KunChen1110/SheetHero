@@ -3,9 +3,6 @@
 import os
 from typing import Any, Dict
 
-from openpyxl.utils import get_column_letter
-
-from ...agent.utils.token_cost import calculate_token_cost_line
 from ...log.logger_registry import LoggerRegistry
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -36,20 +33,12 @@ class ExcelContextBuilder:
                     f"📊 **Excel File Overview: {os.path.basename(first_path)}**\n"
                 )
 
-            available_tokens = total_token_budget
-            tokens_per_file = available_tokens // len(workbooks) if workbooks else 0
-
             for excel_path, workbook in workbooks.items():
                 file_parts = []
                 file_parts.append(f"\n{'=' * 60}")
                 file_parts.append(f"📁 **File: {os.path.basename(excel_path)}**")
                 file_parts.append(f"**Full Path:** {excel_path}")
                 file_parts.append(f"**Total Sheets:** {len(workbook.sheetnames)}\n")
-
-                tokens_per_sheet = (
-                    tokens_per_file // len(workbook.sheetnames)
-                    if workbook.sheetnames else 0
-                )
 
                 for sheet_name in workbook.sheetnames:
                     sheet = workbook[sheet_name]
@@ -62,37 +51,31 @@ class ExcelContextBuilder:
                         f"- Dimensions: {sheet.max_row} rows × {sheet.max_column} columns"
                     )
 
-                    if tokens_per_sheet > 0:
-                        preview_result = self._get_sheet_preview_with_token_limit(
-                            sheet,
-                            tokens_per_sheet,
-                            max_rows=min(sheet.max_row, 10000),
-                            max_cols=min(sheet.max_column, 1000)
-                        )
+                    head_result = self._get_sheet_head(
+                        sheet,
+                        max_rows=5,
+                        max_cols=min(sheet.max_column, 20)
+                    )
 
-                        sheet_parts.append(
-                            f"- Data Preview ({preview_result['rows_shown']} of {sheet.max_row} rows, "
-                            f"{preview_result['cols_shown']} of {sheet.max_column} columns):"
-                        )
+                    sheet_parts.append(
+                        f"- Columns (header row): {', '.join(head_result['headers'])}"
+                    )
+                    sheet_parts.append(
+                        f"- Head ({head_result['rows_shown']} rows shown, "
+                        f"{head_result['cols_shown']} of {sheet.max_column} columns):"
+                    )
 
-                        if preview_result['is_truncated']:
-                            sheet_parts.append("  ⚠️ Preview truncated to fit token budget")
-
-                        sheet_parts.append("  Data:")
+                    if head_result['rows_shown'] > 0 and head_result['headers']:
                         markdown_rows = []
-                        for row_data in preview_result['formatted_data']:
+                        markdown_rows.append(f"| {' | '.join(head_result['headers'])} |")
+                        markdown_rows.append(
+                            f"| {' | '.join(['---'] * len(head_result['headers']))} |"
+                        )
+                        for row_data in head_result['rows']:
                             markdown_rows.append(f"| {' | '.join(row_data)} |")
-
-                        if markdown_rows:
-                            sheet_parts.append("  " + "\\n".join(markdown_rows))
-
-                        if preview_result['rows_shown'] < sheet.max_row:
-                            sheet_parts.append("\n  📊 Sheet Summary:")
-                            sheet_parts.append(f"  - Total rows: {sheet.max_row}")
-                            sheet_parts.append(f"  - Total columns: {sheet.max_column}")
-                            sheet_parts.append(
-                                f"  - Rows shown in preview: {preview_result['rows_shown']}"
-                            )
+                        sheet_parts.append("  " + "\\n".join(markdown_rows))
+                    else:
+                        sheet_parts.append("  (no data)")
 
                     file_parts.extend(sheet_parts)
 
@@ -104,64 +87,47 @@ class ExcelContextBuilder:
             logger.error(f"Error generating Excel overview: {str(e)}")
             return f"❌ Error generating Excel overview: {str(e)}"
 
-    def _get_sheet_preview_with_token_limit(self, sheet, token_budget: int,
-                                            max_rows: int = 10000,
-                                            max_cols: int = 1000) -> Dict[str, Any]:
-        """
-        Generate a sheet preview that fits within the AI's token budget.
-        """
-        preview_data = []
-        formatted_data = []
-        tokens_used = 0
-        rows_shown = 0
-
-        start_row = 1
-        max_data_rows = min(max_rows, sheet.max_row)
+    def _get_sheet_head(self, sheet, max_rows: int = 5, max_cols: int = 20) -> Dict[str, Any]:
+        """Return header row + first N data rows, trimmed to max cols."""
         max_data_cols = min(max_cols, sheet.max_column)
+        headers = []
+        rows = []
 
-        for row_idx in range(start_row, max_data_rows + 1):
+        if sheet.max_row < 1 or max_data_cols < 1:
+            return {
+                "headers": [],
+                "rows": [],
+                "rows_shown": 0,
+                "cols_shown": 0,
+            }
+
+        for col_idx in range(1, max_data_cols + 1):
+            cell_value = sheet.cell(row=1, column=col_idx).value
+            headers.append(self._sanitize_cell(cell_value))
+
+        data_rows = min(max_rows, max(sheet.max_row - 1, 0))
+        for row_idx in range(2, 2 + data_rows):
             row_cells = []
-            formatted_row_cells = []
-
             for col_idx in range(1, max_data_cols + 1):
-                cell_ref = f"{get_column_letter(col_idx)}{row_idx}"
-                cell = sheet[cell_ref]
-                cell_value = cell.value
-
-                display_value = str(cell_value) if cell_value is not None else ""
-                display_value = (
-                    display_value
-                    .replace("|", "\\|")
-                    .replace("\n", " ")
-                    .replace("\r", " ")
-                )
-
-                formatted_cell = f"{cell_ref}:{display_value}"
-                row_cells.append(cell_value)
-                formatted_row_cells.append(formatted_cell)
-
-            row_str = " | ".join(formatted_row_cells)
-            row_tokens = calculate_token_cost_line(row_str)
-
-            if tokens_used + row_tokens > token_budget:
-                if rows_shown < 5:
-                    preview_data.append(row_cells)
-                    formatted_data.append(formatted_row_cells)
-                    rows_shown += 1
-                    tokens_used += row_tokens
-                break
-
-            preview_data.append(row_cells)
-            formatted_data.append(formatted_row_cells)
-            rows_shown += 1
-            tokens_used += row_tokens
+                cell_value = sheet.cell(row=row_idx, column=col_idx).value
+                row_cells.append(self._sanitize_cell(cell_value))
+            rows.append(row_cells)
 
         return {
-            'data': preview_data,
-            'formatted_data': formatted_data,
-            'rows_shown': rows_shown,
-            'cols_shown': max_data_cols,
-            'start_row': start_row,
-            'is_truncated': rows_shown < max_data_rows,
-            'tokens_used': tokens_used
+            "headers": headers,
+            "rows": rows,
+            "rows_shown": len(rows),
+            "cols_shown": max_data_cols,
         }
+
+    @staticmethod
+    def _sanitize_cell(value: Any) -> str:
+        if value is None:
+            text = ""
+        else:
+            text = str(value)
+        return (
+            text.replace("|", "\\|")
+            .replace("\n", " ")
+            .replace("\r", " ")
+        )
