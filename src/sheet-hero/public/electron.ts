@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow } from "electron";
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -11,18 +11,18 @@ function createWindow() {
   });
   
   win.setMenuBarVisibility(false);
-  win.loadURL('http://localhost:3480');
+  win.loadURL("http://localhost:3480");
 
 }
 
 app.whenReady().then(() => {
     createWindow();
 
-    app.on('activate', () => {
+    app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     })
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });

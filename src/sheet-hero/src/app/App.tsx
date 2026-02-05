@@ -1,6 +1,5 @@
 import React from 'react';
-import Sidebar from './Components/Sidebar';
-import PromptInput from './Components/PromptInput';
+import Sidebar from '@/app/components/Sidebar';
 
 function App() {
   return (
@@ -12,7 +11,6 @@ function App() {
         <div className="flex-1 overflow-y-auto rounded-3xl bg-dark_gray"></div>
 
         <div className="border-t border-gray p-2">
-          <PromptInput/>
         </div>
 
       </div>
