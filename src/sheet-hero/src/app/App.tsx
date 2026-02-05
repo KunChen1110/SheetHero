@@ -1,9 +1,8 @@
-import { FileSpreadsheet, AlertCircle, Settings } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role} from "@/app/Interfaces";
 
-function App() {
+export default function App() {
   // The array of chat interfaces in the chat box
   const [chats, setChats] = useState<Chat[]>([]);
 
@@ -12,6 +11,9 @@ function App() {
 
   // The array of excel file interfaces active being used for query
   const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
+
+  // Used to ensure the chat always scrolls to the bottom of the chat box
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   function handleSettingsClick(): void {
     console.log("Settings was clicked");
@@ -26,7 +28,8 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen p-2 gap-2">
+    <div className="h-full flex bg-linear-to-br">
+      {/* =-=-= Sidebar =-=-=*/}
       <Sidebar 
         onSettingsClick={handleSettingsClick}
         files={excelFiles}
@@ -37,15 +40,19 @@ function App() {
         onNewChat={handleNewChat}
       />
 
-      <div className="flex flex-col flex-1 bg-dark_gray rounded-4xl p-2">
+      {/* =-=-= Main chat =-=-= */}
+      <div className="flex-1 flex flex-col relative">
         
-        <div className="flex-1 overflow-y-auto rounded-3xl bg-dark_gray"></div>
-
-        <div className="border-t border-gray p-2"></div>
+        {/* =-=-= Messages =-=-=*/}
+        <div className="flex-1 overflow-y-auto relative z-10">
+          <div className="h-full p-12 pb-0">
+            <div className="max-w-4xl mx-auto pt-8">
+              <div ref={messagesEndRef}/>
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>
   );
 }
-
-export default App;
