@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { ExcelFile, Chat } from "@/app/Interfaces";
 
-const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"];
+const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
 interface SidebarProperties {
   onSettingsClick?: () => void;
@@ -14,7 +14,9 @@ interface SidebarProperties {
 }
 
 function isAcceptedFileType(extension: string): boolean {
-  return ACCEPTED_FILE_EXTENSIONS.includes(extension.toLowerCase() as any);
+  return ACCEPTED_FILE_EXTENSIONS.some(
+    (ext) => ext === extension.toLowerCase(),
+  );
 }
 
 function getAcceptAttribute(): string {
