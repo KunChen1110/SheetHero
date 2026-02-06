@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/app/components/Sidebar";
-import { Chat, ExcelFile, Message, Role} from "@/app/Interfaces";
+import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatInput } from "./components/ChatInput";
 
@@ -12,7 +12,7 @@ export default function App() {
   const [activeChatId, setActiveChatId] = useState<string>("1");
 
   // The array of excel file interfaces active being used for query
-	const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
+  const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
 
   // Used to ensure the chat always scrolls to the bottom of the chat box
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -21,36 +21,30 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
 
   function getMessages(): Message[] {
-    const activeChat = chats.find(c => c.id === activeChatId);
+    const activeChat = chats.find((c) => c.id === activeChatId);
     return activeChat?.messages || [];
   }
-
 
   function handleSettingsClick(): void {
     console.log("Settings was clicked");
   }
 
-
   function handleChatSelect(): void {
     console.log("Chat was selected");
   }
-  
 
   function handleNewChat(): void {
     console.log("New chat created");
   }
-
 
   function handleSendMessage(message: string): void {
     console.log(message);
   }
 
   return (
-    <div 
-      className = "h-full flex">
-        
+    <div className="h-full flex">
       {/* =-=-= Sidebar =-=-=*/}
-      <Sidebar 
+      <Sidebar
         onSettingsClick={handleSettingsClick}
         files={excelFiles}
         onFilesChange={setExcelFiles}
@@ -61,42 +55,25 @@ export default function App() {
       />
 
       {/* =-=-= Main chat =-=-= */}
-      <div 
-        className = "flex-1 flex flex-col relative">
-        
+      <div className="flex-1 flex flex-col relative">
         {/* =-=-= Messages =-=-=*/}
-        <div 
-          className = "flex-1 overflow-y-auto relative z-10">
-
-          <div 
-            className = "h-full p-12 pb-0">
-
-            <div 
-              className = "h-full rounded-3xl overflow-y-auto shadow-2xl border border-gray-700/50">
-            
-              <div 
-                className = "max-w-4xl mx-auto pt-8">
-
+        <div className="flex-1 overflow-y-auto relative z-10">
+          <div className="h-full p-12 pb-0">
+            <div className="h-full rounded-3xl overflow-y-auto shadow-2xl border border-gray-700/50">
+              <div className="max-w-4xl mx-auto pt-8">
                 {getMessages().map((message) => (
-                  <ChatMessage 
+                  <ChatMessage
                     key={message.id}
                     role={message.role}
                     content={message.content}
                   />
                 ))}
-                
-                <div ref={messagesEndRef}/>
-
+                <div ref={messagesEndRef} />
               </div>
             </div>
           </div>
         </div>
-
-        <ChatInput 
-          onSendMessage={handleSendMessage}
-          disabled={isTyping} 
-        />
-
+        <ChatInput onSendMessage={handleSendMessage} disabled={isTyping} />
       </div>
     </div>
   );
