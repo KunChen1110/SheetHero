@@ -24,9 +24,13 @@ class DiagnoseStage:
 
     def run_readonly(self, workbooks, user_task: str = "") -> List[str]:
         workbook_source = workbooks or {}
+        debug_lines: List[str] = []
+        def _debug_hook(message: str) -> None:
+            debug_lines.append(message)
         sampled = sample_workbook_view(
             workbook_source,
             token_budget=self.token_budget,
+            debug_hook=_debug_hook if self.progress_logger else None,
         )
         scan_report = build_diagnose_report(sampled)
         prompt_text = PromptBuilder().build_diagnose_prompt(user_task, scan_report)
@@ -34,6 +38,10 @@ class DiagnoseStage:
 
         if self.progress_logger:
             self.progress_logger.log("[DIAGNOSE] Generating diagnostic issues", to_terminal=False)
+            if debug_lines:
+                self.progress_logger.log_raw(
+                    "\n".join(["### [DIAGNOSE GEOM DEBUG]"] + debug_lines)
+                )
             self.progress_logger.log_raw(
                 "\n".join(["### [DIAGNOSE PROMPT]", prompt_text])
             )

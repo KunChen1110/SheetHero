@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run diagnose stage for a dataset entry and print the question list."""
+"""Run understanding stage for a dataset entry and save the markdown report."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ class _CliProgressLogger:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run diagnose stage for a dataset entry and print the question list."
+        description="Run understanding stage for a dataset entry and save the markdown report."
     )
     parser.add_argument(
         "--test-id",
@@ -87,7 +87,8 @@ def main() -> int:
 
     from src.backend.config.settings import Config
     from src.backend.environment import Sandbox
-    from src.backend.stages.diagnose.stage import DiagnoseStage
+    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
+    from src.backend.stages.understanding.stage import UnderstandingStage
 
     dataset_dir = Path(args.dataset_dir)
     tasks = _load_tasks(dataset_dir)
@@ -108,7 +109,7 @@ def main() -> int:
         client_kwargs["base_url"] = config.base_url
     client = OpenAI(**client_kwargs)
 
-    output_path = repo_root / "artifacts" / "tests" / "diagnose_output.xlsx"
+    output_path = repo_root / "artifacts" / "tests" / "understanding_output.xlsx"
     sandbox = Sandbox(
         excel_paths=input_paths,
         output_preferences={"mode": "text", "file_path": None},
@@ -118,42 +119,32 @@ def main() -> int:
     )
 
     progress_logger = _CliProgressLogger()
-    diagnose = DiagnoseStage(
+    understanding = UnderstandingStage(
         client,
         config.deployment,
-        input_paths,
-        sandbox=sandbox,
-        token_budget=config.total_token_budget,
         progress_logger=progress_logger,
     )
 
-    workbook_view = sandbox.get_workbook_view()
-    questions = diagnose.run_readonly(
-        workbooks=workbook_view,
-        user_task=task.get("prompt", ""),
+    context_builder = ExcelContextBuilder(input_paths, sandbox.workbooks)
+    understanding_context = context_builder.build(config.total_token_budget)
+    understanding_output = understanding.run(
+        task.get("prompt", ""),
+        understanding_context,
     )
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = (
         repo_root
         / "artifacts"
         / "test_report"
-        / "diagnose"
-        / f"diagnose_{timestamp}.md"
+        / "understanding"
+        / f"understanding_{timestamp}.md"
     )
     progress_logger.write_report(report_path)
 
-    if diagnose.progress_logger is None and hasattr(diagnose, "_last_diagnose_code"):
-        code = getattr(diagnose, "_last_diagnose_code") or ""
-        if code:
-            print("\n[DIAGNOSE CODE]\n" + code)
-
     print(f"Task: {task.get('task_id', 'Unknown')} - {task.get('title', '')}".strip())
-    print("Question list:")
-    if not questions:
-        print("[]")
-        return 0
-    for idx, question in enumerate(questions, start=1):
-        print(f"{idx}. {question}")
+    print("\nUnderstanding output:")
+    print(understanding_output or "")
     return 0
 
 

@@ -25,7 +25,7 @@ def _suppress_console_logging():
 
 
 def _load_task_from_json(json_path: str, task_id: str = None,
-                         task_index: int = 0) -> tuple[dict, Path]:
+                         task_index: int = 1) -> tuple[dict, Path]:
     path = Path(json_path).expanduser().resolve()
     tasks = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(tasks, list) or not tasks:
@@ -38,12 +38,12 @@ def _load_task_from_json(json_path: str, task_id: str = None,
         available = [task.get("task_id") for task in tasks]
         raise ValueError(f"Task '{task_id}' not found. Available: {available}")
 
-    if task_index < 0 or task_index >= len(tasks):
+    if task_index <= 0 or task_index > len(tasks):
         raise ValueError(
-            f"task_index {task_index} out of range (0..{len(tasks) - 1})"
+            f"task_index {task_index} out of range (1..{len(tasks)})"
         )
 
-    return tasks[task_index], path.parent
+    return tasks[task_index - 1], path.parent
 
 
 def main():
@@ -56,8 +56,8 @@ def main():
                         help="Path to a task JSON file (e.g., docs/task01.json)")
     parser.add_argument("--task-id",
                         help="Task ID to select from JSON (e.g., 'Test 1')")
-    parser.add_argument("--task-index", type=int, default=0,
-                        help="Task index to select from JSON (default: 0)")
+    parser.add_argument("--task-index", type=int, default=1,
+                        help="Task index to select from JSON (1-based, default: 1)")
 
     # === Positional Arguments (used when no task JSON) ===
     parser.add_argument("question", nargs="?",

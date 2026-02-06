@@ -6,6 +6,14 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 import os
+import math
+import random
+import re
+from datetime import date, datetime
+
+from ...log.logger_registry import LoggerRegistry
+
+logger = LoggerRegistry.setup_logger(__name__)
 
 
 def sample_workbook_view(workbook_view: Dict[str, pd.DataFrame],
@@ -14,7 +22,9 @@ def sample_workbook_view(workbook_view: Dict[str, pd.DataFrame],
                          mid_k: int = 3,
                          bottom_k: int = 3,
                          anomaly_k: int = 4,
-                         tokens_per_cell: float = 3.0
+                         tokens_per_cell: float = 3.0,
+                         max_rows_per_sheet: int = 20,
+                         debug_hook=None
                          ) -> Dict[str, Tuple[List[str], List[List[str]]]]:
     """
     Return sampled rows per sheet as {sheet_key: (columns, rows)}.
@@ -29,34 +39,20 @@ def sample_workbook_view(workbook_view: Dict[str, pd.DataFrame],
 
     budget_cells = _estimate_cell_budget(token_budget, tokens_per_cell)
     sheets = _collect_sheet_stats(workbook_view)
-    total_cells = sum(item["cells"] for item in sheets)
-
-    if total_cells <= budget_cells:
-        return _materialize_all_rows(workbook_view)
-
-    remaining = budget_cells
     output: Dict[str, Tuple[List[str], List[List[str]]]] = {}
-    sampled_sources: Dict[str, pd.DataFrame] = {}
+    sampled_sources: Dict[str, pd.DataFrame] = {
+        item["sheet"]: item["df"] for item in sheets
+    }
 
-    for item in sorted(sheets, key=lambda x: x["cells"]):
-        sheet_key = item["sheet"]
-        df = item["df"]
-        cells = item["cells"]
-        if cells <= remaining:
-            output.update(_materialize_all_rows({sheet_key: df}))
-            remaining -= cells
-        else:
-            sampled_sources[sheet_key] = df
-
-    if sampled_sources:
-        sampled = _sample_rows(sampled_sources, top_k, mid_k, bottom_k, anomaly_k)
-        capped = _cap_samples(sampled, remaining)
-        output.update(capped)
+    sampled = _sample_rows_geometric(sampled_sources, budget_cells, debug_hook=debug_hook)
+    capped = _cap_samples(sampled, budget_cells)
+    output.update(capped)
 
     return output
 
 
-def _materialize_all_rows(workbook_view: Dict[str, pd.DataFrame]
+def _materialize_all_rows(workbook_view: Dict[str, pd.DataFrame],
+                          max_rows_per_sheet: int | None = None
                           ) -> Dict[str, Tuple[List[str], List[List[str]]]]:
     output: Dict[str, Tuple[List[str], List[List[str]]]] = {}
     for sheet_key, df in workbook_view.items():
@@ -70,15 +66,16 @@ def _materialize_all_rows(workbook_view: Dict[str, pd.DataFrame]
             if _is_empty_row(values):
                 continue
             rows.append(values)
+            if max_rows_per_sheet is not None and max_rows_per_sheet > 0:
+                if len(rows) >= max_rows_per_sheet:
+                    break
         output[sheet_key] = (columns, rows)
     return output
 
 
-def _sample_rows(workbook_view: Dict[str, pd.DataFrame],
-                 top_k: int,
-                 mid_k: int,
-                 bottom_k: int,
-                 anomaly_k: int) -> Dict[str, Tuple[List[str], List[List[str]]]]:
+def _sample_rows_geometric(workbook_view: Dict[str, pd.DataFrame],
+                           budget_cells: int,
+                           debug_hook=None) -> Dict[str, Tuple[List[str], List[List[str]]]]:
     output: Dict[str, Tuple[List[str], List[List[str]]]] = {}
     for sheet_key, df in workbook_view.items():
         if df is None or not hasattr(df, "columns"):
@@ -88,7 +85,7 @@ def _sample_rows(workbook_view: Dict[str, pd.DataFrame],
             output[sheet_key] = ([str(col) for col in df.columns], [])
             continue
         columns = [str(col) for col in df.columns]
-        row_indices = _pick_row_indices(df, top_k, mid_k, bottom_k, anomaly_k)
+        row_indices = _geometric_scan_indices(df, budget_cells, debug_hook=debug_hook)
         rows = []
         for idx in row_indices:
             row = df.iloc[idx].tolist()
@@ -100,47 +97,99 @@ def _sample_rows(workbook_view: Dict[str, pd.DataFrame],
     return output
 
 
-def _pick_row_indices(df: pd.DataFrame,
-                      top_k: int,
-                      mid_k: int,
-                      bottom_k: int,
-                      anomaly_k: int) -> List[int]:
+def _geometric_scan_indices(df: pd.DataFrame,
+                            budget_cells: int,
+                            tau: float = 0.7,
+                            p_at_dist1: float = 0.8,
+                            lambda_decay: float = 3.0,
+                            debug_hook=None) -> List[int]:
     total_rows = len(df)
-    indices: List[int] = []
+    if total_rows <= 0:
+        return []
 
-    for idx in range(min(top_k, total_rows)):
-        indices.append(idx)
+    total_cells = max(int(df.shape[0]) * max(int(df.shape[1]), 1), 1)
+    budget_factor = min(max(budget_cells / total_cells, 0.0), 1.0)
 
-    if total_rows > 0:
-        mid_start = max((total_rows // 2) - (mid_k // 2), 0)
-        for idx in range(mid_start, min(mid_start + mid_k, total_rows)):
-            indices.append(idx)
+    selected: List[int] = []
+    ref_mask: List[int] | None = None
+    last_change_idx = 0
 
-    for idx in range(max(total_rows - bottom_k, 0), total_rows):
-        indices.append(idx)
-
-    if anomaly_k > 0:
-        anomaly_rows = _find_anomaly_rows(df, anomaly_k)
-        indices.extend(anomaly_rows)
-
-    deduped = sorted(set(idx for idx in indices if 0 <= idx < total_rows))
-    return deduped
-
-
-def _find_anomaly_rows(df: pd.DataFrame, limit: int) -> List[int]:
-    candidates: List[int] = []
+    debug = os.getenv("DIAGNOSE_GEOM_DEBUG") == "1"
+    def _emit(msg: str) -> None:
+        if not debug:
+            return
+        if debug_hook:
+            debug_hook(msg)
+        else:
+            logger.info(msg)
     for idx, row in df.iterrows():
-        values = ["" if value is None else str(value) for value in row.tolist()]
-        if any(value.strip() == "" for value in values):
-            candidates.append(idx)
+        mask = _build_value_mask(row.tolist())
+        if ref_mask is None:
+            selected.append(idx)
+            ref_mask = mask
+            last_change_idx = idx
+            _emit(f"[GEOM] select row {idx + 1}: first row")
             continue
-        if any(len(value) > 40 for value in values):
-            candidates.append(idx)
+
+        sim = _mask_similarity(mask, ref_mask)
+        if sim < tau:
+            selected.append(idx)
+            ref_mask = mask
+            last_change_idx = idx
+            _emit(f"[GEOM] select row {idx + 1}: structural change (sim={sim:.2f} < tau={tau})")
             continue
-        if any("," in value or ";" in value or "/" in value for value in values):
-            candidates.append(idx)
-            continue
-    return candidates[:limit]
+
+        dist = max(idx - last_change_idx, 0)
+        base = p_at_dist1 * math.exp(-(max(dist, 1) - 1) / max(lambda_decay, 1e-6))
+        p = base * budget_factor
+        if random.random() < max(min(p, 1.0), 0.0):
+            selected.append(idx)
+            _emit(f"[GEOM] select row {idx + 1}: probabilistic (p={p:.3f}, sim={sim:.2f}, dist={dist})")
+
+    return sorted(set(selected))
+
+
+def _build_value_mask(row: List[object]) -> List[int]:
+    return [_value_type(value) for value in row]
+
+
+def _value_type(value: object) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, float) and pd.isna(value):
+        return 0
+    if pd.isna(value):
+        return 0
+    if isinstance(value, (datetime, date, pd.Timestamp)):
+        return 4
+    if isinstance(value, (int,)) and not isinstance(value, bool):
+        return 1
+    if isinstance(value, float):
+        return 2
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0
+        if text.startswith("="):
+            return 5
+        # simple date detection
+        try:
+            pd.to_datetime(text)
+            return 4
+        except Exception:
+            return 3
+    return 3
+
+
+def _mask_similarity(mask: List[int], ref_mask: List[int]) -> float:
+    if not ref_mask:
+        return 0.0
+    pairs = list(zip(mask, ref_mask))
+    denom = sum(1 for v, r in pairs if v != 0 or r != 0)
+    if denom == 0:
+        return 1.0
+    matches = sum(1 for v, r in pairs if v == r and (v != 0 or r != 0))
+    return matches / denom
 
 
 def _cap_samples(sampled: Dict[str, Tuple[List[str], List[List[str]]]],

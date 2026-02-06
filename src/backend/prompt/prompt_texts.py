@@ -212,42 +212,20 @@ Begin writing Python code below:
 """)
 
 _DIAGNOSE_PROMPT = textwrap.dedent("""\
-You are a data quality and task-readiness inspector.
+You are a data quality and task-readiness inspector. Your task is to figure out potential data quality issues from spreasheet samples.
 
 You MUST reason in the following order.
 
-STEP 1 — Task framing
+STEP 1 — Task Understanding
 Read the user task and determine:
 - The primary operation(s) involved (e.g., merge, lookup, fill missing values, aggregate).
 - Which data conditions are EXPECTED given the task.
 - Which data conditions would BLOCK correctness of the task.
 
-Your interpretation of the task determines which diagnostic rules are activated.
+STEP 2 — Evidence-based inspection
+Inspect the sampled data for issues that need users to clarify. Such as: what is the value in missing space?
+How to treat the inconsistency of names and ID.
 
-STEP 2 — Rule activation (task-driven)
-Activate rules ONLY if their conditions are met:
-
-- IF the task involves numeric aggregation (e.g., sum, average, total),
-  THEN numeric validity becomes relevant.
-
-- IF the task involves joins, lookups, or grouping by identifiers,
-  THEN the following ID-related checks become relevant:
-  a) ID consistency (format/type consistency across files)
-  b) ID completeness (missing or blank identifiers that prevent joining)
-
-- IF the task explicitly aims to fill, complete, or enrich missing values,
-  THEN missing values in the target columns are EXPECTED and should not be treated
-  as blocking risks.
-
-Rules that are not activated MUST be ignored.
-
-STEP 3 — Evidence-based inspection
-Inspect the sampled data ONLY for issues that are:
-- Directly supported by the samples, AND
-- Blocking under the activated rules above.
-
-Do not report conditions that correspond to the intended transformation
-target of the task.
 
 Input:
 - A user task describing required operations.
@@ -256,7 +234,7 @@ Input:
 User task:
 <<user_task>>
 
-Sampled data report:
+Sampled data samples:
 <<scan_report>>
 
 Notes on representation:
@@ -265,34 +243,24 @@ Notes on representation:
 
 Issue scope:
 - Report risks, not fixes.
+- Diagnose ONLY schema-level blocking risks (structural/data-integrity issues that prevent correct execution).
+- Do NOT report business anomalies or domain-specific outliers.
 - Only consider the following issue categories when their rules are activated:
   1) Numeric validity risks in columns used for aggregation.
   2) Identifier consistency risks affecting joins, lookups, or grouping.
   3) Identifier completeness risks (missing/blank join keys).
   4) Identity-related critical information required to answer the task.
-  
-Identifier-related issues (e.g., missing or blank join keys)
-must be reported as ID integrity risks, NOT as numeric validity risks,
-even if the identifier values are numeric.
 
-Numeric interpretation:
-- Pure numbers (e.g., 30, 150, 102) are valid numeric values.
-- Numeric validity risk exists ONLY if a sample value clearly contains
-  non-numeric characters (letters, units, symbols) or is empty/"N/A".
-
+                                   
 Output format (STRICT):
 - Output ONLY a JSON array of strings.
 - Each string represents ONE blocking risk.
 - Each string MUST be a natural-language full sentence.
 - Each string MUST include:
+  - file name
   - sheet name,
   - column name,
-  - a row anchor phrased as:
-    "where <leftmost column name> = <leftmost cell value>".
-- If the leftmost column value is missing, use this format instead:
-  "where <leftmost column name> is blank; row = \"<row snapshot>\"".
-- The row snapshot must be a short cell-level string like: " | Ian Petal |".
-- If no blocking risks are found, output [].
+  - Select a row anchor that helps the user navigate to the problematic row. Choose a column and the corresponding value from that row that best identifies it.
 """)
 
 _DIAGNOSE_PRIORITIZE_PROMPT = textwrap.dedent("""\
@@ -308,16 +276,6 @@ User task:
 Candidate issues:
 <<candidate_questions>>
 
-Triage logic (task-aware):
-
-- IF the task does NOT involve numeric aggregation,
-  THEN remove numeric validity issues.
-
-- IF the task does NOT involve joins, lookups, or grouping by identifiers,
-  THEN remove identifier consistency issues.
-
-- Identity-related critical information required to answer the task
-  must always be kept.
 
 Granularity rule (MANDATORY):
 - If multiple issues refer to the same column and require the same
