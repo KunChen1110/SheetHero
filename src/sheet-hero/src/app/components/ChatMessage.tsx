@@ -21,8 +21,8 @@ export function ChatMessage({ role, content }: ChatMessageProperties) {
           className={`w-8 h-8 rounded-full flex items-center justify-center 
             ${
               isUser
-                ? "bg-blue-500  text-white shadow-lg shadow-blue-500/20"
-                : "bg-green-500 text-white shadow-lg shadow-green-500/30"
+                ? "bg-blue-500  text-white shadow-blue-500/20"
+                : "bg-green-500 text-white shadow-green-500/30"
             }
         `}
         ></div>
