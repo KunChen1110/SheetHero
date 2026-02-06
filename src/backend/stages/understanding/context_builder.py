@@ -73,7 +73,7 @@ class ExcelContextBuilder:
                         )
                         for row_data in head_result['rows']:
                             markdown_rows.append(f"| {' | '.join(row_data)} |")
-                        sheet_parts.append("  " + "\\n".join(markdown_rows))
+                        sheet_parts.append("  " + "\n".join(markdown_rows))
                     else:
                         sheet_parts.append("  (no data)")
 
@@ -105,13 +105,22 @@ class ExcelContextBuilder:
             cell_value = sheet.cell(row=1, column=col_idx).value
             headers.append(self._sanitize_cell(cell_value))
 
-        data_rows = min(max_rows, max(sheet.max_row - 1, 0))
-        for row_idx in range(2, 2 + data_rows):
+        rows_collected = 0
+        for row_idx in range(2, sheet.max_row + 1):
             row_cells = []
+            has_value = False
             for col_idx in range(1, max_data_cols + 1):
                 cell_value = sheet.cell(row=row_idx, column=col_idx).value
-                row_cells.append(self._sanitize_cell(cell_value))
+                cell_text = self._sanitize_cell(cell_value)
+                if cell_text.strip():
+                    has_value = True
+                row_cells.append(cell_text)
+            if not has_value:
+                continue
             rows.append(row_cells)
+            rows_collected += 1
+            if rows_collected >= max_rows:
+                break
 
         return {
             "headers": headers,
