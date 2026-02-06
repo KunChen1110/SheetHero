@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="Created execution_test.py to test the execution stage">
+      <change afterPath="$PROJECT_DIR$/test/stages/execution_test.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="Data_Cleaning" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitLabMergeRequestFiltersHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPENED&quot;,
+    &quot;assignee&quot;: {
+      &quot;type&quot;: &quot;org.jetbrains.plugins.gitlab.mergerequest.ui.filters.GitLabMergeRequestsFiltersValue.MergeRequestsMemberFilterValue.MergeRequestsAssigneeFilterValue&quot;,
+      &quot;username&quot;: &quot;psyxl12&quot;,
+      &quot;fullname&quot;: &quot;Xianze Lu Wu&quot;
+    }
+  }
+}</component>
+  <component name="GitLabMergeRequestsSettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;first&quot;: &quot;https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git&quot;,
+    &quot;second&quot;: &quot;92c180d9-5c6a-4690-ad1f-377eaa0702ad&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="34mnWjBKN5yxMygyVOl6kQkx3nX" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.Main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Menu.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.validation.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Data__Cleaning__chris&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/team29_project/src/frontend/resources&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Modules&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\team29_project\src\frontend\resources" />
+      <recent name="D:\team29_project\src\backend" />
+      <recent name="D:\team29_project\src\frontend\components" />
+      <recent name="D:\team29_project\assets" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\team29_project\assets\Preview" />
+      <recent name="D:\team29_project\src\frontend\resources" />
+      <recent name="D:\team29_project" />
+      <recent name="D:\team29_project\src\frontend\pages" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.main">
+    <configuration name="Main" type="PythonConfigurationType" factoryName="Python">
+      <module name="team29_project" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="D:\team29_project" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="team29_project" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/backend" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/backend/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.main" />
+        <item itemvalue="Python.main" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="61b36187-0f43-411d-a9cb-466958a93063" name="Changes" comment="" />
+      <created>1761827647956</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1761827647956</updated>
+      <workItem from="1761827649713" duration="732000" />
+      <workItem from="1761849986979" duration="632000" />
+      <workItem from="1761851123766" duration="18000" />
+      <workItem from="1762875552996" duration="3264000" />
+      <workItem from="1762880967357" duration="632000" />
+      <workItem from="1762994895390" duration="1568000" />
+      <workItem from="1763034697677" duration="309000" />
+      <workItem from="1764869616934" duration="25077000" />
+      <workItem from="1764900010892" duration="1175000" />
+      <workItem from="1764941550127" duration="32431000" />
+      <workItem from="1765044311237" duration="5689000" />
+    </task>
+    <task id="LOCAL-00001" summary="Simplified understanding.py">
+      <option name="closed" value="true" />
+      <created>1764095408067</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1764095408067</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Simplified understanding.py and validation.py">
+      <option name="closed" value="true" />
+      <created>1764101784263</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1764101784263</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Completed the missing response of the user and &quot;answer&quot; from 1-10.&#10;Note: Modified some of the feedback too.">
+      <option name="closed" value="true" />
+      <created>1769644219051</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1769644219052</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Completed the missing response of the user and &quot;answer&quot; from 1-10 in dataset.json.&#10;Note: Modified some of the feedback too.">
+      <option name="closed" value="true" />
+      <created>1769644272442</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1769644272442</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Completed the missing response of the user and &quot;answer&quot; from 11-27 in dataset.json.&#10;Note: Modified some of the feedback too. Missing task20 and might have to recheck the 1-10task">
+      <option name="closed" value="true" />
+      <created>1769731474792</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1769731474792</updated>
+    </task>
+    <task id="LOCAL-00006" summary="Created cleaning_test.py to test the cleaning stage">
+      <option name="closed" value="true" />
+      <created>1770325710880</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1770325710880</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Simplified understanding.py" />
+    <MESSAGE value="Simplified understanding.py and validation.py" />
+    <MESSAGE value="Completed the missing response of the user and &quot;answer&quot; from 1-10.&#10;Note: Modified some of the feedback too." />
+    <MESSAGE value="Completed the missing response of the user and &quot;answer&quot; from 1-10 in dataset.json.&#10;Note: Modified some of the feedback too." />
+    <MESSAGE value="Completed the missing response of the user and &quot;answer&quot; from 11-27 in dataset.json.&#10;Note: Modified some of the feedback too. Missing task20 and might have to recheck the 1-10task" />
+    <MESSAGE value="Created cleaning_test.py to test the cleaning stage" />
+    <MESSAGE value="Created execution_test.py to test the execution stage" />
+    <option name="LAST_COMMIT_MESSAGE" value="Created execution_test.py to test the execution stage" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/TeamProject$Menu.coverage" NAME="Menu Coverage Results" MODIFIED="1764982447963" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:\team29_project\src" />
+    <SUITE FILE_PATH="coverage/TeamProject$Main.coverage" NAME="Main Coverage Results" MODIFIED="1765049487982" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:\team29_project" />
+  </component>
+</project>
