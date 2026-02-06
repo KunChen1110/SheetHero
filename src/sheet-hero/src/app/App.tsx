@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Sidebar } from "@/app/components/Sidebar";
-import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
+import { Chat, ExcelFile, Message } from "@/app/Interfaces";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatInput } from "./components/ChatInput";
 
