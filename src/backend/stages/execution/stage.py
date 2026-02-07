@@ -13,14 +13,16 @@ class ExecutionStage(Stage):
 
     def __init__(self, client, deployment: str, sandbox,
                  excel_context_execution: str,
-                 output_instruction: Optional[str] = None, progress_log_file=None):
+                 output_instruction: Optional[str] = None, progress_log_file=None,
+                 use_bounded_execution: bool = False):
         self.runner = ExecutionRuntime(
             client,
             deployment,
             sandbox,
             excel_context_execution,
             output_instruction=output_instruction,
-            progress_log_file=progress_log_file
+            progress_log_file=progress_log_file,
+            use_bounded_execution=use_bounded_execution,
         )
 
     def run(self, understanding_output: str, user_question: str,

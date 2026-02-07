@@ -19,13 +19,15 @@ class ExecutionRuntime(StageRuntime):
 
     def __init__(self, client, deployment: str, sandbox,
                  excel_context_execution: str,
-                 output_instruction: Optional[str] = None, progress_log_file=None):
+                 output_instruction: Optional[str] = None, progress_log_file=None,
+                 use_bounded_execution: bool = False):
         super().__init__(progress_log_file)
         self.client = client
         self.deployment = deployment
         self.sandbox = sandbox
         self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
+        self.use_bounded_execution = use_bounded_execution
 
         self.llm_client = ExecutionLLMClient(client, deployment)
         self.parser = ExecutionResponseParser()
@@ -37,7 +39,8 @@ class ExecutionRuntime(StageRuntime):
 
     def _get_system_prompt(self) -> dict:
         system_content = PromptBuilder().build_execution_system_prompt(
-            self.output_instruction
+            self.output_instruction,
+            use_bounded_execution=self.use_bounded_execution,
         )
         return {"role": "system", "content": system_content}
 
@@ -68,7 +71,11 @@ class ExecutionRuntime(StageRuntime):
             self._log_to_file(f"\n---\n\n### Execution Turn {turn + 1}\n")
 
             try:
-                response_message = self.llm_client.get_response(self.conversation_history)
+                max_tokens = 2048 if self.use_bounded_execution else None
+                response_message = self.llm_client.get_response(
+                    self.conversation_history,
+                    max_tokens=max_tokens,
+                )
                 self.conversation_history.append(response_message)
 
                 thought, code_action = self.parser.parse(response_message.content)
@@ -100,16 +107,26 @@ class ExecutionRuntime(StageRuntime):
                         }
 
                     logger.warning("No valid action found, asking for clarification")
-                    reminder = (
-                        "CRITICAL FORMAT VIOLATION: You must respond in EXACTLY one of these formats:\n\n"
-                        "FORMAT A - Thinking + Code:\n"
-                        "**Thought:** [Your reasoning here]\n\n"
-                        "```python\n# Your code here\n```\n\n"
-                        "FORMAT B - Thinking + Final Answer:\n"
-                        "**Thought:** [Your reasoning here]\n\n"
-                        "Final Answer: Your answer here\n\n"
-                        "NO other text is allowed. Start with **Thought:** ALWAYS."
-                    )
+                    if self.use_bounded_execution:
+                        reminder = (
+                            "FORMAT VIOLATION: Reply with ONLY one of these, nothing else:\n\n"
+                            "A) Code only: ```python\n# your code\n```\n\n"
+                            "B) One line: Final Answer: your answer\n\n"
+                            "No **Thought:**, no reasoning, no extra text.\n\n"
+                            "GUARDRAILS: Use list_all_workbooks() for paths; no invented filenames. "
+                            "If fixing an error, make only the smallest necessary change."
+                        )
+                    else:
+                        reminder = (
+                            "CRITICAL FORMAT VIOLATION: You must respond in EXACTLY one of these formats:\n\n"
+                            "FORMAT A - Thinking + Code:\n"
+                            "**Thought:** [Your reasoning here]\n\n"
+                            "```python\n# Your code here\n```\n\n"
+                            "FORMAT B - Thinking + Final Answer:\n"
+                            "**Thought:** [Your reasoning here]\n\n"
+                            "Final Answer: Your answer here\n\n"
+                            "NO other text is allowed. Start with **Thought:** ALWAYS."
+                        )
                     self.conversation_history.append({"role": "user", "content": reminder})
                     continue
 
@@ -144,6 +161,14 @@ class ExecutionRuntime(StageRuntime):
                         f"\n**Execution error (Turn {turn + 1}):**\n```\n{error_message}\n```\n"
                     )
 
+                    feedback_to_model = error_message
+                    if self.use_bounded_execution:
+                        feedback_to_model = (
+                            "MINIMAL FIX REQUIRED: Fix only the smallest necessary part "
+                            "(variable/column/type/range). Do not add new code or invented paths.\n\n"
+                            + error_message
+                        )
+
                     execution_steps.append({
                         "turn": turn + 1,
                         "code": code_action,
@@ -151,7 +176,7 @@ class ExecutionRuntime(StageRuntime):
                         "success": False
                     })
 
-                    self.conversation_history.append({"role": "user", "content": error_message})
+                    self.conversation_history.append({"role": "user", "content": feedback_to_model})
 
             except Exception as e:
                 logger.error(f"LLM Error: {str(e)}")
