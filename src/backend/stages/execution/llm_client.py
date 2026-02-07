@@ -20,16 +20,21 @@ class ExecutionLLMClient(BaseLLMClient):
         super().__init__(client, deployment)
 
     def get_response(self, messages: list, max_retries: int = 5,
-                     base_delay: float = 1.0):
+                     base_delay: float = 1.0, max_tokens: Optional[int] = None):
         last_exception = None
+        create_kwargs = {
+            "model": self.deployment,
+            "messages": messages,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            create_kwargs["max_tokens"] = max_tokens
 
         for attempt in range(max_retries):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.deployment,
-                    messages=messages,
-                )
-
+                response = self.client.chat.completions.create(**create_kwargs)
+                if not getattr(response, "choices", None) or len(response.choices) == 0:
+                    raise ValueError("LLM returned no choices (empty response)")
                 return response.choices[0].message
 
             except RateLimitError as e:
