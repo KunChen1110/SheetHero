@@ -22,9 +22,13 @@ class ValidationLLMClient(BaseLLMClient):
                 response = self.client.chat.completions.create(
                     model=self.deployment,
                     messages=messages,
+                    stream=False,
                 )
-
-                return response.choices[0].message.content
+                if not getattr(response, "choices", None) or len(response.choices) == 0:
+                    raise ValueError("LLM returned no choices (empty response)")
+                msg = response.choices[0].message
+                content = getattr(msg, "content", None)
+                return content if content is not None else ""
 
             except Exception as e:
                 last_exception = e

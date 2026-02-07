@@ -3,6 +3,7 @@ from typing import List
 
 import customtkinter as ctk
 
+from backend import Config
 from frontend.components.colors import *
 from frontend.components.footer_frame import FooterFrame
 
@@ -14,6 +15,8 @@ options: List[str] = [
     "gpt-4-32k",
     "gpt-4",
     "gpt-4o",
+    "qwen2.5:7b-instruct",  # Ollama / local Qwen2.5 7B
+    "qwen2.5-coder:7b-instruct",
 ]
 
 from frontend.components.colors import GREEN
@@ -400,14 +403,19 @@ class ConfigPage(ctk.CTkFrame):
      # Triggered when the confirm button is pressed
     def on_confirm_pressed(self):
         api_key = self.api_entry.get().strip()
+        base_url = self.url_entry.get().strip()
 
-        if not api_key:
-            messagebox.showwarning("Warning","Please enter an API key.")
+        # When both empty: use default API key from backend Config (online mode)
+        if not api_key and not base_url:
+            self.controller.api_key = Config().api_key
+            self.controller.base_url = None
+            self.controller.deployment = self.deployment_drop.get()
+            self.controller.show_page("PromptPage")
             return
 
-
-        self.controller.api_key = api_key
-        self.controller.base_url = self.url_entry.get().strip()
+        # When only Base URL is set (e.g. Ollama): API key optional, use placeholder
+        self.controller.api_key = api_key if api_key else "ollama"
+        self.controller.base_url = base_url or None
         self.controller.deployment = self.deployment_drop.get()
 
         self.controller.show_page("PromptPage")
