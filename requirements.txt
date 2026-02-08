@@ -5,8 +5,6 @@ pandas>=2.0.0
 numpy>=1.24.0
 pillow>=10.0.0
 tiktoken>=0.5.0
-customtkinter
-tkinterdnd2
 
 # Visualization
 matplotlib>=3.7.0
@@ -20,3 +18,8 @@ python-dotenv>=1.0.0
 # black>=23.0.0
 # flake8>=6.0.0
 # mypy>=1.0.0
+
+# GUI dependencies
+fastapi
+uvicorn
+pydantic
