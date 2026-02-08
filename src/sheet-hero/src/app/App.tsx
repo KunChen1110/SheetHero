@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
 import { ChatMessage } from "@/app/components/ChatMessage";
@@ -10,7 +10,7 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
 
   // The current active chat id
-  const [activeChatId, setActiveChatId] = useState<string>("1");
+  const [activeChatId, setActiveChatId] = useState<string>("");
 
   // The array of excel file interfaces active being used for query
   const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
@@ -35,8 +35,12 @@ export default function App() {
     console.log("Chat was selected");
   }
 
+  useEffect(() => {
+    createNewChat();
+  }, []);
+
   // Creates a new chat
-  function createNewChat(): void {
+  async function createNewChat(): Promise<void> {
     const newChat: Chat = {
       id: Date.now().toString(),
       title: "New Chat",
@@ -53,14 +57,12 @@ export default function App() {
   }
 
   // Creates a new message inside of current chat
-  async function createNewMessage(content: string) {
+  async function createNewMessage(content: string): Promise<void> {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: Role.USER,
       content,
     };
-
-    console.log(await api.get("/test"));
 
     // Update current chat with new message
     setChats((prevChats) =>
@@ -80,26 +82,31 @@ export default function App() {
 
     setIsTyping(true);
 
-    // Simulate AI response delay, this is kinda stupid but it looks cool lmao
-    setTimeout(
-      () => {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: Role.ASSISTANT,
-          content: generateResponse(content, excelFiles),
-        };
+    // Begin generating a response,
 
-        setChats((prevChats) =>
-          prevChats.map((chat) =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, assistantMessage] }
-              : chat,
-          ),
-        );
-        setIsTyping(false);
-      },
-      Math.random() * 500 + 1000,
-    );
+    try {
+      // Wait for backend response
+      const assistantContent = await generateResponse(content, excelFiles);
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: Role.ASSISTANT,
+        content: assistantContent,
+      };
+
+      // Update chat with assistant message
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === activeChatId
+            ? { ...chat, messages: [...chat.messages, assistantMessage] }
+            : chat,
+        ),
+      );
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsTyping(false);
+    }
   }
 
   // Creates a basic chat title for the chat history
@@ -108,11 +115,26 @@ export default function App() {
     return words.length > 30 ? words.substring(0, 30) + "..." : words;
   }
 
-  // Response logic goes here
-  function generateResponse(userMessage: string, files: ExcelFile[]): string {
-    const lowerMessage = userMessage.toLowerCase();
+  // Response logic
+  async function generateResponse(
+    userMessage: string,
+    files: ExcelFile[],
+  ): Promise<string> {
+    console.log(userMessage);
     console.log(files);
-    return lowerMessage;
+
+    // TODO This only prints the understanding output, this WILL need to be changed!!
+    try {
+      const response = await api.get("/sheet-hero/run");
+      console.log(response.data);
+      return (
+        response.data.result["understanding_output"] ||
+        "No response from backend"
+      );
+    } catch (error) {
+      console.error(error);
+      return "Error: Could not get response from backend";
+    }
   }
 
   return (

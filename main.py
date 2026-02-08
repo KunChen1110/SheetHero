@@ -1,17 +1,12 @@
-import os
-import sys
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+
+from src.backend.agent.core.SheetHero import SheetHero
+from src.backend.config.settings import Config
 
 app = FastAPI()
-
-origins = [
-    "http://localhost:3480"
-]
-
+origins = ["http://localhost:3480"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins = origins,
@@ -27,11 +22,21 @@ def test():
     return "This is a test"
 
 
-# This is a bit of a hack, but it works
-PROJECT_ROOT = os.path.dirname(__file__)
-SRC_PATH = os.path.join(PROJECT_ROOT, "src")
-if SRC_PATH not in sys.path:
-    sys.path.insert(0, SRC_PATH)
+@app.get("/sheet-hero/run")
+def run_sheet_hero_api():
+    config = Config(
+        api_key = "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"
+    )
+    agent = SheetHero(
+        excel_paths = ["D:\output.xlsx"],
+        config = config,
+    )
+
+    result = agent.run(
+        user_question = "test",
+    )
+
+    return { "result": result }
 
 
 if __name__ == "__main__":
