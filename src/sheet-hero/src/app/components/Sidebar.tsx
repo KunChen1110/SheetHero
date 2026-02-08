@@ -45,7 +45,12 @@ export function Sidebar({
     const selectedFiles = Array.from(e.target.files || []).filter((file) =>
       isAcceptedFileType(getFileExtension(file.name)),
     );
+
+    if (selectedFiles.length === 0) return;
+
     addFiles(selectedFiles);
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function handleDrop(e: React.DragEvent): void {
@@ -87,13 +92,12 @@ export function Sidebar({
   }
 
   return (
-    <div className="w-72 bg-gray-900/80 backdrop-blur-sm border-r border-gray-800/50 flex flex-col h-full relative">
+    <div className="w-75 bg-gray-900/80 border-r border-gray-800/50 flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-800/50 relative z-10">
-        <div className="flex items-center gap-3 px-3 py-2 mb-4">
+      <div className="p-4 border-b border-gray-800/50">
+        <div className="flex items-center p-3">
           <div className="flex-1 min-w-0">
             <div className="text-base font-semibold text-white">Sheet Hero</div>
-
             <div className="text-xs text-green-400">Spreadsheet AI</div>
 
             {/* TODO Put logo or smtnh here */}
@@ -111,14 +115,14 @@ export function Sidebar({
 
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-700/50 text-white group"
+          className="flex w-full items-center bg-gray-900 p-4 rounded-lg border border-gray-700/50 text-white hover:border-green-600/30 hover:bg-gray-800/80 transition-all"
         >
           <span className="text-sm font-medium">Upload Files</span>
         </button>
       </div>
 
       {/* =-=-= Scrollable area for files & chat history =-=-= */}
-      <div className="flex-1 overflow-y-auto relative z-10">
+      <div className="flex-1 overflow-y-auto relative">
         {/* =-=-= Active files box =-=-= */}
         <div
           className="p-3 border-b border-gray-800/30"
@@ -126,10 +130,8 @@ export function Sidebar({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
         >
-          <div className="flex items-center justify-between mb-2 px-2">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Files
-            </h3>
+          <div className="flex items-center justify-between p-1">
+            <h3 className="text-xs font-semibold text-gray-400 py-1">FILES</h3>
 
             {files.length > 0 && (
               <span className="text-xs text-gray-500">{files.length}</span>
@@ -140,21 +142,21 @@ export function Sidebar({
           {/* Otherwise, display all the files in the file array */}
 
           {files.length === 0 ? (
-            <div className="text-center px-2 py-4">
+            <div className="text-center p-5">
               {/* TODO Put some icon here */}
               {/* Display drag & drop instructions */}
               <p className="text-xs text-gray-500">No files uploaded</p>
-              <p className="text-xs text-gray-600 mt-1">Drag & drop here</p>
+              <p className="text-xs text-gray-600">Drag & drop here</p>
             </div>
           ) : (
             <div className="space-y-1">
               {files.map((file) => (
                 <div
                   key={file.id}
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg bg-gray-800/50 border border-gray-700/30 hover:border-green-600/30 transition-all group"
+                  className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/80 border border-gray-700/30 hover:border-green-600/30"
                 >
-                  {/* File display capsule */}
-                  <div className="shrink-0 w-5 h-5 rounded bg-green-600/20 flex items-center justify-center">
+                  {/* =-=-= File display capsule =-=-= */}
+                  <div className="w-5 h-5 rounded bg-green-600/20 flex items-center justify-center">
                     <span className="text-xs font-bold text-green-400">
                       {file.index}
                     </span>
@@ -162,19 +164,15 @@ export function Sidebar({
 
                   {/* File name */}
                   <div className="flex-1 min-w-0">
-                    <div
-                      className="text-xs text-gray-200 truncate"
-                      title={file.name}
-                    >
+                    <div className="text-xs text-gray-200" title={file.name}>
                       {file.name}
                     </div>
                   </div>
 
                   {/* File remove button */}
                   <button
+                    className="p-1 hover:bg-red-500/20 rounded"
                     onClick={() => removeFile(file.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500/20 rounded"
-                    aria-label="Remove file"
                   >
                     X {/* TODO <-- Make this an icon */}
                   </button>
@@ -187,10 +185,8 @@ export function Sidebar({
         {/* =-=-= Chat history box =-=-= */}
         <div className="p-3">
           {/* Chats title */}
-          <div className="flex items-center justify-between mb-2 px-2">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Chats
-            </h3>
+          <div className="flex items-center justify-between p-1">
+            <h3 className="text-xs font-semibold text-gray-400 py-1">CHATS</h3>
 
             {/* Create new chat button */}
             <button
@@ -204,7 +200,7 @@ export function Sidebar({
           {/* If there are no chats, display no chat history */}
           {/* Otherwise, display all the chats in the chat array */}
           {chats.length === 0 ? (
-            <div className="text-center px-2 py-4">
+            <div className="text-center p-3">
               {/* TODO Put some icon here */}
               <p className="text-xs text-gray-500">No chat history</p>
             </div>
@@ -214,18 +210,16 @@ export function Sidebar({
                 <button
                   key={chat.id}
                   onClick={() => onChatSelect?.(chat.id)}
-                  className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg transition-all text-left group 
+                  className={`w-full flex p-4 rounded-lg text-left 
                       ${
                         activeChat === chat.id
                           ? "bg-gray-800/80 border border-green-600/30"
-                          : "hover:bg-gray-800/80 hover:border hover:border-green-600/20"
+                          : "hover:bg-gray-800/20"
                       }
                     `}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-200 truncate">
-                      {chat.title}
-                    </div>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-200">{chat.title}</div>
                   </div>
                 </button>
               ))}
@@ -235,10 +229,10 @@ export function Sidebar({
       </div>
 
       {/* =-=-= Footer =-=-= */}
-      <div className="p-4 border-t border-gray-800/50 relative z-10">
+      <div className="p-4 border-t border-gray-800/50 relative">
         {/* Settings button */}
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/80 hover:border hover:border-green-600/20 transition-all text-left group"
+          className="w-full flex items-center p-3 rounded-lg hover:bg-gray-800/80 hover:border hover:border-green-600/20 transition-all text-left group"
           onClick={onSettingsClick}
         >
           {/* TODO Put settings icon here */}

@@ -10,7 +10,7 @@ export function ChatMessage({ role, content }: ChatMessageProperties) {
 
   return (
     <div
-      className={`flex gap-4 px-6 py-6
+      className={`flex gap-4 p-6
         ${isUser ? "bg-gray-800/50" : "bg-gray-750/50"}
     `}
     >
@@ -18,21 +18,15 @@ export function ChatMessage({ role, content }: ChatMessageProperties) {
         {/* If its the user's message, make background blue */}
         {/* Otherwise, make background green */}
         <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center 
-            ${
-              isUser
-                ? "bg-blue-500  text-white shadow-blue-500/20"
-                : "bg-green-500 text-white shadow-green-500/30"
-            }
+          className={`w-8 h-8 rounded-full flex 
+            ${isUser ? "bg-blue-500  text-white" : "bg-green-500 text-white"}
         `}
         ></div>
       </div>
 
       {/* Message contents */}
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-gray-100 whitespace-pre-wrap wrap-break-words leading-relaxed">
-          {content}
-        </div>
+        <div className="text-sm text-gray-100">{content}</div>
       </div>
     </div>
   );

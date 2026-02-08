@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Sidebar } from "@/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import { ChatInput } from "@/app/components/ChatInput";
-import { api } from "@/api";
+// import { api } from "@/api";
 
 export default function App() {
   // The array of chat histories
@@ -27,17 +27,16 @@ export default function App() {
   // The active chat's messages, if it has any
   const messages = activeChat?.messages || [];
 
+  // Handles when the settings button is clicked
   function handleSettingsClick(): void {
     console.log("Settings was clicked");
   }
 
-  function handleChatSelect(): void {
+  // Handles when a chat history was selected
+  function handleChatSelect(chatId: string): void {
+    setActiveChatId(chatId);
     console.log("Chat was selected");
   }
-
-  useEffect(() => {
-    createNewChat();
-  }, []);
 
   // Creates a new chat
   async function createNewChat(): Promise<void> {
@@ -125,11 +124,11 @@ export default function App() {
 
     // TODO This only prints the understanding output, this WILL need to be changed!!
     try {
-      const response = await api.get("/sheet-hero/run");
-      console.log(response.data);
+      // const response = await api.get("/sheet-hero/run");
+      // console.log(response.data);
       return (
-        response.data.result["understanding_output"] ||
-        "No response from backend"
+        // response.data.result["understanding_output"] ||
+        "Backend is not linked"
       );
     } catch (error) {
       console.error(error);
@@ -137,8 +136,9 @@ export default function App() {
     }
   }
 
+  // HTML for the app
   return (
-    <div className="h-full flex">
+    <div className="h-full flex bg-gray-950">
       {/* =-=-= Sidebar =-=-=*/}
       <Sidebar
         onSettingsClick={handleSettingsClick}
@@ -151,25 +151,22 @@ export default function App() {
       />
 
       {/* =-=-= Main chat =-=-= */}
-      <div className="flex-1 flex flex-col relative">
-        <div className="flex-1 overflow-y-auto relative z-1">
-          <div className="h-full p-12 pb-0">
-            <div className="h-full rounded-3xl overflow-y-auto shadow-2xl border border-gray-700/50">
-              {/* =-=-= Messages =-=-=*/}
-              <div className="max-w-4xl mx-auto pt-">
-                {messages.map((message) => (
-                  <ChatMessage
-                    key={message.id}
-                    role={message.role}
-                    content={message.content}
-                  />
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
+      <div className="flex flex-1 flex-col p-12 pb-0">
+        {/* =-=-= Messages container =-=-= */}
+        <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-4xl mx-auto space-y-2">
+              {messages.map((message) => (
+                <ChatMessage
+                  key={message.id}
+                  role={message.role}
+                  content={message.content}
+                />
+              ))}
+              <div ref={messagesEndRef} />
             </div>
           </div>
         </div>
-        {/* =-=-= Chat input =-=-=*/}
         <ChatInput onSendMessage={createNewMessage} disabled={isTyping} />
       </div>
     </div>
