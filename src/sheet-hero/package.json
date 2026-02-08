@@ -5,10 +5,15 @@
   "type": "module",
   "main": "public/electron.ts",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:3480 && electron .\"",
     "build": "vite build && electron-builder",
     "preview": "vite preview",
-    "lint": "eslint"
+    "lint": "eslint",
+
+    "dev:frontend": "vite",
+    "dev:backend": "python ../../main.py",
+    "dev:electron": "electron .",
+
+    "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\" "
   },
   "dependencies": {
     "lucide-react": "^0.563.0",

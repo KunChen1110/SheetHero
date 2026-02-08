@@ -3,6 +3,7 @@ import { Sidebar } from "@/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import { ChatInput } from "@/app/components/ChatInput";
+import { api } from "@/api";
 
 export default function App() {
   // The array of chat histories
@@ -52,12 +53,14 @@ export default function App() {
   }
 
   // Creates a new message inside of current chat
-  function createNewMessage(content: string): void {
+  async function createNewMessage(content: string) {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: Role.USER,
       content,
     };
+
+    console.log(await api.get("/test"));
 
     // Update current chat with new message
     setChats((prevChats) =>
