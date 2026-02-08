@@ -16,15 +16,16 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
   }
 
   return (
-    <div className="bg-transparent p-6 relative z-10">
+    <div className="p-6 relative">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
         <div
-          className={`relative flex items-center bg-gray-800 rounded-2xl border transition-all shadow-lg
-            ${disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"}
-		`}
+          className={`relative flex items-center bg-gray-800 rounded-2xl border transition-all ${
+            disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"
+          }
+        `}
         >
           <textarea
-            className="flex-1 resize-none bg-transparent px-4 py-3 pr-12 text-sm text-gray-100 placeholder-gray-500"
+            className="flex-1 resize-none p-4 text-sm text-gray-100 placeholder-gray-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
             disabled={disabled}
             rows={1}
@@ -52,7 +53,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
           />
 
           <button
-            className="absolute right-2 p-2 rounded-lg"
+            className="absolute right-2 p-2 rounded-lg bg-linear-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-green-500 disabled:hover:to-green-600 transition-all"
             type="submit"
             disabled={!input.trim() || disabled}
           >
