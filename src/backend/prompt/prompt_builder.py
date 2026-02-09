@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .prompt_data import (ExecutionPrompts, UnderstandingPrompts, ValidationPrompts,
-                          QAPrompts, DiagnosePrompts, CleaningPrompts)
+                          QAPrompts, DiagnosePrompts, CleaningPrompts, InteractPrompts)
 
 
 class PromptBuilder:
@@ -17,6 +17,7 @@ class PromptBuilder:
     _default_qa = QAPrompts()
     _default_diagnose = DiagnosePrompts()
     _default_cleaning = CleaningPrompts()
+    _default_interact = InteractPrompts()
 
     def __init__(self,
                  understanding: Optional[UnderstandingPrompts] = None,
@@ -24,13 +25,15 @@ class PromptBuilder:
                  validation: Optional[ValidationPrompts] = None,
                  qa: Optional[QAPrompts] = None,
                  diagnose: Optional[DiagnosePrompts] = None,
-                 cleaning: Optional[CleaningPrompts] = None):
+                 cleaning: Optional[CleaningPrompts] = None,
+                 interact: Optional[InteractPrompts] = None):
         self._understanding = understanding or self._default_understanding
         self._execution = execution or self._default_execution
         self._validation = validation or self._default_validation
         self._qa = qa or self._default_qa
         self._diagnose = diagnose or self._default_diagnose
         self._cleaning = cleaning or self._default_cleaning
+        self._interact = interact or self._default_interact
 
     def _render(self, template: str, values: Dict[str, Any]) -> str:
         result = template
@@ -40,17 +43,27 @@ class PromptBuilder:
         return result
 
     def build_understanding_prompt(self, user_question: str,
-                                   excel_context_understanding: str) -> str:
+                                   excel_context_understanding: str,
+                                   session_context_understanding: str = "") -> str:
         template = self._understanding.prompt
         return self._render(template, {
             "user_question": user_question,
-            "excel_context_understanding": excel_context_understanding
+            "excel_context_understanding": excel_context_understanding,
+            "session_context_understanding": session_context_understanding
         })
 
     def build_quality_diagnosis_prompt(self, excel_context_understanding: str) -> str:
         template = self._understanding.quality_prompt
         return self._render(template, {
             "excel_context_understanding": excel_context_understanding
+        })
+
+    def build_understanding_context_match_prompt(self, user_question: str,
+                                                 session_context_understanding: str) -> str:
+        template = self._understanding.context_match_prompt
+        return self._render(template, {
+            "user_question": user_question,
+            "session_context_understanding": session_context_understanding
         })
 
     def build_diagnose_code_prompt(self, schema_summary: str, user_task: str) -> str:
@@ -74,6 +87,13 @@ class PromptBuilder:
         return self._render(self._diagnose.prioritize_prompt, {
             "user_task": user_task,
             "candidate_questions": candidates,
+        })
+
+    def build_diagnose_router_prompt(self, user_question: str,
+                                     understanding_output: str) -> str:
+        return self._render(self._diagnose.router_prompt, {
+            "user_question": user_question,
+            "understanding_output": understanding_output
         })
 
     def build_cleaning_code_prompt(self, schema_summary: str, actions: list[str]) -> str:
@@ -131,6 +151,23 @@ class PromptBuilder:
         return self._render(template, {
             "problem": problem,
             "reply": reply
+        })
+
+    def build_interact_needs_spreadsheet_prompt(self, user_message: str) -> str:
+        return self._render(self._interact.needs_spreadsheet_prompt, {
+            "user_message": user_message
+        })
+
+    def build_interact_context_match_prompt(self, user_message: str,
+                                            context_understanding: str) -> str:
+        return self._render(self._interact.context_match_prompt, {
+            "user_message": user_message,
+            "context_understanding": context_understanding
+        })
+
+    def build_interact_context_summary_prompt(self, user_message: str) -> str:
+        return self._render(self._interact.context_summary_prompt, {
+            "user_message": user_message
         })
 
     def build_enhanced_understanding_prompt(self, understanding_output: str,
