@@ -14,8 +14,15 @@ You are an expert Excel data analyst. I need you to analyze the spreadsheet cont
 **Excel Workbook Content:**
 <<excel_context_understanding>>
 
+**Session Context (may be unrelated):**
+<<session_context_understanding>>
+
 **Your Task:**
 Analyze the Excel content and visual representation (if provided) to provide analysis in the following format EXACTLY. Do NOT provide the actual answer to the user's question - only provide the analysis framework:
+
+Context guidance:
+- The session context may be unrelated; ignore it if it does not match the user question.
+- Always prioritize the user question; use session context only to fill missing background.
 
 1. **Sheet Summary**:
 Provide a comprehensive overview including:
@@ -51,6 +58,23 @@ Provide a comprehensive overview including:
   - For multi-sheet calculations: Verify that all relevant sheets were included
   - Check that data from different sheets was combined correctly
 - **Hierarchical Data Considerations**: Note any parent-child relationships, subtotals, or nested categories
+""")
+
+_UNDERSTANDING_CONTEXT_MATCH_PROMPT = textwrap.dedent("""\
+Decide if the session context matches the user question.
+
+Rules:
+- If the context is clearly relevant to the user's question, answer YES.
+- If the context is unrelated or conflicts, answer NO.
+- If unsure, answer NO.
+
+Return ONLY one token: YES or NO.
+
+User question:
+<<user_question>>
+
+Session context:
+<<session_context_understanding>>
 """)
 
 _QUALITY_DIAG_PROMPT = textwrap.dedent("""\
@@ -293,6 +317,67 @@ Selection rules:
 
 Output format (STRICT):
 - Output ONLY a JSON array of strings.
+""")
+
+_DIAGNOSE_ROUTER_PROMPT = textwrap.dedent("""\
+You are a router that decides whether to run a data-diagnose stage.
+
+Decision rules:
+- If the user only asks to analyze, discover, or search, and does NOT require generating a new Excel file or modifying data, answer NO.
+- If the user needs data cleaning, fixing formats, handling missing/duplicates, or expects changes to data or a new Excel output, answer YES.
+- If unsure, answer NO.
+
+Return ONLY one token: YES or NO.
+
+User question:
+<<user_question>>
+
+Understanding summary:
+<<understanding_output>>
+""")
+
+_INTERACT_NEEDS_SPREADSHEET_PROMPT = textwrap.dedent("""\
+You decide if the user's request requires spreadsheet data to answer correctly.
+
+Rules:
+- Answer YES only if the request needs Excel data to be correct.
+- Answer NO if it can be answered without any spreadsheet data.
+- If unsure, answer NO.
+
+Return ONLY one token: YES or NO.
+
+User message:
+<<user_message>>
+""")
+
+_INTERACT_CONTEXT_MATCH_PROMPT = textwrap.dedent("""\
+You decide if the user's request matches the current Excel world topic.
+
+Rules:
+- If the request is about the same domain/task as the context, answer YES.
+- If the request clearly switches to a different domain/task, answer NO.
+- If the context is empty or missing, answer YES.
+- If unsure, answer NO.
+
+Return ONLY one token: YES or NO.
+
+User message:
+<<user_message>>
+
+Current context:
+<<context_understanding>>
+""")
+
+_INTERACT_CONTEXT_SUMMARY_PROMPT = textwrap.dedent("""\
+Summarize the user's intended Excel task into a short, stable domain statement.
+
+Rules:
+- One short sentence (max 20 words).
+- Only high-level domain/task intent.
+- No column names, schema, steps, or validation strategy.
+
+User message:
+<<user_message>>
 """)
 
 _QA_MATCH_PROMPT = textwrap.dedent("""\
