@@ -1,13 +1,27 @@
 import { useState, useRef } from "react";
-import { Sidebar } from "@/app/components/Sidebar";
-import { Chat, ExcelFile, Message, Role } from "@/app/Interfaces";
-import { ChatMessage } from "@/app/components/ChatMessage";
-import { ChatInput } from "@/app/components/ChatInput";
+import { Sidebar } from "@/renderer/app/components/Sidebar";
+import { Chat, ExcelFile, Message, Role } from "@/renderer/interfaces";
+import { ChatMessage } from "@/renderer/app/components/ChatMessage";
+import { ChatInput } from "@/renderer/app/components/ChatInput";
+import { Settings } from "@/renderer/app/components/Settings";
 // import { api } from "@/api";
+
+const DEFAULT_CHAT: Chat = {
+  id: "1",
+  title: "Getting Started",
+  messages: [
+    {
+      id: "1",
+      role: Role.ASSISTANT,
+      content:
+        "Hello! I'm your Excel Spreadsheet Assistant. Upload or drag & drop your Excel files to get started!\n\n**How to use:**\n• Upload Excel files (.xlsx, .xls, .csv) using the sidebar\n• Each file gets an index number (e.g., File #1, File #2)\n• Reference files in your messages: 'Analyze File #1' or 'Compare File #1 and File #2'\n• Ask me questions about your data or request specific analyses\n\n**What I can help with:**\n• Data analysis and insights\n• Formula suggestions\n• Chart and visualization recommendations\n• Data cleaning and formatting tips\n• Spreadsheet structure improvements",
+    },
+  ],
+};
 
 export default function App() {
   // The array of chat histories
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [chats, setChats] = useState<Chat[]>([DEFAULT_CHAT]);
 
   // The current active chat id
   const [activeChatId, setActiveChatId] = useState<string>("");
@@ -27,15 +41,26 @@ export default function App() {
   // The active chat's messages, if it has any
   const messages = activeChat?.messages || [];
 
+  // const [apiKey, setApiKey] = useState<string>("");
+  // const [maxTurns, setMaxTurns] = useState<number>(10);
+  // const [model, setModel] = useState<string>("gpt-4-mini");
+
+  // If the settings display is currently open
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   // Handles when the settings button is clicked
   function handleSettingsClick(): void {
-    console.log("Settings was clicked");
+    setIsSettingsOpen(true);
   }
 
   // Handles when a chat history was selected
   function handleChatSelect(chatId: string): void {
     setActiveChatId(chatId);
-    console.log("Chat was selected");
+  }
+
+  // Handles when the settings are saved
+  function handleSaveSettings(): void {
+    console.log("settings should be saved here");
   }
 
   // Creates a new chat
@@ -169,6 +194,16 @@ export default function App() {
         </div>
         <ChatInput onSendMessage={createNewMessage} disabled={isTyping} />
       </div>
+
+      {/* =-=-= Settings =-=-= */}
+      <Settings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        apiKey={"apiKey"}
+        maxTurns={1}
+        model={"model"}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 }

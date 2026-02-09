@@ -1,4 +1,4 @@
-import { Role } from "@/app/Interfaces";
+import { Role } from "@/renderer/interfaces";
 
 interface ChatMessageProperties {
   role: Role;

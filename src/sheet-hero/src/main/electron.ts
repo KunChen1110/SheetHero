@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from "electron";
 
+// Creates a window
 function createWindow() {
   const win = new BrowserWindow({
     minWidth: 800,
@@ -15,14 +16,15 @@ function createWindow() {
 
 }
 
-app.whenReady().then(() => {
-    createWindow();
+// Creates a window when the app is ready
+app.on("ready", createWindow);
 
-    app.on("activate", () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    })
-});
+// Creates a window when the app is clicked and there are no other windows open
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+})
 
+// Quit the application when all windows are closed
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
