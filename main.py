@@ -28,7 +28,7 @@ def run_sheet_hero_api():
         api_key = ""
     )
     agent = SheetHero(
-        excel_paths = ["D:\output.xlsx"],
+        excel_paths = ["D:\\output.xlsx"],
         config = config,
     )
 

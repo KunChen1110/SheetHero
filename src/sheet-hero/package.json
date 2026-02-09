@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "public/electron.ts",
+  "main": "src/main/electron.ts",
   "scripts": {
     "build": "vite build && electron-builder",
     "preview": "vite preview",

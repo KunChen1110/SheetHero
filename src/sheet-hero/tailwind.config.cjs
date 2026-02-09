@@ -1,6 +1,6 @@
-module.exports = {
+export default {
   content: [
-    "./index.html",
+    "./src/renderer/index.html",
     "./src/**/*.{ts,tsx}"
   ],
 

@@ -9,6 +9,11 @@ export interface Chat {
   messages: Message[];
 }
 
+export interface ChatsData {
+  chats: Chat[];
+  activeChatId: string;
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -20,4 +25,10 @@ export interface ExcelFile {
   name: string;
   index: number;
   file: File;
+}
+
+export interface AppSettings {
+  apiKey: string;
+  maxTurns: number;
+  model: string;
 }
