@@ -80,6 +80,7 @@ export default function App() {
       behavior: "smooth",
     });
   }
+
   // Automatically scrolls to the bottom of the dialogue box after typing or new message creation
   useEffect(() => {
     scrollToBottom();
@@ -135,7 +136,6 @@ export default function App() {
     setIsTyping(true);
 
     // Begin generating a response,
-
     try {
       // Wait for backend response
       const assistantContent = await generateResponse(content, excelFiles);
@@ -200,7 +200,7 @@ export default function App() {
       {/* =-=-= Main chat =-=-= */}
       <div className="flex flex-1 flex-col p-12 pb-0">
         {/* =-=-= Messages container =-=-= */}
-        <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden">
+        <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
             {/* =-=-=  No API key overlay =-=-=  */}
             {!hasApiKey && (

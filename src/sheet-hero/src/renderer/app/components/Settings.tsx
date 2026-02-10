@@ -45,8 +45,8 @@ export function Settings({
   }
 
   // If clicking off the menu, call the given "onClose" function
-  function handleOverlayClick(e: React.MouseEvent): void {
-    if (e.target === e.currentTarget) {
+  function handleOverlayClick(event: React.MouseEvent): void {
+    if (event.target === event.currentTarget) {
       onClose();
     }
   }

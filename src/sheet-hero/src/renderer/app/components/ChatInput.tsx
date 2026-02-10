@@ -10,8 +10,9 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
   const [input, setInput] = useState("");
 
   // Passes arguments to a given "onSendMessage" function, then resets the input text
-  function handleSubmit(e: React.FormEvent): void {
-    e.preventDefault();
+  function handleSubmit(event: React.FormEvent): void {
+    event.preventDefault();
+
     if (input.trim() && !disabled) {
       onSendMessage(input.trim());
       setInput("");
@@ -33,11 +34,11 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
             value={input}
             disabled={disabled}
             rows={1}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                handleSubmit(event);
               }
             }}
             placeholder={
