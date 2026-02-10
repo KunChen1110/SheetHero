@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
-import { Chat, ExcelFile, Message, Role } from "@/renderer/interfaces";
+import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
 import { ChatMessage } from "@/renderer/app/components/ChatMessage";
 import { ChatInput } from "@/renderer/app/components/ChatInput";
 import { Settings } from "@/renderer/app/components/Settings";
+import { useSettings } from "@/util/storage";
 // import { api } from "@/api";
 
 const DEFAULT_CHAT: Chat = {
@@ -14,12 +15,14 @@ const DEFAULT_CHAT: Chat = {
       id: "1",
       role: Role.ASSISTANT,
       content:
-        "Hello! I'm your Excel Spreadsheet Assistant. Upload or drag & drop your Excel files to get started!\n\n**How to use:**\n• Upload Excel files (.xlsx, .xls, .csv) using the sidebar\n• Each file gets an index number (e.g., File #1, File #2)\n• Reference files in your messages: 'Analyze File #1' or 'Compare File #1 and File #2'\n• Ask me questions about your data or request specific analyses\n\n**What I can help with:**\n• Data analysis and insights\n• Formula suggestions\n• Chart and visualization recommendations\n• Data cleaning and formatting tips\n• Spreadsheet structure improvements",
+        "Hello! I'm your Excel Spreadsheet Assistant. Upload or drag & drop your Excel files to get started!",
     },
   ],
 };
 
 export default function App() {
+  const { settings, saveSettings } = useSettings();
+
   // The array of chat histories
   const [chats, setChats] = useState<Chat[]>([DEFAULT_CHAT]);
 
@@ -41,10 +44,6 @@ export default function App() {
   // The active chat's messages, if it has any
   const messages = activeChat?.messages || [];
 
-  // const [apiKey, setApiKey] = useState<string>("");
-  // const [maxTurns, setMaxTurns] = useState<number>(10);
-  // const [model, setModel] = useState<string>("gpt-4-mini");
-
   // If the settings display is currently open
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -59,8 +58,16 @@ export default function App() {
   }
 
   // Handles when the settings are saved
-  function handleSaveSettings(): void {
-    console.log("settings should be saved here");
+  function handleSaveSettings(
+    apiKey: string,
+    maxTurns: number,
+    model: string,
+  ): void {
+    saveSettings({
+      apiKey: apiKey,
+      maxTurns: maxTurns,
+      model: model,
+    });
   }
 
   // Creates a new chat
@@ -199,9 +206,9 @@ export default function App() {
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        apiKey={"apiKey"}
-        maxTurns={1}
-        model={"model"}
+        apiKey={settings.apiKey}
+        maxTurns={settings.maxTurns}
+        model={settings.model}
         onSave={handleSaveSettings}
       />
     </div>

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ExcelFile, Chat } from "@/renderer/interfaces";
+import { ExcelFile, Chat } from "@/util/interfaces";
 
 const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 

@@ -18,14 +18,15 @@ export function Settings({
   onClose,
   onSave,
 }: SettingsProperties) {
+  const [showApiKey, setShowApiKey] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [localMaxTurns, setLocalMaxTurns] = useState(maxTurns);
-  const [showApiKey, setShowApiKey] = useState(false);
   const [localModel, setLocalModel] = useState(model);
 
   useEffect(() => {
     setLocalApiKey(apiKey);
     setLocalMaxTurns(maxTurns);
+    setLocalModel(model);
   }, [apiKey, maxTurns, model, isOpen]);
 
   if (!isOpen) return null;
