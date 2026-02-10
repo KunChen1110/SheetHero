@@ -6,8 +6,10 @@ interface ChatMessageProperties {
 }
 
 export function ChatMessage({ role, content }: ChatMessageProperties) {
+  // Check if the role of the message is the user
   const isUser = role === Role.USER;
 
+  // HTML for the chat message
   return (
     <div
       className={`flex gap-4 p-6

@@ -6,7 +6,10 @@ interface ChatInputProperties {
 }
 
 export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
+  // The input text shown on the input container
   const [input, setInput] = useState("");
+
+  // Passes arguments to a given "onSendMessage" function, then resets the input text
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
     if (input.trim() && !disabled) {
@@ -15,6 +18,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
     }
   }
 
+  // HTML for the chat input
   return (
     <div className="p-6 relative">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
