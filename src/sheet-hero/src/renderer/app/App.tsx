@@ -1,33 +1,34 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
 import { ChatMessage } from "@/renderer/app/components/ChatMessage";
 import { ChatInput } from "@/renderer/app/components/ChatInput";
 import { Settings } from "@/renderer/app/components/Settings";
 import { useSettings } from "@/util/storage";
-// import { api } from "@/api";
+// import { api } from "@/util/api";
 
 const DEFAULT_CHAT: Chat = {
-  id: "1",
+  id: Date.now().toString(),
   title: "Getting Started",
   messages: [
     {
-      id: "1",
+      id: Date.now().toString(),
       role: Role.ASSISTANT,
       content:
-        "Hello! I'm your Excel Spreadsheet Assistant. Upload or drag & drop your Excel files to get started!",
+        "Hello! I'm SheetHero. Upload or drag & drop your Excel files to get started!",
     },
   ],
 };
 
 export default function App() {
+  // Save and load settings utility
   const { settings, saveSettings } = useSettings();
 
   // The array of chat histories
   const [chats, setChats] = useState<Chat[]>([DEFAULT_CHAT]);
 
   // The current active chat id
-  const [activeChatId, setActiveChatId] = useState<string>("");
+  const [activeChatId, setActiveChatId] = useState<string>(DEFAULT_CHAT.id);
 
   // The array of excel file interfaces active being used for query
   const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
@@ -46,6 +47,9 @@ export default function App() {
 
   // If the settings display is currently open
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // If there is an API key in use
+  const hasApiKey = settings.apiKey.trim().length > 0;
 
   // Handles when the settings button is clicked
   function handleSettingsClick(): void {
@@ -70,8 +74,25 @@ export default function App() {
     });
   }
 
+  // Scrolls to the bottom of the dialogue box
+  function scrollToBottom(): void {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }
+  // Automatically scrolls to the bottom of the dialogue box after typing or new message creation
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  // Creates a basic chat title for the chat history
+  function generateChatTitle(firstMessage: string): string {
+    const words = firstMessage.split(" ").slice(0, 4).join(" ");
+    return words.length > 30 ? words.substring(0, 30) + "..." : words;
+  }
+
   // Creates a new chat
-  async function createNewChat(): Promise<void> {
+  function createNewChat(): void {
     const newChat: Chat = {
       id: Date.now().toString(),
       title: "New Chat",
@@ -140,12 +161,6 @@ export default function App() {
     }
   }
 
-  // Creates a basic chat title for the chat history
-  function generateChatTitle(firstMessage: string): string {
-    const words = firstMessage.split(" ").slice(0, 4).join(" ");
-    return words.length > 30 ? words.substring(0, 30) + "..." : words;
-  }
-
   // Response logic
   async function generateResponse(
     userMessage: string,
@@ -187,6 +202,31 @@ export default function App() {
         {/* =-=-= Messages container =-=-= */}
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6">
+            {/* =-=-=  No API key overlay =-=-=  */}
+            {!hasApiKey && (
+              <div className="bg-linear-to-r from-yellow-900/40 to-red-900/40 border-b border-yellow-600/30 backdrop-blur-sm rounded-3xl">
+                <div className="max-w-4xl mx-auto p-5">
+                  <div className="flex items-start">
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-yellow-200">
+                        API Key Required
+                      </h3>
+                      <p className="text-sm text-yellow-100/80 py-2">
+                        Please configure your API key in settings to start
+                        usings SheetHero.
+                      </p>
+                      <button
+                        onClick={handleSettingsClick}
+                        className="p-3 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium rounded-lg transition-colors shadow-lg"
+                      >
+                        Open Settings
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="max-w-4xl mx-auto space-y-2">
               {messages.map((message) => (
                 <ChatMessage
@@ -199,9 +239,11 @@ export default function App() {
             </div>
           </div>
         </div>
-        <ChatInput onSendMessage={createNewMessage} disabled={isTyping} />
+        <ChatInput
+          onSendMessage={createNewMessage}
+          disabled={isTyping || !hasApiKey}
+        />
       </div>
-
       {/* =-=-= Settings =-=-= */}
       <Settings
         isOpen={isSettingsOpen}

@@ -13,16 +13,19 @@ interface SidebarProperties {
   activeChat?: string;
 }
 
+// Checks if a file type is valid
 function isAcceptedFileType(extension: string): boolean {
   return ACCEPTED_FILE_EXTENSIONS.some(
     (ext) => ext === extension.toLowerCase(),
   );
 }
 
+// Returns all file extensions, used for file dialog
 function getAcceptAttribute(): string {
   return [...ACCEPTED_FILE_EXTENSIONS].map((ext) => `.${ext}`).join(",");
 }
 
+// Gets the extension name of a file
 function getFileExtension(fileName: string): string {
   const parts = fileName.split(".");
 
@@ -41,8 +44,9 @@ export function Sidebar({
 }: SidebarProperties) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>): void {
-    const selectedFiles = Array.from(e.target.files || []).filter((file) =>
+  // Handles when files are selected from the file dialog
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>): void {
+    const selectedFiles = Array.from(event.target.files || []).filter((file) =>
       isAcceptedFileType(getFileExtension(file.name)),
     );
 
@@ -53,15 +57,17 @@ export function Sidebar({
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function handleDrop(e: React.DragEvent): void {
-    e.preventDefault();
+  // Adds a file when dropped into the drap & drop container
+  function handleDrop(event: React.DragEvent): void {
+    event.preventDefault();
 
-    const droppedFiles = Array.from(e.dataTransfer.files).filter((file) =>
+    const droppedFiles = Array.from(event.dataTransfer.files).filter((file) =>
       isAcceptedFileType(getFileExtension(file.name)),
     );
     addFiles(droppedFiles);
   }
 
+  // Adds a file to the file list
   function addFiles(newFiles: File[]): void {
     const currentMaxIndex =
       files.length > 0 ? Math.max(...files.map((f) => f.index)) : 0;
@@ -74,6 +80,7 @@ export function Sidebar({
     onFilesChange([...files, ...excelFiles]);
   }
 
+  // Removes a file from the file list
   function removeFile(id: string): void {
     const updatedFiles = files.filter((f) => f.id !== id);
     const reindexedFiles = updatedFiles.map((file, idx) => ({
@@ -83,17 +90,20 @@ export function Sidebar({
     onFilesChange(reindexedFiles);
   }
 
-  function handleDragOver(e: React.DragEvent): void {
-    e.preventDefault();
+  // Makes the drag & drop functionality work properly
+  function handleDragOver(event: React.DragEvent): void {
+    event.preventDefault();
   }
 
-  function handleDragLeave(e: React.DragEvent): void {
-    e.preventDefault();
+  // Makes the drag & drop functionality work properly
+  function handleDragLeave(event: React.DragEvent): void {
+    event.preventDefault();
   }
 
+  // HTML for the sidebar
   return (
     <div className="w-75 bg-gray-900/80 border-r border-gray-800/50 flex flex-col h-full">
-      {/* Header */}
+      {/* =-=-= Header =-=-=*/}
       <div className="p-4 border-b border-gray-800/50">
         <div className="flex items-center p-3">
           <div className="flex-1 min-w-0">
@@ -104,6 +114,7 @@ export function Sidebar({
           </div>
         </div>
 
+        {/* File dialog for selecting files */}
         <input
           className="hidden"
           type="file"
@@ -229,10 +240,10 @@ export function Sidebar({
       </div>
 
       {/* =-=-= Footer =-=-= */}
-      <div className="p-4 border-t border-gray-800/50 relative">
+      <div className="p-4 border-t border-gray-800/50">
         {/* Settings button */}
         <button
-          className="w-full flex items-center p-3 rounded-lg hover:bg-gray-800/80 hover:border hover:border-green-600/20 transition-all text-left group"
+          className="w-full flex items-center p-4 rounded-lg bg-gray-900 hover:bg-gray-800/80 border border-gray-700/50 hover:border-green-600/20 transition-all"
           onClick={onSettingsClick}
         >
           {/* TODO Put settings icon here */}

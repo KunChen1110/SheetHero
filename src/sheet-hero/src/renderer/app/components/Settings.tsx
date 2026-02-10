@@ -18,9 +18,16 @@ export function Settings({
   onClose,
   onSave,
 }: SettingsProperties) {
+  // If the api key is visible
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // The api key used for the model
   const [localApiKey, setLocalApiKey] = useState(apiKey);
+
+  // The maximum amount of turns the model can perform
   const [localMaxTurns, setLocalMaxTurns] = useState(maxTurns);
+
+  // The model being used
   const [localModel, setLocalModel] = useState(model);
 
   useEffect(() => {
@@ -31,24 +38,27 @@ export function Settings({
 
   if (!isOpen) return null;
 
+  // Passes arguments to a given "onSave" function, then calls a given "onClose" function
   function handleSave(): void {
     onSave(localApiKey.trim(), localMaxTurns, localModel.trim());
     onClose();
   }
 
+  // If clicking off the menu, call the given "onClose" function
   function handleOverlayClick(e: React.MouseEvent): void {
     if (e.target === e.currentTarget) {
       onClose();
     }
   }
 
+  // HTML for the settings
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={handleOverlayClick}
     >
       <div className="bg-gray-900 border border-gray-700/50 rounded-2xl max-w-md w-full">
-        {/* Header */}
+        {/* =-=-= Header =-=-= */}
         <div className="flex items-center justify-between p-6 border-b border-gray-800/50">
           <h2 className="text-xl font-semibold text-white">Settings</h2>
           <button
@@ -61,7 +71,7 @@ export function Settings({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* API Key */}
+          {/* =-=-= API Key =-=-= */}
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-200 py-2">
               <Key size={16} className="text-green-400" />
@@ -89,7 +99,7 @@ export function Settings({
             </p>
           </div>
 
-          {/* Model */}
+          {/* =-=-= Model =-=-= */}
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-200 mb-2">
               <Bot size={16} className="text-green-400" />
@@ -109,7 +119,7 @@ export function Settings({
             </p>
           </div>
 
-          {/* Max Turns */}
+          {/* =-=-= Max Turns =-=-= */}
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-200 mb-2">
               <Hash size={16} className="text-green-400" />
@@ -131,7 +141,7 @@ export function Settings({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* =-=-= Footer =-=-=*/}
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-800/50">
           <button
             onClick={onClose}
