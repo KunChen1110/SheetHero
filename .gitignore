@@ -9,3 +9,8 @@ venv/
 env/
 .env/
 .DS_Store
+# local env
+.venv/
+# artifacts
+artifacts/loggers/
+.idea/
