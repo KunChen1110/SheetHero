@@ -1,4 +1,5 @@
 import { Role } from "@/util/interfaces";
+import { FileSpreadsheet, User } from "lucide-react";
 
 interface ChatMessageProperties {
   role: Role;
@@ -20,10 +21,12 @@ export function ChatMessage({ role, content }: ChatMessageProperties) {
         {/* If its the user's message, make background blue */}
         {/* Otherwise, make background green */}
         <div
-          className={`w-8 h-8 rounded-full flex
+          className={`w-8 h-8 rounded-full flex items-center justify-center
             ${isUser ? "bg-blue-500 text-white" : "bg-green-500 text-white"}
         `}
-        ></div>
+        >
+          {isUser ? <User size={22} /> : <FileSpreadsheet size={22} />}
+        </div>
       </div>
 
       {/* Message contents */}

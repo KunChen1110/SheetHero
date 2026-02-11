@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Send } from "lucide-react";
 
 interface ChatInputProperties {
   onSendMessage: (message: string) => void;
@@ -62,7 +63,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
             type="submit"
             disabled={!input.trim() || disabled}
           >
-            Send {/* TODO his should probably be an icon <--- */}
+            <Send size={22} />
           </button>
         </div>
       </form>

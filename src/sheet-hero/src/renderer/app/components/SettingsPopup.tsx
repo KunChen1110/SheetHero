@@ -10,7 +10,7 @@ interface SettingsProperties {
   onSave: (apiKey: string, maxTurns: number, model: string) => void;
 }
 
-export function Settings({
+export function SettingsPopup({
   isOpen,
   apiKey,
   maxTurns,

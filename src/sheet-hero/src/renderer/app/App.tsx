@@ -3,7 +3,7 @@ import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
 import { ChatMessage } from "@/renderer/app/components/ChatMessage";
 import { ChatInput } from "@/renderer/app/components/ChatInput";
-import { Settings } from "@/renderer/app/components/Settings";
+import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
 import { MissingAPI } from "./components/MissingAPI";
 import { useSettings } from "@/util/storage";
 // import { api } from "@/util/api";
@@ -202,7 +202,7 @@ export default function App() {
       <div className="flex flex-1 flex-col p-12 pb-0">
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
-            {/* =-=-=  No API key overlay =-=-=  */}
+            {/* =-=-=  Missing API key overlay =-=-=  */}
             {!hasApiKey && <MissingAPI onSettingsClick={handleSettingsClick} />}
             <div className="max-w-4xl mx-auto space-y-5 py-5">
               {/* =-=-=  Messages container =-=-=  */}
@@ -223,7 +223,7 @@ export default function App() {
         />
       </div>
       {/* =-=-= Settings =-=-= */}
-      <Settings
+      <SettingsPopup
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         apiKey={settings.apiKey}

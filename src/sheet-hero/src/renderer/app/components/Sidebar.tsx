@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { ExcelFile, Chat } from "@/util/interfaces";
 import { FileDisplay } from "@/renderer/app/components/FileDisplay";
 import { ChatDisplay } from "./ChatDisplay";
+import { FileSpreadsheet, Settings, Upload } from "lucide-react";
 
 const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
@@ -87,12 +88,13 @@ export function Sidebar({
     <div className="w-75 bg-gray-900/80 border-r border-gray-800/50 flex flex-col h-full">
       {/* =-=-= Header =-=-=*/}
       <div className="p-4 border-b border-gray-800/50">
-        <div className="flex items-center p-3">
+        <div className="flex items-center p-3 gap-2">
+          <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
+            <FileSpreadsheet size={26} className="text-white" />
+          </div>
           <div className="flex-1 min-w-0">
             <div className="text-base font-semibold text-white">Sheet Hero</div>
             <div className="text-xs text-green-400">Spreadsheet AI</div>
-
-            {/* TODO Put logo or smtnh here */}
           </div>
         </div>
 
@@ -107,9 +109,13 @@ export function Sidebar({
         />
 
         <button
+          className="flex w-full items-center gap-2 bg-gray-900 p-4 rounded-lg border border-gray-700/50 text-white hover:border-green-600/30 hover:bg-gray-800/80 transition-all"
           onClick={() => fileInputRef.current?.click()}
-          className="flex w-full items-center bg-gray-900 p-4 rounded-lg border border-gray-700/50 text-white hover:border-green-600/30 hover:bg-gray-800/80 transition-all"
         >
+          <Upload
+            size={18}
+            className="text-gray-400 group-hover:text-green-400 transition-colors"
+          />
           <span className="text-sm font-medium">Upload Files</span>
         </button>
       </div>
@@ -136,11 +142,10 @@ export function Sidebar({
       <div className="p-4 border-t border-gray-800/50">
         {/* Settings button */}
         <button
-          className="w-full flex items-center p-4 rounded-lg bg-gray-900 hover:bg-gray-800/80 border border-gray-700/50 hover:border-green-600/20 transition-all"
+          className="w-full flex items-center p-4 gap-2 rounded-lg bg-gray-900 hover:bg-gray-800/80 border border-gray-700/50 hover:border-green-600/20 transition-all"
           onClick={onSettingsClick}
         >
-          {/* TODO Put settings icon here */}
-
+          <Settings size={18} className="text-gray-400" />
           <span className="text-sm text-gray-200">Settings</span>
         </button>
       </div>
