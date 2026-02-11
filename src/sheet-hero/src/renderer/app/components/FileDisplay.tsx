@@ -1,4 +1,5 @@
 import { ExcelFile } from "@/util/interfaces";
+import { FileSpreadsheet } from "lucide-react";
 
 interface DragAndDropProperties {
   files: ExcelFile[];
@@ -49,7 +50,9 @@ export function FileDisplay({
 
       {files.length === 0 ? (
         <div className="text-center p-5">
-          {/* TODO Put some icon here */}
+          <div className="w-10 h-10 rounded-lg bg-gray-800/50 flex items-center justify-center mx-auto mb-2">
+            <FileSpreadsheet size={20} className="text-gray-600" />
+          </div>
           {/* Display drag & drop instructions */}
           <p className="text-xs text-gray-500">No files uploaded</p>
           <p className="text-xs text-gray-600">Drag & drop here</p>
