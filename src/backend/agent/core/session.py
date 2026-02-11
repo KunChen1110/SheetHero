@@ -20,3 +20,7 @@ class SheetHeroSession:
     context_understanding: Optional[str] = None
     workbooks: Optional[Dict[str, Any]] = None
     result: Optional[Any] = None
+
+    # Used for UI display
+    ui_thoughts: list[dict] = field(default_factory=list)
+    ui_thought_cursor: int = 0
