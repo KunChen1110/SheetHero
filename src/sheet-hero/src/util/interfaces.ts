@@ -1,17 +1,12 @@
 export enum Role {
-    USER,
-    ASSISTANT,
+  USER,
+  ASSISTANT,
 }
 
 export interface Chat {
   id: string;
   title: string;
   messages: Message[];
-}
-
-export interface ChatsData {
-  chats: Chat[];
-  activeChatId: string;
 }
 
 export interface Message {
