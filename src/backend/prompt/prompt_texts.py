@@ -389,11 +389,23 @@ Question:
 User reply:
 <<reply>>
 
-Rules:
+You MUST reason in this order:
+STEP 1 — Interpret user reply
+- Rewrite the user reply into a full explicit answer using the question context.
+- This is required especially when the reply is short, numeric, yes/no, or implicit.
+
+STEP 2 — Match decision
+- Decide whether the interpreted answer directly addresses the question.
+
+STEP 3 — Action extraction
+- If MATCH=YES, extract one clear cleaning instruction.
+- If the interpreted answer means "no change needed", output ACTION as NO_OP.
+
+Output Rules:
 - Output exactly two lines.
 - Line 1: MATCH: YES or NO
 - Line 2: ACTION: <one clear cleaning instruction sentence>, NO_OP, or ACTION:
-- If the reply indicates no change is needed, treat as MATCH = YES and ACTION = NO_OP.
+- If the interpreted answer indicates no change is needed, treat as MATCH = YES and ACTION = NO_OP.
 - If YES and ACTION is not NO_OP, it must specify file, sheet, column(s), and operation.
 - If NO, ACTION should be empty.
 """)
