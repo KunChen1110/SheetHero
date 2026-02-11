@@ -1,13 +1,15 @@
 import { useRef } from "react";
 import { ExcelFile, Chat } from "@/util/interfaces";
+import { FileDisplay } from "@/renderer/app/components/FileDisplay";
+import { ChatDisplay } from "./ChatDisplay";
 
 const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
 interface SidebarProperties {
-  onSettingsClick?: () => void;
+  onSettingsClick: () => void;
   onFilesChange: (files: ExcelFile[]) => void;
-  onChatSelect?: (chatId: string) => void;
-  onNewChat?: () => void;
+  onChatSelect: (chatId: string) => void;
+  onNewChat: () => void;
   files: ExcelFile[];
   chats: Chat[];
   activeChat?: string;
@@ -27,9 +29,9 @@ function getAcceptAttribute(): string {
 
 // Gets the extension name of a file
 function getFileExtension(fileName: string): string {
-  const parts = fileName.split(".");
+  const extension = fileName.split(".");
 
-  if (parts.length > 1) return parts.pop()!;
+  if (extension.length > 1) return extension.pop()!;
   else return "";
 }
 
@@ -57,16 +59,6 @@ export function Sidebar({
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  // Adds a file when dropped into the drap & drop container
-  function handleDrop(event: React.DragEvent): void {
-    event.preventDefault();
-
-    const droppedFiles = Array.from(event.dataTransfer.files).filter((file) =>
-      isAcceptedFileType(getFileExtension(file.name)),
-    );
-    addFiles(droppedFiles);
-  }
-
   // Adds a file to the file list
   function addFiles(newFiles: File[]): void {
     const currentMaxIndex =
@@ -88,16 +80,6 @@ export function Sidebar({
       index: idx + 1,
     }));
     onFilesChange(reindexedFiles);
-  }
-
-  // Makes the drag & drop functionality work properly
-  function handleDragOver(event: React.DragEvent): void {
-    event.preventDefault();
-  }
-
-  // Makes the drag & drop functionality work properly
-  function handleDragLeave(event: React.DragEvent): void {
-    event.preventDefault();
   }
 
   // HTML for the sidebar
@@ -134,109 +116,20 @@ export function Sidebar({
 
       {/* =-=-= Scrollable area for files & chat history =-=-= */}
       <div className="flex-1 overflow-y-auto relative">
-        {/* =-=-= Active files box =-=-= */}
-        <div
-          className="p-3 border-b border-gray-800/30"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-        >
-          <div className="flex items-center justify-between p-1">
-            <h3 className="text-xs font-semibold text-gray-400 py-1">FILES</h3>
+        {/* =-=-= File display =-=-= */}
+        <FileDisplay
+          files={files}
+          onAddFiles={addFiles}
+          onRemoveFile={removeFile}
+        />
 
-            {files.length > 0 && (
-              <span className="text-xs text-gray-500">{files.length}</span>
-            )}
-          </div>
-
-          {/* If there are no files, display drag & drop instructions */}
-          {/* Otherwise, display all the files in the file array */}
-
-          {files.length === 0 ? (
-            <div className="text-center p-5">
-              {/* TODO Put some icon here */}
-              {/* Display drag & drop instructions */}
-              <p className="text-xs text-gray-500">No files uploaded</p>
-              <p className="text-xs text-gray-600">Drag & drop here</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/80 border border-gray-700/30 hover:border-green-600/30"
-                >
-                  {/* =-=-= File display capsule =-=-= */}
-                  <div className="w-5 h-5 rounded bg-green-600/20 flex items-center justify-center">
-                    <span className="text-xs font-bold text-green-400">
-                      {file.index}
-                    </span>
-                  </div>
-
-                  {/* File name */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-gray-200" title={file.name}>
-                      {file.name}
-                    </div>
-                  </div>
-
-                  {/* File remove button */}
-                  <button
-                    className="p-1 hover:bg-red-500/20 rounded"
-                    onClick={() => removeFile(file.id)}
-                  >
-                    X {/* TODO <-- Make this an icon */}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* =-=-= Chat history box =-=-= */}
-        <div className="p-3">
-          {/* Chats title */}
-          <div className="flex items-center justify-between p-1">
-            <h3 className="text-xs font-semibold text-gray-400 py-1">CHATS</h3>
-
-            {/* Create new chat button */}
-            <button
-              onClick={onNewChat}
-              className="text-xs text-gray-500 hover:text-green-400 transition-colors"
-            >
-              + New
-            </button>
-          </div>
-
-          {/* If there are no chats, display no chat history */}
-          {/* Otherwise, display all the chats in the chat array */}
-          {chats.length === 0 ? (
-            <div className="text-center p-3">
-              {/* TODO Put some icon here */}
-              <p className="text-xs text-gray-500">No chat history</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {chats.map((chat) => (
-                <button
-                  key={chat.id}
-                  onClick={() => onChatSelect?.(chat.id)}
-                  className={`w-full flex p-4 rounded-lg text-left 
-                      ${
-                        activeChat === chat.id
-                          ? "bg-gray-800/80 border border-green-600/30"
-                          : "hover:bg-gray-800/20"
-                      }
-                    `}
-                >
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-200">{chat.title}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* =-=-= Chat display =-=-= */}
+        <ChatDisplay
+          chats={chats}
+          activeChat={activeChat}
+          onChatSelect={onChatSelect}
+          onNewChat={onNewChat}
+        />
       </div>
 
       {/* =-=-= Footer =-=-= */}

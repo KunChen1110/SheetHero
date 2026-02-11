@@ -4,6 +4,7 @@ import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
 import { ChatMessage } from "@/renderer/app/components/ChatMessage";
 import { ChatInput } from "@/renderer/app/components/ChatInput";
 import { Settings } from "@/renderer/app/components/Settings";
+import { MissingAPI } from "./components/MissingAPI";
 import { useSettings } from "@/util/storage";
 // import { api } from "@/util/api";
 
@@ -36,7 +37,7 @@ export default function App() {
   // If the model is considered to be typing or not
   const [isTyping, setIsTyping] = useState(false);
 
-  // Used to ensure the chat always scrolls to the bottom of the chat box
+  // Reference used to scroll to the bottom of the chat box
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // The currently active chat
@@ -199,35 +200,12 @@ export default function App() {
 
       {/* =-=-= Main chat =-=-= */}
       <div className="flex flex-1 flex-col p-12 pb-0">
-        {/* =-=-= Messages container =-=-= */}
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
             {/* =-=-=  No API key overlay =-=-=  */}
-            {!hasApiKey && (
-              <div className="bg-linear-to-r from-yellow-900/40 to-red-900/40 border-b border-yellow-600/30 backdrop-blur-sm rounded-3xl">
-                <div className="max-w-4xl mx-auto p-5">
-                  <div className="flex items-start">
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-yellow-200">
-                        API Key Required
-                      </h3>
-                      <p className="text-sm text-yellow-100/80 py-2">
-                        Please configure your API key in settings to start
-                        usings SheetHero.
-                      </p>
-                      <button
-                        onClick={handleSettingsClick}
-                        className="p-3 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium rounded-lg transition-colors shadow-lg"
-                      >
-                        Open Settings
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="max-w-4xl mx-auto space-y-2">
+            {!hasApiKey && <MissingAPI onSettingsClick={handleSettingsClick} />}
+            <div className="max-w-4xl mx-auto space-y-5 py-5">
+              {/* =-=-=  Messages container =-=-=  */}
               {messages.map((message) => (
                 <ChatMessage
                   key={message.id}
