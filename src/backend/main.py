@@ -7,6 +7,7 @@ from typing import Any
 
 from .config.settings import Config
 from .service.sheethero_service import SheetHeroService
+from .service.stream_dialogue_driver import StreamDialogueDriver
 
 
 @dataclass
@@ -102,19 +103,38 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
         print("Error: prompt not set.")
         return
 
-    result = service.submit_turn(
-        prompt=buffer.prompt or "",
-        excel_paths=buffer.excel_paths,
-    )
+    driver = StreamDialogueDriver(service)
+    stream = driver.start(buffer.prompt or "", buffer.excel_paths)
 
-    while result.get("type") == "clarification":
-        question = str(result.get("message") or "Please clarify your request.")
-        user_reply = input(f"Agent: {question}\nYou: ")
-        result = service.submit_clarification(user_reply)
+    while True:
+        stream_terminated = True
+        for event in stream:
+            stream_terminated = False
+            event_type = str(event.get("type") or "")
+            stage = event.get("stage")
+            if stage:
+                print(f"[{event_type}] stage={stage}")
+            elif event_type == "progress":
+                print("[progress]")
 
-    print(f"Agent: {result.get('message')}")
-    if result.get("type") != "error":
-        buffer.clear()
+            thoughts = event.get("ui_thoughts")
+            if isinstance(thoughts, list) and thoughts:
+                print(f"[ui_thoughts] +{len(thoughts)}")
+
+            if event_type == "clarification":
+                question = str(event.get("message") or "Please clarify your request.")
+                user_reply = input(f"Agent: {question}\nYou: ")
+                stream = driver.reply(user_reply)
+                break
+
+            if event_type in {"final", "error"}:
+                print(f"Agent: {event.get('message')}")
+                if event_type != "error":
+                    buffer.clear()
+                return
+        if stream_terminated:
+            print("Error: stream ended without clarification/final/error.")
+            return
 
 
 def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line: str) -> None:
