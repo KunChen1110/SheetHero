@@ -158,11 +158,18 @@ class QualityAssuranceStage:
         action = ""
         for line in content.splitlines():
             line = line.strip()
-            if line.upper().startswith("MATCH:"):
-                value = line.split(":", 1)[1].strip().upper()
-                match = value == "YES"
-            if line.upper().startswith("ACTION:"):
-                action = line.split(":", 1)[1].strip()
+            if not line:
+                continue
+            upper = line.upper()
+            if upper.startswith("MATCH:") or upper.startswith("MATCH ="):
+                parts = line.split(":", 1) if ":" in line else line.split("=", 1)
+                if len(parts) == 2:
+                    value = parts[1].strip().upper()
+                    match = value == "YES"
+            if upper.startswith("ACTION:") or upper.startswith("ACTION ="):
+                parts = line.split(":", 1) if ":" in line else line.split("=", 1)
+                if len(parts) == 2:
+                    action = parts[1].strip()
         if match and action.lower() in {"", "none", "no_op", "no action", "ignore", "keep", "keep as-is", "as-is"}:
             action = "NO_OP"
         return match, action

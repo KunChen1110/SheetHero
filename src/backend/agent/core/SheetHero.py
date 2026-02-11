@@ -1,6 +1,5 @@
 """SheetHero orchestrator class."""
 import os
-import re
 from typing import Any, Dict, List, Optional, Union
 
 from openai import OpenAI
@@ -25,6 +24,7 @@ from ...stages.understanding.stage import UnderstandingStage
 from ...stages.understanding.context_builder import ExcelContextBuilder
 from ...stages.validation.stage import ValidationStage
 from .session import SheetHeroSession
+from ..utils.context_extractor import ContextExtractor
 
 
 class SheetHero:
@@ -163,10 +163,18 @@ class SheetHero:
             if init_result is not None:
                 return init_result
 
+        # ========== UNDERSTANDING ==========
+        if session.state == "understanding":
+            return self._handle_understanding(session, current_request)
+
+        # ========== DIAGNOSING ==========
+        if session.state == "diagnosing":
+            return self._handle_diagnosing(session, current_request)
+
         # ========== QA ==========
         if session.state == "qa":
             if user_input is None:
-                return {"type": "clarification", "message": "Please clarify your request."}
+                return {"type": "clarification", "stage": "qa", "message": "Please clarify your request."}
 
             return self._handle_qa(session, user_input, qa_stage)
 
@@ -287,7 +295,6 @@ class SheetHero:
                 session.result = {"final_answer": message}
                 session.state = "done"
                 return {"type": "final", "result": session.result, "message": message}
-
             if self.progress_logger:
                 self.progress_logger.log(
                     f"[INTERACT] case=4 proceed_with_workbook context=\"{(session.context_understanding or '').strip()}\"",
@@ -297,17 +304,26 @@ class SheetHero:
         else:
             session.workbooks = self.sandbox.workbooks
 
+        session.state = "understanding"
+        return {"type": "progress", "stage": "understanding"}
+
+    def _handle_understanding(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
         excel_context = ExcelContextBuilder(
             self._get_context_paths(session),
             session.workbooks
         ).build(self.config.total_token_budget)
 
+        self._append_ui_thought(session, "understanding", "running", "Understanding workbook/task context")
         session.understanding = self.understanding_module.run(
             current_request,
             excel_context,
             session.context_understanding
         )
+        self._append_ui_thought(session, "understanding", "done", session.understanding or "")
+        session.state = "diagnosing"
+        return {"type": "progress", "stage": "diagnosing"}
 
+    def _handle_diagnosing(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
         wb_view = self.sandbox.get_workbook_view()
         decision = self.diagnose_router.decide(
             user_question=current_request,
@@ -316,10 +332,12 @@ class SheetHero:
         )
 
         if decision.should_diagnose:
+            self._append_ui_thought(session, "diagnosing", "running", "Diagnosing data quality risks")
             question_list = self.diagnose_module.run_readonly(
                 workbooks=wb_view,
                 user_task=current_request
             )
+            self._append_ui_thought(session, "diagnosing", "done", question_list)
 
             qa_stage = QualityAssuranceStage(
                 self.client,
@@ -333,12 +351,18 @@ class SheetHero:
             question = qa_stage.next_question()
             if question:
                 session.state = "qa"
-                return {"type": "clarification", "message": question}
+                return {"type": "clarification", "stage": "qa", "message": question}
 
             qa_stage.finalize_decision()
             session.state = "cleaning"
             return {"type": "progress", "stage": "cleaning"}
 
+        self._append_ui_thought(
+            session,
+            "diagnosing",
+            "skipped",
+            "No blocking data quality clarification required"
+        )
         session.state = "executing"
         return {"type": "progress", "stage": "executing"}
 
@@ -355,12 +379,13 @@ class SheetHero:
             if followup:
                 return {
                     "type": "clarification",
+                    "stage": "qa",
                     "message": f"{hint}\n\nPlease answer this question:\n{followup}",
                 }
             qa_stage.clear_last_mismatch()
         question = qa_stage.next_question()
         if question:
-            return {"type": "clarification", "message": question}
+            return {"type": "clarification", "stage": "qa", "message": question}
 
         qa_stage.finalize_decision()
         session.state = "cleaning"
@@ -369,10 +394,13 @@ class SheetHero:
     def _handle_cleaning(self, session: SheetHeroSession,
                          qa_stage: Optional[QualityAssuranceStage],
                          current_request: str) -> Dict[str, Any]:
+        actions = qa_stage.export_cleaning_actions() if qa_stage else []
+        self._append_ui_thought(session, "cleaning", "running", actions)
         self.cleaning_module.apply(
             sandbox=self.sandbox,
-            actions=qa_stage.export_cleaning_actions() if qa_stage else []
+            actions=actions
         )
+        self._append_ui_thought(session, "cleaning", "done", actions)
         if qa_stage:
             qa_stage.clear_cleaning_actions()
         session.state = "executing"
@@ -388,16 +416,39 @@ class SheetHero:
             self._get_context_paths(session),
             session.workbooks
         ).build(self.config.total_token_budget)
+        self._append_ui_thought(session, "executing", "running", "Generating and running execution code")
         execution_result = self.execution_module.run(
             user_query=user_query,
             execution_context=execution_context,
             understanding_output=understanding_output
         )
+        self._append_ui_thought(
+            session,
+            "executing",
+            "done",
+            {
+                "success": execution_result.get("success"),
+                "answer": execution_result.get("answer"),
+                "total_turns": execution_result.get("total_turns"),
+            },
+        )
+        self._append_ui_thought(session, "validation", "running", "Validating execution result")
         validation_result = self.validation_module.run(
             execution_result=execution_result,
             user_query=user_query,
             understanding_output=understanding_output,
             execution_context=execution_context
+        )
+        self._append_ui_thought(
+            session,
+            "validation",
+            "done",
+            {
+                "validation_passed": validation_result.get("validation_passed"),
+                "confidence_score": validation_result.get("confidence_score"),
+                "requires_reexecution": validation_result.get("requires_reexecution"),
+                "issues_found": validation_result.get("issues_found", []),
+            },
         )
 
         session.result = {
@@ -409,10 +460,13 @@ class SheetHero:
             )
         }
 
+        extracted_context = ContextExtractor.extract_workbook_purpose_domain(
+            session.understanding or ""
+        ).strip()
+        if extracted_context:
+            session.context_understanding = extracted_context
+
         if validation_result.get("validation_passed"):
-            session.context_understanding = self._extract_workbook_purpose_domain(
-                session.understanding or ""
-            )
             session.state = "done"
         else:
             if not validation_result.get("requires_reexecution", True):
@@ -427,6 +481,21 @@ class SheetHero:
         self._qa_sessions.pop(session.session_id, None)
         self._log_final_report(session)
         return {"type": "final", "result": session.result}
+
+    @staticmethod
+    def _append_ui_thought(
+        session: SheetHeroSession,
+        stage: str,
+        status: str,
+        content: Any,
+    ) -> None:
+        session.ui_thoughts.append(
+            {
+                "stage": stage,
+                "status": status,
+                "content": content,
+            }
+        )
 
     # Specify the rule of writing output
     def _build_output_instruction(self) -> str:
@@ -497,14 +566,3 @@ class SheetHero:
                 lines.append(f"- {issue}")
         lines.append("Please clarify or provide additional context.")
         return "\n".join(lines)
-
-    @staticmethod
-    def _extract_workbook_purpose_domain(understanding_output: str) -> str:
-        if not understanding_output:
-            return ""
-        pattern = re.compile(r"\*\*Workbook Purpose & Domain\*\*\s*:\s*(.+)")
-        for line in understanding_output.splitlines():
-            match = pattern.search(line.strip())
-            if match:
-                return match.group(1).strip()
-        return ""
