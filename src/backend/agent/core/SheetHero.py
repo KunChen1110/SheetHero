@@ -375,16 +375,6 @@ class SheetHero:
         )
         if qa_stage:
             qa_stage.clear_cleaning_actions()
-        if self.cleaning_module.last_run_affects_schema():
-            understanding_context = ExcelContextBuilder(
-                self._get_context_paths(session),
-                session.workbooks
-            ).build(self.config.total_token_budget)
-            session.understanding = self.understanding_module.run(
-                current_request,
-                understanding_context,
-                session.context_understanding
-            )
         session.state = "executing"
         return {"type": "progress", "stage": "executing"}
 
