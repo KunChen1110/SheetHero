@@ -112,3 +112,24 @@
   - Removed verbose comments from `core/__init__.py`
   - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
 
+## 6/2/2026
+### --- Added ---
+- Added local LLM integration layer
+  - Implemented interface to call local LLM backends
+  - Extended runtime pipeline to support local inference execution
+
+## 12/2/2026
+### --- Added ---
+- Introduced dedicated prompt modules for online and offline modes
+  - `prompt_texts_online.py` now contains all default/online prompt templates.
+  - `prompt_texts_offline.py` defines stricter offline prompts with verification-heavy guardrails.
+- Added offline-specific execution guardrails and merge playbook
+  - Enforced 6-step offline execution checklist (inventory, schema resolution, type checks, coverage proof, and output writing).
+  - Added explicit column alias resolution, missing-value policy, and date coverage checks.
+  - Added an offline merge/concat playbook to reduce hallucinations around multi-file joins.
+
+### --- Changed ---
+- Updated execution response formats for both online and offline modes
+  - Online execution is now code-only and must always write an Output sheet and save the workbook via `save_workbook_to(output_path)`, returning the saved file path.
+  - Offline execution is now strictly code-only as well, disallowing free-form natural language "Final Answer" responses.
+- Refactored `prompt_data.py` to import shared building blocks from `prompt_texts_online.py` and offline-only pieces from `prompt_texts_offline.py`.
