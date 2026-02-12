@@ -17,6 +17,7 @@ options: List[str] = [
     "gpt-4o",
     "qwen2.5:7b-instruct",  # Ollama / local Qwen2.5 7B
     "qwen2.5-coder:7b-instruct",
+    "qwen2.5-coder:14b-instruct",
 ]
 
 from frontend.components.colors import GREEN
