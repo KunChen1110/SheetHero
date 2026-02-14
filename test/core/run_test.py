@@ -3,7 +3,7 @@
 Dataset Runner - Unified Test Execution Script
 
 Usage:
-    python3 datasetRun.py --test-n 1
+    python3 test/core/run_test.py --test-n 1
 """
 
 import sys
@@ -13,6 +13,10 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # Suppress all logging output to console BEFORE importing other modules
 logging.getLogger().setLevel(logging.CRITICAL)
 root_logger = logging.getLogger()
@@ -20,9 +24,9 @@ for handler in root_logger.handlers[:]:
     if isinstance(handler, logging.StreamHandler):
         root_logger.removeHandler(handler)
 
-from .agent.core.SheetHero import SheetHero
-from .config.settings import Config
-from .agent.io.formatter import OutputFormatter
+from src.backend.agent.core.SheetHero import SheetHero
+from src.backend.config.settings import Config
+from src.backend.agent.io.formatter import OutputFormatter
 
 # Suppress all logging output AFTER importing modules (to catch any loggers created during import)
 logging.getLogger().setLevel(logging.CRITICAL)
@@ -82,15 +86,7 @@ class DatasetRunner:
         if expected_output_file is None:
             expected_output_file = []
 
-        if spreadsheets:
-            first_input = self.dataset_dir / spreadsheets[0]
-            output_dir = first_input.parent
-        elif expected_output_file and len(expected_output_file) > 0:
-            expected_path = self.dataset_dir / expected_output_file[0]
-            output_dir = expected_path.parent
-        else:
-            task_num = task_id.replace("Test ", "").strip()
-            output_dir = self.dataset_dir / f"Task{task_num.zfill(2)}"
+        output_dir = PROJECT_ROOT / "artifacts" / "output"
 
         output_filename = task_id.lower().replace(" ", "") + "_output.xlsx"
         output_path = output_dir / output_filename
@@ -156,9 +152,7 @@ def main():
         if args.dataset_dir:
             dataset_dir = Path(args.dataset_dir).resolve()
         else:
-            current_dir = Path(__file__).parent
-            project_root = current_dir.parent.parent
-            dataset_dir = project_root / "dataset"
+            dataset_dir = PROJECT_ROOT / "dataset"
 
         if not dataset_dir.exists():
             raise FileNotFoundError(f"Dataset directory not found: {dataset_dir}")
