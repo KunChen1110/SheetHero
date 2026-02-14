@@ -4,10 +4,10 @@ Batch dataset tester.
 
 Usage examples:
     # Run specific tests (Test 1~5)
-    python3 test_user_case.py --tests 1 2 3 4 5
+    python3 test/core/test_user_case.py --tests 1 2 3 4 5
 
     # Run a continuous range (Test 1~10)
-    python3 test_user_case.py --range 1 10
+    python3 test/core/test_user_case.py --range 1 10
 
 Outputs:
     - test/output.json
@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATASET_RUN = PROJECT_ROOT / "src" / "backend" / "datasetRun.py"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATASET_RUN = PROJECT_ROOT / "test" / "core" / "run_test.py"
 DATASET_DIR = PROJECT_ROOT / "dataset"
 TEST_OUTPUT_DIR = PROJECT_ROOT / "test"
 SUMMARY_JSON = TEST_OUTPUT_DIR / "output.json"
@@ -37,7 +37,7 @@ SUMMARY_JSON = TEST_OUTPUT_DIR / "output.json"
 def get_expected_output_path_for_test(test_n: int) -> Path | None:
     """
     Reconstruct the expected Excel output path for a given test number,
-    using the same logic as src/backend/datasetRun.py, but without
+    using the same logic as test/core/run_test.py, but without
     modifying or importing it.
     """
     json_path = DATASET_DIR / "dataset.json"
@@ -63,7 +63,7 @@ def get_expected_output_path_for_test(test_n: int) -> Path | None:
     spreadsheets = task.get("spreadsheets") or []
     expected_output_file = task.get("expected_output_file") or []
 
-    # Mirror datasetRun.determine_output_path logic
+    # Mirror run_test.determine_output_path logic
     if spreadsheets:
         first_input = DATASET_DIR / spreadsheets[0]
         output_dir = first_input.parent
@@ -81,7 +81,7 @@ def get_expected_output_path_for_test(test_n: int) -> Path | None:
 
 def run_single_test(test_n: int, output_mode: str) -> Dict[str, Any]:
     """
-    Run a single TestN by invoking datasetRun.py as a subprocess.
+    Run a single TestN by invoking run_test.py as a subprocess.
 
     This does NOT modify any backend code. It simply shells out to the
     existing runner and captures stdout/stderr and return code.
@@ -288,7 +288,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         choices=["file", "text"],
         default="file",
-        help="Output mode to use when calling datasetRun.py: "
+        help="Output mode to use when calling run_test.py: "
              "'file' (default) to generate Excel outputs, or 'text' to only "
              "produce textual answers without writing result workbooks.",
     )
@@ -299,7 +299,7 @@ def main() -> None:
     args = parse_args()
 
     if not DATASET_RUN.exists():
-        print(f"datasetRun.py not found at: {DATASET_RUN}", file=sys.stderr)
+        print(f"run_test.py not found at: {DATASET_RUN}", file=sys.stderr)
         sys.exit(1)
 
     # Decide which test numbers to run
