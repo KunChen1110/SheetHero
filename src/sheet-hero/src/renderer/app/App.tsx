@@ -34,8 +34,17 @@ export default function App() {
   // The array of excel file interfaces active being used for query
   const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
 
-  // If the model is considered to be typing or not
+  // If the model is considered to be typing
   const [isTyping, setIsTyping] = useState(false);
+
+  // If the model is considered to be waiting for a reply from the user
+  const [isWaiting, setIsWaiting] = useState(false);
+
+  // If the settings display is currently open
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // The session id in use, used for individual backend sessions
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Reference used to scroll to the bottom of the chat box
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,9 +54,6 @@ export default function App() {
 
   // The active chat's messages, if it has any
   const messages = activeChat?.messages || [];
-
-  // If the settings display is currently open
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // If there is an API key in use
   const hasApiKey = settings.apiKey.trim().length > 0;
@@ -93,7 +99,6 @@ export default function App() {
     return words.length > 30 ? words.substring(0, 30) + "..." : words;
   }
 
-  // Creates a new chat
   function createNewChat(): void {
     const newChat: Chat = {
       id: Date.now().toString(),
@@ -108,9 +113,11 @@ export default function App() {
     };
     setChats((prev) => [newChat, ...prev]);
     setActiveChatId(newChat.id);
+    // Reset session for new chat
+    setSessionId(null);
+    setIsWaiting(false);
   }
 
-  // Creates a new message inside of current chat
   async function createNewMessage(content: string): Promise<void> {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -118,7 +125,6 @@ export default function App() {
       content,
     };
 
-    // Update current chat with new message
     setChats((prevChats) =>
       prevChats.map((chat) =>
         chat.id === activeChatId
@@ -136,10 +142,16 @@ export default function App() {
 
     setIsTyping(true);
 
-    // Begin generating a response,
     try {
-      // Wait for backend response
-      const assistantContent = await generateResponse(content);
+      let assistantContent: string;
+
+      if (isWaiting && sessionId) {
+        // This is a reply to a clarification question
+        assistantContent = await sendReply(content);
+      } else {
+        // This is a new conversation start
+        assistantContent = await startConversation(content);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -147,7 +159,6 @@ export default function App() {
         content: assistantContent,
       };
 
-      // Update chat with assistant message
       setChats((prevChats) =>
         prevChats.map((chat) =>
           chat.id === activeChatId
@@ -157,27 +168,72 @@ export default function App() {
       );
     } catch (error) {
       console.error(error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: Role.ASSISTANT,
+        content: "Error: Could not get response from backend",
+      };
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === activeChatId
+            ? { ...chat, messages: [...chat.messages, errorMessage] }
+            : chat,
+        ),
+      );
     } finally {
       setIsTyping(false);
     }
   }
 
-  // Response logic
-  async function generateResponse(userMessage: string): Promise<string> {
-    try {
-      const result = await api.post("/sheet-hero/run", {
-        api_key: settings.apiKey,
-        model: settings.model,
-        max_turns: settings.maxTurns,
-        prompt: userMessage,
-        excel_paths: excelFiles.map((f) => f.path),
-      });
-      console.log(result);
-      return result.data.result.message;
-    } catch (error) {
-      console.error(error);
-      return "Error: Could not get response from backend";
+  async function startConversation(userMessage: string): Promise<string> {
+    const newSessionId = Date.now().toString();
+    setSessionId(newSessionId);
+
+    const result = await api.post("/sheet-hero/start", {
+      session_id: newSessionId,
+      api_key: settings.apiKey,
+      model: settings.model,
+      max_turns: settings.maxTurns,
+      prompt: userMessage,
+      excel_paths: excelFiles.map((f) => f.path),
+    });
+
+    return processEvents(result.data.events);
+  }
+
+  async function sendReply(userReply: string): Promise<string> {
+    if (!sessionId) {
+      throw new Error("No active session");
     }
+
+    const result = await api.post("/sheet-hero/reply", {
+      session_id: sessionId,
+      user_reply: userReply,
+    });
+
+    return processEvents(result.data.events);
+  }
+
+  function processEvents(events: Record<string, string>[]): string {
+    for (const event of events) {
+      const type = event.type;
+
+      if (type === "clarification") {
+        setIsWaiting(true);
+        return event.message;
+      }
+
+      if (type === "final" || type === "error") {
+        setIsWaiting(false);
+        if (sessionId) {
+          api.delete(`/sheet-hero/session/${sessionId}`).catch(console.error);
+          setSessionId(null);
+        }
+        return event.message;
+      }
+    }
+
+    return "Processing...";
   }
 
   // HTML for the app
