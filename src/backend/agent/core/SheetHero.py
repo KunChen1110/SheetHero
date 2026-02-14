@@ -258,7 +258,6 @@ class SheetHero:
         if not active_workbooks and self.has_excel:
             active_workbooks = self.sandbox.workbooks
             session.current_workbooks = active_workbooks
-            session.workbooks = active_workbooks
 
         if not active_workbooks:
             needs_spreadsheet = self.interact_module.needs_spreadsheet(current_request)
@@ -281,7 +280,6 @@ class SheetHero:
                 )
                 if matches_context:
                     session.current_workbooks = session.previous_workbooks
-                    session.workbooks = session.previous_workbooks
                     active_workbooks = session.current_workbooks
                 else:
                     session.context_understanding = self.interact_module.summarize_context(
@@ -320,7 +318,6 @@ class SheetHero:
             )
         self._hydrate_sandbox_from_session(active_workbooks)
         session.current_workbooks = active_workbooks
-        session.workbooks = active_workbooks
 
         session.state = "understanding"
         return {"type": "progress", "stage": "understanding"}
