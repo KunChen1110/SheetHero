@@ -186,6 +186,10 @@ class SheetHero:
         if session.state == "executing":
             return self._handle_execution(session, current_request)
 
+        # ========== VALIDATION ==========
+        if session.state == "validation":
+            return self._handle_validation(session, current_request)
+
         if session.state == "done":
             return {"type": "final", "result": session.result}
 
@@ -195,14 +199,16 @@ class SheetHero:
         if not self.progress_logger:
             return
         context = (session.context_understanding or "").strip() or "<empty>"
-        wb_summary = self._summarize_workbooks(session.workbooks)
+        current_wb_summary = self._summarize_workbooks(session.current_workbooks)
+        previous_wb_summary = self._summarize_workbooks(session.previous_workbooks)
         safe_request = (current_request or "").replace("`", "'").strip() or "<empty>"
         self.progress_logger.log_raw(
             "\n### [SESSION CONTEXT]\n"
             f"- state: `{session.state}`\n"
             f"- request: `{safe_request}`\n"
             f"- context_understanding:\n```\n{context}\n```\n"
-            f"- workbooks: `{wb_summary}`\n"
+            f"- current_workbooks: `{current_wb_summary}`\n"
+            f"- previous_workbooks: `{previous_wb_summary}`\n"
         )
 
     @staticmethod
@@ -247,7 +253,14 @@ class SheetHero:
         self.progress_logger.log("=" * 80, to_terminal=False)
 
     def _handle_init(self, session: SheetHeroSession, current_request: str) -> Optional[Dict[str, Any]]:
-        if not self.has_excel:
+        active_workbooks = session.get_active_workbooks()
+
+        if not active_workbooks and self.has_excel:
+            active_workbooks = self.sandbox.workbooks
+            session.current_workbooks = active_workbooks
+            session.workbooks = active_workbooks
+
+        if not active_workbooks:
             needs_spreadsheet = self.interact_module.needs_spreadsheet(current_request)
             if not needs_spreadsheet:
                 if self.progress_logger:
@@ -261,7 +274,33 @@ class SheetHero:
                 session.state = "done"
                 return {"type": "final", "result": session.result, "message": response}
 
-            if not session.workbooks:
+            if session.previous_workbooks:
+                matches_context = self.interact_module.context_matches(
+                    current_request,
+                    session.context_understanding or ""
+                )
+                if matches_context:
+                    session.current_workbooks = session.previous_workbooks
+                    session.workbooks = session.previous_workbooks
+                    active_workbooks = session.current_workbooks
+                else:
+                    session.context_understanding = self.interact_module.summarize_context(
+                        current_request
+                    )
+                    if self.progress_logger:
+                        self.progress_logger.log(
+                            f"[INTERACT] case=3 context_mismatch context=\"{session.context_understanding}\"",
+                            to_terminal=False
+                        )
+                    message = (
+                        "Your request seems to switch to a different analysis topic. "
+                        "Please confirm whether to switch Excel files, or upload a new Excel file."
+                    )
+                    session.result = {"final_answer": message}
+                    session.state = "done"
+                    return {"type": "final", "result": session.result, "message": message}
+
+            if not active_workbooks:
                 session.context_understanding = self.interact_module.summarize_context(
                     current_request
                 )
@@ -274,43 +313,23 @@ class SheetHero:
                 session.result = {"final_answer": message}
                 session.state = "done"
                 return {"type": "final", "result": session.result, "message": message}
-
-            matches_context = self.interact_module.context_matches(
-                current_request,
-                session.context_understanding or ""
+        if self.progress_logger:
+            self.progress_logger.log(
+                f"[INTERACT] case=4 proceed_with_workbook context=\"{(session.context_understanding or '').strip()}\"",
+                to_terminal=False
             )
-            if not matches_context:
-                session.context_understanding = self.interact_module.summarize_context(
-                    current_request
-                )
-                if self.progress_logger:
-                    self.progress_logger.log(
-                        f"[INTERACT] case=3 context_mismatch context=\"{session.context_understanding}\"",
-                        to_terminal=False
-                    )
-                message = (
-                    "Your request seems to switch to a different analysis topic. "
-                    "Please confirm whether to switch Excel files, or upload a new Excel file."
-                )
-                session.result = {"final_answer": message}
-                session.state = "done"
-                return {"type": "final", "result": session.result, "message": message}
-            if self.progress_logger:
-                self.progress_logger.log(
-                    f"[INTERACT] case=4 proceed_with_workbook context=\"{(session.context_understanding or '').strip()}\"",
-                    to_terminal=False
-                )
-            self._hydrate_sandbox_from_session(session.workbooks)
-        else:
-            session.workbooks = self.sandbox.workbooks
+        self._hydrate_sandbox_from_session(active_workbooks)
+        session.current_workbooks = active_workbooks
+        session.workbooks = active_workbooks
 
         session.state = "understanding"
         return {"type": "progress", "stage": "understanding"}
 
     def _handle_understanding(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
+        active_workbooks = session.get_active_workbooks()
         excel_context = ExcelContextBuilder(
             self._get_context_paths(session),
-            session.workbooks
+            active_workbooks
         ).build(self.config.total_token_budget)
 
         self._append_ui_thought(session, "understanding", "running", "Understanding workbook/task context")
@@ -412,9 +431,10 @@ class SheetHero:
         if not understanding_output:
             return {"type": "error", "message": "Understanding missing before execution."}
         user_query = current_request
+        active_workbooks = session.get_active_workbooks()
         execution_context = ExcelContextBuilder(
             self._get_context_paths(session),
-            session.workbooks
+            active_workbooks
         ).build(self.config.total_token_budget)
         self._append_ui_thought(session, "executing", "running", "Generating and running execution code")
         execution_result = self.execution_module.run(
@@ -432,6 +452,20 @@ class SheetHero:
                 "total_turns": execution_result.get("total_turns"),
             },
         )
+        session.pending_execution_result = execution_result
+        session.pending_execution_context = execution_context
+        session.state = "validation"
+        return {"type": "progress", "stage": "validation"}
+
+    def _handle_validation(self, session: SheetHeroSession,
+                           current_request: str) -> Dict[str, Any]:
+        execution_result = session.pending_execution_result
+        execution_context = session.pending_execution_context
+        if not execution_result or execution_context is None:
+            return {"type": "error", "message": "Execution result missing before validation."}
+        understanding_output = session.understanding or ""
+        user_query = current_request
+
         self._append_ui_thought(session, "validation", "running", "Validating execution result")
         validation_result = self.validation_module.run(
             execution_result=execution_result,
@@ -478,6 +512,8 @@ class SheetHero:
                 )
                 session.state = "executing"
                 return {"type": "progress", "stage": "executing"}
+        session.pending_execution_result = None
+        session.pending_execution_context = None
         self._qa_sessions.pop(session.session_id, None)
         self._log_final_report(session)
         return {"type": "final", "result": session.result}
@@ -522,10 +558,11 @@ class SheetHero:
         )
 
     def _get_context_paths(self, session: SheetHeroSession) -> List[str]:
+        active_workbooks = session.get_active_workbooks()
+        if active_workbooks:
+            return list(active_workbooks.keys())
         if self.excel_paths:
             return self.excel_paths
-        if session.workbooks:
-            return list(session.workbooks.keys())
         return []
 
     def _hydrate_sandbox_from_session(self, workbooks: Dict[str, Any]) -> None:

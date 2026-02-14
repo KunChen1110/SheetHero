@@ -18,9 +18,18 @@ class SheetHeroSession:
 
     # understanding of context (stable)
     context_understanding: Optional[str] = None
+    current_workbooks: Optional[Dict[str, Any]] = None
+    previous_workbooks: Optional[Dict[str, Any]] = None
+    # Deprecated compatibility field; migrate call sites to current_workbooks.
     workbooks: Optional[Dict[str, Any]] = None
     result: Optional[Any] = None
 
     # Used for UI display
     ui_thoughts: list[dict] = field(default_factory=list)
     ui_thought_cursor: int = 0
+    pending_execution_result: Optional[Dict[str, Any]] = None
+    pending_execution_context: Optional[str] = None
+
+    def get_active_workbooks(self) -> Optional[Dict[str, Any]]:
+        """Return task-bound workbook facts, preferring the new field."""
+        return self.current_workbooks or self.workbooks
