@@ -1,11 +1,12 @@
-import { useRef } from "react";
 import { ExcelFile, Chat } from "@/util/interfaces";
 import { FileDisplay } from "@/renderer/app/components/FileDisplay";
 import { ChatDisplay } from "./ChatDisplay";
+import { SidebarHeader } from "./SidebarHeader";
 import { FileSpreadsheet, Settings, Upload } from "lucide-react";
 
 const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
+// Properties needed for the sidebar
 interface SidebarProperties {
   onSettingsClick: () => void;
   onFilesChange: (files: ExcelFile[]) => void;
@@ -21,11 +22,6 @@ function isAcceptedFileType(extension: string): boolean {
   return ACCEPTED_FILE_EXTENSIONS.some(
     (ext) => ext === extension.toLowerCase(),
   );
-}
-
-// Returns all file extensions, used for file dialog
-function getAcceptAttribute(): string {
-  return [...ACCEPTED_FILE_EXTENSIONS].map((ext) => `.${ext}`).join(",");
 }
 
 // Gets the extension name of a file
@@ -45,19 +41,40 @@ export function Sidebar({
   chats,
   activeChat,
 }: SidebarProperties) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // This uses the preload.js to open a file dialog
+  // This is needed to get the file path for the selected files
+  async function handleUploadClick() {
+    try {
+      const filePaths = await window.electronAPI.openFileDialog();
 
-  // Handles when files are selected from the file dialog
-  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>): void {
-    const selectedFiles = Array.from(event.target.files || []).filter((file) =>
-      isAcceptedFileType(getFileExtension(file.name)),
-    );
+      if (filePaths && filePaths.length > 0) {
+        // Filter only accepted file types
+        const validFilePaths = filePaths.filter((filePath) => {
+          const fileName = filePath.split(/[\\/]/).pop() || "";
+          return isAcceptedFileType(getFileExtension(fileName));
+        });
 
-    if (selectedFiles.length === 0) return;
+        if (validFilePaths.length === 0) return;
 
-    addFiles(selectedFiles);
+        const currentMaxIndex =
+          files.length > 0 ? Math.max(...files.map((f) => f.index)) : 0;
 
-    if (fileInputRef.current) fileInputRef.current.value = "";
+        const excelFiles: ExcelFile[] = validFilePaths.map((filePath, idx) => {
+          const fileName = filePath.split(/[\\/]/).pop() || filePath;
+
+          return {
+            id: `${Date.now()}-${idx}`,
+            name: fileName,
+            index: currentMaxIndex + idx + 1,
+            path: filePath,
+          };
+        });
+
+        onFilesChange([...files, ...excelFiles]);
+      }
+    } catch (error) {
+      console.error("Error opening file dialog:", error);
+    }
   }
 
   // Adds a file to the file list
@@ -68,7 +85,7 @@ export function Sidebar({
       id: `${Date.now()} - ${idx}`,
       name: file.name,
       index: currentMaxIndex + idx + 1,
-      file,
+      path: file.name,
     }));
     onFilesChange([...files, ...excelFiles]);
   }
@@ -99,18 +116,9 @@ export function Sidebar({
         </div>
 
         {/* File dialog for selecting files */}
-        <input
-          className="hidden"
-          type="file"
-          multiple
-          accept={getAcceptAttribute()}
-          onChange={handleFileSelect}
-          ref={fileInputRef}
-        />
-
         <button
           className="flex w-full items-center gap-2 bg-gray-900 p-4 rounded-lg border border-gray-700/50 text-white hover:border-green-600/30 hover:bg-gray-800/80 transition-all"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleUploadClick}
         >
           <Upload
             size={18}
@@ -120,16 +128,33 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* =-=-= Scrollable area for files & chat history =-=-= */}
-      <div className="flex-1 overflow-y-auto relative">
-        {/* =-=-= File display =-=-= */}
-        <FileDisplay
-          files={files}
-          onAddFiles={addFiles}
-          onRemoveFile={removeFile}
-        />
+      {/* =-=-= File display =-=-= */}
+      <SidebarHeader
+        title="FILES"
+        content={<div className="text-xs text-gray-500">{files.length}</div>}
+      />
 
-        {/* =-=-= Chat display =-=-= */}
+      <FileDisplay
+        files={files}
+        onAddFiles={addFiles}
+        onRemoveFile={removeFile}
+      />
+
+      {/* =-=-= Chat display =-=-= */}
+      <SidebarHeader
+        title="CHATS"
+        content={
+          <button
+            className="text-xs text-gray-500 hover:text-green-400 transition-colors"
+            onClick={onNewChat}
+          >
+            + New
+          </button>
+        }
+      />
+
+      {/* Scroll container with listed chats */}
+      <div className="flex-1 overflow-y-auto relative">
         <ChatDisplay
           chats={chats}
           activeChat={activeChat}

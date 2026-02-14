@@ -1,7 +1,8 @@
 import { ExcelFile } from "@/util/interfaces";
 import { FileSpreadsheet } from "lucide-react";
 
-interface DragAndDropProperties {
+// Properties needed for the file display
+interface FileDisplayProperties {
   files: ExcelFile[];
   onAddFiles: (files: File[]) => void;
   onRemoveFile: (id: string) => void;
@@ -11,7 +12,7 @@ export function FileDisplay({
   files,
   onAddFiles,
   onRemoveFile,
-}: DragAndDropProperties) {
+}: FileDisplayProperties) {
   // Handles when a file was dropped in to the drag and drop container
   function handleDrop(event: React.DragEvent): void {
     event.preventDefault();
@@ -37,14 +38,6 @@ export function FileDisplay({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
-      <div className="flex items-center justify-between p-1">
-        <h3 className="text-xs font-semibold text-gray-400 py-1">FILES</h3>
-
-        {files.length > 0 && (
-          <div className="text-xs text-gray-500">{files.length}</div>
-        )}
-      </div>
-
       {/* If there are no files, display drag & drop instructions */}
       {/* Otherwise, display all the files in the file array */}
 

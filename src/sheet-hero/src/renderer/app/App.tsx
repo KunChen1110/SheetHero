@@ -6,7 +6,7 @@ import { ChatInput } from "@/renderer/app/components/ChatInput";
 import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
 import { MissingAPI } from "./components/MissingAPI";
 import { useSettings } from "@/util/storage";
-// import { api } from "@/util/api";
+import { api } from "@/util/api";
 
 const DEFAULT_CHAT: Chat = {
   id: Date.now().toString(),
@@ -139,7 +139,7 @@ export default function App() {
     // Begin generating a response,
     try {
       // Wait for backend response
-      const assistantContent = await generateResponse(content, excelFiles);
+      const assistantContent = await generateResponse(content);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -163,21 +163,17 @@ export default function App() {
   }
 
   // Response logic
-  async function generateResponse(
-    userMessage: string,
-    files: ExcelFile[],
-  ): Promise<string> {
-    console.log(userMessage);
-    console.log(files);
-
-    // TODO This only prints the understanding output, this WILL need to be changed!!
+  async function generateResponse(userMessage: string): Promise<string> {
     try {
-      // const response = await api.get("/sheet-hero/run");
-      // console.log(response.data);
-      return (
-        // response.data.result["understanding_output"] ||
-        "Backend is not linked"
-      );
+      const result = await api.post("/sheet-hero/run", {
+        api_key: settings.apiKey,
+        model: settings.model,
+        max_turns: settings.maxTurns,
+        prompt: userMessage,
+        excel_paths: excelFiles.map((f) => f.path),
+      });
+      console.log(result);
+      return result.data.result.message;
     } catch (error) {
       console.error(error);
       return "Error: Could not get response from backend";

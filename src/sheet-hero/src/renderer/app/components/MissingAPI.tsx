@@ -1,5 +1,6 @@
 import { AlertCircle, Settings } from "lucide-react";
 
+// Properties needed for the missing api overlay
 interface MissingAPIProperties {
   onSettingsClick: () => void;
 }

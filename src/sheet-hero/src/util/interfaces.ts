@@ -1,3 +1,5 @@
+export const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
+
 export enum Role {
   USER,
   ASSISTANT,
@@ -19,7 +21,7 @@ export interface ExcelFile {
   id: string;
   name: string;
   index: number;
-  file: File;
+  path: string;
 }
 
 export interface AppSettings {
