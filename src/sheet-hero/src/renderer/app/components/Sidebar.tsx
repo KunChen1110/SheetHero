@@ -3,6 +3,7 @@ import { FileDisplay } from "@/renderer/app/components/FileDisplay";
 import { ChatDisplay } from "./ChatDisplay";
 import { SidebarHeader } from "./SidebarHeader";
 import { FileSpreadsheet, Settings, Upload } from "lucide-react";
+import { SidebarWidget } from "./SidebarWidget";
 
 const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
@@ -116,16 +117,11 @@ export function Sidebar({
         </div>
 
         {/* File dialog for selecting files */}
-        <button
-          className="flex w-full items-center gap-2 bg-gray-900 p-4 rounded-lg border border-gray-700/50 text-white hover:border-green-600/30 hover:bg-gray-800/80 transition-all"
-          onClick={handleUploadClick}
-        >
-          <Upload
-            size={18}
-            className="text-gray-400 group-hover:text-green-400 transition-colors"
-          />
-          <div className="text-sm font-medium">Upload Files</div>
-        </button>
+        <SidebarWidget
+          title="Upload Files"
+          onWidgetClick={handleUploadClick}
+          icon={<Upload size={18} className="text-gray-400" />}
+        />
       </div>
 
       {/* =-=-= File display =-=-= */}
@@ -166,13 +162,11 @@ export function Sidebar({
       {/* =-=-= Footer =-=-= */}
       <div className="p-4 border-t border-gray-800/50">
         {/* Settings button */}
-        <button
-          className="w-full flex items-center p-4 gap-2 rounded-lg bg-gray-900 hover:bg-gray-800/80 border border-gray-700/50 hover:border-green-600/20 transition-all"
-          onClick={onSettingsClick}
-        >
-          <Settings size={18} className="text-gray-400" />
-          <div className="text-sm text-gray-200">Settings</div>
-        </button>
+        <SidebarWidget
+          title="Settings"
+          onWidgetClick={onSettingsClick}
+          icon={<Settings size={18} className="text-gray-400" />}
+        />
       </div>
     </div>
   );
