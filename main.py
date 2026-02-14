@@ -19,17 +19,6 @@ app.add_middleware(
     allow_headers = ["*"],
 )
 
-
-@app.get("/test")
-def test():
-    print("test")
-    return "This is a test"
-
-
-@app.get("/sheet-hero/run")
-def run_sheet_hero_api():
-    config = Config(
-        api_key = ""
 class SheetHeroRequest(BaseModel):
     api_key: str
     model: str
