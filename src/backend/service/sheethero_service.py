@@ -14,7 +14,6 @@ from ..agent.core.session import SheetHeroSession
 class DialogueMemory:
     """Cross-session memory for dialogue continuity."""
 
-    last_excel_paths: list[str] = field(default_factory=list)
     last_context_understanding: str = ""
     last_workbooks: Optional[Dict[str, Any]] = None
 
@@ -63,14 +62,12 @@ class SheetHeroService:
         # Cache prior session memory before switching task/session.
         self._cache_session_memory()
 
-        # no_excel => incoming_paths = [] => build/keep has_excel=False agent.
-        if self._agent is None or incoming_paths != self._memory.last_excel_paths:
-            self._agent = SheetHero(
-                excel_paths=incoming_paths,
-                config=self.config,
-                load_excel=self.load_excel,
-            )
-            self._memory.last_excel_paths = list(incoming_paths)
+        # Build a new agent for each new task turn.
+        self._agent = SheetHero(
+            excel_paths=incoming_paths,
+            config=self.config,
+            load_excel=self.load_excel,
+        )
 
         # New task -> always create a new session.
         self._session = self._agent.start_session(prompt)
