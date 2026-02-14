@@ -116,7 +116,7 @@ export function Sidebar({
             size={18}
             className="text-gray-400 group-hover:text-green-400 transition-colors"
           />
-          <span className="text-sm font-medium">Upload Files</span>
+          <div className="text-sm font-medium">Upload Files</div>
         </button>
       </div>
 
@@ -146,7 +146,7 @@ export function Sidebar({
           onClick={onSettingsClick}
         >
           <Settings size={18} className="text-gray-400" />
-          <span className="text-sm text-gray-200">Settings</span>
+          <div className="text-sm text-gray-200">Settings</div>
         </button>
       </div>
     </div>

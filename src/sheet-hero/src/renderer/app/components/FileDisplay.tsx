@@ -41,7 +41,7 @@ export function FileDisplay({
         <h3 className="text-xs font-semibold text-gray-400 py-1">FILES</h3>
 
         {files.length > 0 && (
-          <span className="text-xs text-gray-500">{files.length}</span>
+          <div className="text-xs text-gray-500">{files.length}</div>
         )}
       </div>
 
@@ -66,9 +66,9 @@ export function FileDisplay({
             >
               {/* =-=-= File display capsule =-=-= */}
               <div className="w-5 h-5 rounded bg-green-600/20 flex items-center justify-center">
-                <span className="text-xs font-bold text-green-400">
+                <div className="text-xs font-bold text-green-400">
                   {file.index}
-                </span>
+                </div>
               </div>
 
               {/* File name */}

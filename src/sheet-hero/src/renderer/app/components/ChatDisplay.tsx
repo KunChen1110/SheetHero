@@ -17,7 +17,7 @@ export function ChatDisplay({
   // HTML for the chat display
   return (
     <div className="p-3">
-      {/* Chats title */}
+      {/* Chat display header */}
       <div className="flex items-center justify-between p-1">
         <h3 className="text-xs font-semibold text-gray-400 py-1">CHATS</h3>
 
@@ -31,6 +31,7 @@ export function ChatDisplay({
       </div>
 
       <div className="space-y-1">
+        {/* List of all chats */}
         {chats.map((chat) => (
           <button
             key={chat.id}
@@ -51,6 +52,7 @@ export function ChatDisplay({
                   : "text-gray-400 group-hover:text-green-400"
               }`}
             />
+            {/* Chat title */}
             <div className="flex-1">
               <div className="text-sm text-gray-200">{chat.title}</div>
             </div>

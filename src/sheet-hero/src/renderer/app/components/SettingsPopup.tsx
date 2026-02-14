@@ -76,7 +76,7 @@ export function SettingsPopup({
             <label className="flex items-center gap-2 text-sm font-medium text-gray-200 py-2">
               <Key size={16} className="text-green-400" />
               API Key
-              <span className="text-red-400">*</span>
+              <div className="text-red-400">*</div>
             </label>
             <div className="relative">
               <input
@@ -104,7 +104,7 @@ export function SettingsPopup({
             <label className="flex items-center gap-2 text-sm font-medium text-gray-200 mb-2">
               <Bot size={16} className="text-green-400" />
               Model
-              <span className="text-red-400">*</span>
+              <div className="text-red-400">*</div>
             </label>
             <input
               type="text"
