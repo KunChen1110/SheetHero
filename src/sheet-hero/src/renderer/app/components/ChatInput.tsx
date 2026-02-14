@@ -22,14 +22,15 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
 
   // HTML for the chat input
   return (
-    <div className="p-6 relative">
+    <div className="p-6">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
         <div
-          className={`relative flex items-center bg-gray-800 rounded-2xl border transition-all ${
+          className={`flex items-center bg-gray-800 rounded-2xl border transition-all ${
             disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"
           }
         `}
         >
+          {/* Text input area */}
           <textarea
             className="flex-1 resize-none p-4 text-sm text-gray-100 placeholder-gray-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
@@ -49,17 +50,18 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
             }
             style={{
               minHeight: "48px",
-              maxHeight: "200px",
+              maxHeight: "150px",
             }}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
+            onInput={(event) => {
+              const target = event.target as HTMLTextAreaElement;
               target.style.height = "auto";
               target.style.height = Math.min(target.scrollHeight, 200) + "px";
             }}
           />
 
+          {/* Send input button */}
           <button
-            className="absolute right-2 p-2 rounded-lg bg-linear-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-green-500 disabled:hover:to-green-600 transition-all"
+            className="mr-2 p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowe transition-all"
             type="submit"
             disabled={!input.trim() || disabled}
           >

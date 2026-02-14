@@ -1,163 +1,212 @@
 import argparse
 import json
-import logging
-import sys
+import shlex
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from .agent import SheetHero, OutputFormatter
 from .config.settings import Config
+from .service.sheethero_service import SheetHeroService
+from .service.stream_dialogue_driver import StreamDialogueDriver
 
 
+@dataclass
+class InputBuffer:
+    excel_paths: list[str] = field(default_factory=list)
+    prompt: str | None = None
 
-def _suppress_console_logging():
-    logging.getLogger().setLevel(logging.CRITICAL)
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, logging.StreamHandler):
-            root_logger.removeHandler(handler)
+    def clear(self) -> None:
+        self.excel_paths.clear()
+        self.prompt = None
 
-    for logger_name in list(logging.Logger.manager.loggerDict.keys()):
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.CRITICAL)
-        for handler in logger.handlers[:]:
-            if isinstance(handler, logging.StreamHandler):
-                logger.removeHandler(handler)
+    def ready(self) -> bool:
+        return self.prompt is not None
 
 
-def _load_task_from_json(json_path: str, task_id: str = None,
-                         task_index: int = 0) -> tuple[dict, Path]:
-    path = Path(json_path).expanduser().resolve()
-    tasks = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(tasks, list) or not tasks:
-        raise ValueError(f"No tasks found in {path}")
-
-    if task_id:
-        for task in tasks:
-            if task.get("task_id") == task_id:
-                return task, path.parent
-        available = [task.get("task_id") for task in tasks]
-        raise ValueError(f"Task '{task_id}' not found. Available: {available}")
-
-    if task_index < 0 or task_index >= len(tasks):
-        raise ValueError(
-            f"task_index {task_index} out of range (0..{len(tasks) - 1})"
-        )
-
-    return tasks[task_index], path.parent
+def _handle_path(buffer: InputBuffer, line: str) -> None:
+    payload = line[len("!path="):].strip()
+    if not payload:
+        buffer.excel_paths = []
+        print("[paths set] []")
+        return
+    try:
+        buffer.excel_paths = json.loads(payload)
+        print(f"[paths set] {buffer.excel_paths}")
+    except json.JSONDecodeError:
+        print("Error: !path expects a JSON list, e.g. !path=[\"a.xlsx\"]")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="SheetHero - AI-powered Excel analysis"
-    )
+def _load_tasks() -> tuple[list[dict[str, Any]], Path]:
+    root = Path(__file__).resolve().parents[2]
+    candidates = [root / "dataset" / "dataset.json", root / "dataset.json"]
+    for json_path in candidates:
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                tasks = json.load(f)
+            dataset_dir = json_path.parent / "dataset" if json_path.name == "dataset.json" and json_path.parent == root else json_path.parent
+            return tasks, dataset_dir
+    raise FileNotFoundError("dataset.json not found. Checked: dataset/dataset.json and dataset.json")
 
-    # === Optional Task JSON ===
-    parser.add_argument("--task-json",
-                        help="Path to a task JSON file (e.g., docs/task01.json)")
-    parser.add_argument("--task-id",
-                        help="Task ID to select from JSON (e.g., 'Test 1')")
-    parser.add_argument("--task-index", type=int, default=0,
-                        help="Task index to select from JSON (default: 0)")
 
-    # === Positional Arguments (used when no task JSON) ===
-    parser.add_argument("question", nargs="?",
-                        help="Question to ask about the Excel file")
-    parser.add_argument("excel_paths", nargs='*',
-                        help="Path(s) to the Excel file(s)")
+def _print_dataset_list(tasks: list[dict[str, Any]]) -> None:
+    if not tasks:
+        print("No tasks found in dataset index.")
+        return
+    print("Available dataset tasks:")
+    for idx, task in enumerate(tasks, start=1):
+        task_id = task.get("task_id", "?")
+        title = task.get("title", "")
+        print(f"{idx:>2}. {task_id} - {title}".rstrip(" -"))
 
-    # === Optional Arguments ===
-    parser.add_argument("--output-mode", choices=["text", "file"], default=None,
-                        help="Choose 'text' for inline answers or 'file' to save results")
-    parser.add_argument("--output-file",
-                        help="When --output-mode=file, optional custom output filepath")
-    parser.add_argument("--deployment",
-                        help="Override model deployment (default: config)")
-    parser.add_argument("--base-url",
-                        help="Override OpenAI base URL (default: config)")
-    parser.add_argument("--api-key",
-                        help="Override OpenAI API key (default: config)")
-    parser.add_argument("--max-turns", type=int,
-                        help="Override max iteration turns (default: config)")
-    parser.add_argument("--token-budget", type=int,
-                        help="Override total token budget (default: config)")
-    parser.add_argument("--no-load-excel", action="store_true",
-                        help="Skip loading Excel files (use provided context only)")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Enable console logging")
 
-    args = parser.parse_args()
+def _load_dataset_task(buffer: InputBuffer, index: int) -> bool:
+    tasks, dataset_dir = _load_tasks()
+    if index < 1 or index > len(tasks):
+        print(f"Error: dataset index out of range. Valid range: 1..{len(tasks)}")
+        return False
+
+    task = tasks[index - 1]
+    prompt = str(task.get("prompt") or "").strip()
+    spreadsheets = task.get("spreadsheets", [])
+    if not prompt:
+        print(f"Error: task {index} has empty prompt.")
+        return False
+    if not isinstance(spreadsheets, list) or not spreadsheets:
+        print(f"Error: task {index} has no spreadsheets.")
+        return False
+
+    excel_paths: list[str] = []
+    missing_files: list[str] = []
+    for rel in spreadsheets:
+        rel_path = str(rel).strip()
+        full_path = dataset_dir / rel_path
+        if full_path.exists():
+            excel_paths.append(str(full_path.resolve()))
+        else:
+            missing_files.append(str(full_path))
+    if missing_files:
+        print("Error: some dataset files are missing:")
+        for path in missing_files:
+            print(f"- {path}")
+        return False
+
+    buffer.prompt = prompt
+    buffer.excel_paths = excel_paths
+    task_id = task.get("task_id", f"Task {index}")
+    title = task.get("title", "")
+    print(f"[dataset loaded] index={index}, task={task_id}, title={title}, files={len(excel_paths)}")
+    return True
+
+
+def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
+    if not buffer.ready():
+        print("Error: prompt not set.")
+        return
+
+    driver = StreamDialogueDriver(service)
+    stream = driver.start(buffer.prompt or "", buffer.excel_paths)
+
+    while True:
+        stream_terminated = True
+        for event in stream:
+            stream_terminated = False
+            event_type = str(event.get("type") or "")
+            stage = event.get("stage")
+            if stage:
+                print(f"[{event_type}] stage={stage}")
+            elif event_type == "progress":
+                print("[progress]")
+
+            thoughts = event.get("ui_thoughts")
+            if isinstance(thoughts, list) and thoughts:
+                print(f"[ui_thoughts] +{len(thoughts)}")
+
+            if event_type == "clarification":
+                question = str(event.get("message") or "Please clarify your request.")
+                user_reply = input(f"Agent: {question}\nYou: ")
+                stream = driver.reply(user_reply)
+                break
+
+            if event_type in {"final", "error"}:
+                print(f"Agent: {event.get('message')}")
+                if event_type != "error":
+                    buffer.clear()
+                return
+        if stream_terminated:
+            print("Error: stream ended without clarification/final/error.")
+            return
+
+
+def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!dataset", add_help=False)
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--index", type=int)
+    parser.add_argument("--prepare", action="store_true")
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print("Error: usage `!dataset --list` or `!dataset --index N [--prepare]`")
+        return
+
+    if args.list:
+        try:
+            tasks, _ = _load_tasks()
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error: {e}")
+            return
+        _print_dataset_list(tasks)
+        return
+
+    if args.index is None:
+        print("Error: `!dataset` requires `--index N` or `--list`.")
+        return
 
     try:
-        if not args.verbose:
-            _suppress_console_logging()
+        loaded = _load_dataset_task(buffer, args.index)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error: {e}")
+        return
 
-        config = Config()
-        question = args.question
-        excel_paths = args.excel_paths
+    if loaded and not args.prepare and buffer.ready():
+        _execute_turn(service, buffer)
 
-        if args.task_json:
-            task, base_dir = _load_task_from_json(
-                args.task_json,
-                task_id=args.task_id,
-                task_index=args.task_index
-            )
-            question = task.get("prompt", "")
-            excel_paths = [
-                str((base_dir / path).resolve())
-                for path in task.get("spreadsheets", [])
-            ]
 
-            expected_output = task.get("expected_output_file", [])
-            if args.output_file:
-                config.output_file = args.output_file
-            elif expected_output:
-                config.output_file = str((base_dir / expected_output[0]).resolve())
-            else:
-                config.output_file = None
+def main() -> None:
+    service = SheetHeroService(config=Config())
+    buffer = InputBuffer()
 
-            if args.output_mode:
-                config.output_mode = args.output_mode
-            else:
-                config.output_mode = "file" if expected_output else "text"
-        else:
-            if not question or not excel_paths:
-                raise ValueError("question and excel_paths are required without --task-json")
-            config.output_mode = args.output_mode or "text"
-            config.output_file = args.output_file
+    print("SheetHero CLI (debug mode)")
+    print("Type `exit` to quit.")
+    print("Type `run` to execute the current turn.")
+    print("Type `!dataset --list` to list dataset tasks.")
+    print("Type `!dataset --index N` to load and run a dataset task.")
 
-        if args.deployment:
-            config.deployment = args.deployment
-        if args.base_url:
-            config.base_url = args.base_url
-        if args.api_key:
-            config.api_key = args.api_key
-        if args.max_turns is not None:
-            config.max_turns = args.max_turns
-        if args.token_budget is not None:
-            config.total_token_budget = args.token_budget
+    while True:
+        line = input(">>> ").strip()
 
-        agent = SheetHero(
-            excel_paths=excel_paths,
-            config=config,
-            load_excel=not args.no_load_excel
-        )
+        if line == "exit":
+            break
 
-        result = agent.run(user_question=question)
+        if line == "reset":
+            buffer.clear()
+            print("[buffer cleared]")
+            continue
 
-        output = OutputFormatter().format_user_mode(
-            result,
-            excel_paths,
-            question,
-            output_mode=config.output_mode
-        )
+        if line.startswith("!path="):
+            _handle_path(buffer, line)
+            continue
 
-        print(output)
+        if line.startswith("!dataset"):
+            _handle_dataset_command(service, buffer, line)
+            continue
 
-        sys.exit(0 if result['success'] else 1)
+        if line == "run":
+            _execute_turn(service, buffer)
+            continue
 
-    except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+        # Treat any other input as a prompt only; run on explicit `run`.
+        buffer.prompt = line
+        print(f"[prompt set] {buffer.prompt}")
 
 
 if __name__ == "__main__":
