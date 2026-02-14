@@ -1,6 +1,7 @@
 import { Chat } from "@/util/interfaces";
 import { MessageSquare } from "lucide-react";
 
+// Properties needed for the chat display
 interface ChatDisplayProperties {
   chats: Chat[];
   activeChat?: string;
@@ -12,24 +13,10 @@ export function ChatDisplay({
   chats,
   activeChat,
   onChatSelect,
-  onNewChat,
 }: ChatDisplayProperties) {
   // HTML for the chat display
   return (
     <div className="p-3">
-      {/* Chat display header */}
-      <div className="flex items-center justify-between p-1">
-        <h3 className="text-xs font-semibold text-gray-400 py-1">CHATS</h3>
-
-        {/* Create new chat button */}
-        <button
-          onClick={onNewChat}
-          className="text-xs text-gray-500 hover:text-green-400 transition-colors"
-        >
-          + New
-        </button>
-      </div>
-
       <div className="space-y-1">
         {/* List of all chats */}
         {chats.map((chat) => (
@@ -46,11 +33,13 @@ export function ChatDisplay({
           >
             <MessageSquare
               size={14}
-              className={`shrink-0 ${
-                activeChat === chat.id
-                  ? "text-green-400"
-                  : "text-gray-400 group-hover:text-green-400"
-              }`}
+              className={`shrink-0 
+                ${
+                  activeChat === chat.id
+                    ? "text-green-400"
+                    : "text-gray-400 group-hover:text-green-400"
+                }
+              `}
             />
             {/* Chat title */}
             <div className="flex-1">

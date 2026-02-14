@@ -1,7 +1,8 @@
 import { X, Key, Hash, Bot } from "lucide-react";
 import { useState, useEffect } from "react";
 
-interface SettingsProperties {
+// Properties needed for the settings popup
+interface SettingsPopupProperties {
   isOpen: boolean;
   apiKey: string;
   maxTurns: number;
@@ -17,7 +18,7 @@ export function SettingsPopup({
   model,
   onClose,
   onSave,
-}: SettingsProperties) {
+}: SettingsPopupProperties) {
   // If the api key is visible
   const [showApiKey, setShowApiKey] = useState(false);
 

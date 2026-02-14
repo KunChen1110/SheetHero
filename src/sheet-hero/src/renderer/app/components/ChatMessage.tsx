@@ -1,6 +1,7 @@
 import { Role } from "@/util/interfaces";
 import { FileSpreadsheet, User } from "lucide-react";
 
+// Properties needed for the chat message
 interface ChatMessageProperties {
   role: Role;
   content: string;

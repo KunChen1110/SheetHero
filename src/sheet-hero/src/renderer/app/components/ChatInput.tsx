@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
 
+// Properties needed for the chat input
 interface ChatInputProperties {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
@@ -25,10 +26,9 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
     <div className="p-6">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
         <div
-          className={`flex items-center bg-gray-800 rounded-2xl border transition-all ${
-            disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"
-          }
-        `}
+          className={`flex items-center bg-gray-800 rounded-2xl border transition-all 
+            ${disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"}
+          `}
         >
           {/* Text input area */}
           <textarea

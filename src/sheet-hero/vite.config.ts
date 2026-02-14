@@ -1,28 +1,22 @@
 import { defineConfig } from "vite";
-import path from "path"
+import path from "path";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   root: "src/renderer",
 
-  plugins: [
-    react(),
-  ],
+  plugins: [react()],
 
-  server:{
+  server: {
     port: 3480,
     open: false,
   },
 
-  assetsInclude: [
-    "**/*.svg",
-    "**/*.csv",
-  ],
+  assetsInclude: ["**/*.svg", "**/*.csv"],
 
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-
-})
+});
