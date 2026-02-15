@@ -254,12 +254,12 @@ export default function App() {
       <div className="flex flex-1 flex-col p-12 pb-0">
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
-            {/* =-=-=  Missing API key overlay =-=-=  */}
+            {/* =-=-=  Missing API key overlay =-=-= */}
             {!hasApiKey && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
             )}
             <div className="max-w-4xl mx-auto space-y-5 py-5">
-              {/* =-=-=  Messages container =-=-=  */}
+              {/* =-=-=  Messages container =-=-= */}
               {messages.map((message) => (
                 <AppMessage
                   key={message.id}

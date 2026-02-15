@@ -105,8 +105,9 @@ export function Sidebar({
   return (
     <div className="w-75 bg-gray-900/80 border-r border-gray-800/50 flex flex-col h-full">
       {/* =-=-= Header =-=-=*/}
-      <div className="p-4 border-b border-gray-800/50">
-        <div className="flex items-center p-3 gap-2">
+      <div className="p-3 border-b border-gray-800/50">
+        {/* Logo and title */}
+        <div className="flex items-center p-3 gap-3">
           <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
             <FileSpreadsheet size={26} className="text-white" />
           </div>

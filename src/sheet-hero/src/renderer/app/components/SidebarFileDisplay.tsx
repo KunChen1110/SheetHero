@@ -47,7 +47,7 @@ export function SidebarFileDisplay({
   // Renders the full file list with all currently active files
   function renderFileList() {
     return (
-      <div>
+      <div className="space-y-2">
         {/* List of all files */}
         {files.map((file) => (
           <div
