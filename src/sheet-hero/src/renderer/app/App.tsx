@@ -285,9 +285,9 @@ export default function App() {
       {/* =-=-= Main chat =-=-= */}
       <div className="flex flex-1 flex-col p-12 pb-0">
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 relative">
             {/* =-=-=  Missing API key overlay =-=-= */}
-            {!hasApiKey && (
+            {!hasApiKey && chats.length != 0 && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
             )}
             {/* =-=-=  Messages container =-=-= */}
