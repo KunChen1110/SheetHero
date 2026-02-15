@@ -19,12 +19,10 @@ export function AppMessage({ role, content }: AppMessageProperties) {
     `}
     >
       <div className="shrink-0">
-        {/* If its the user's message, make background blue */}
-        {/* Otherwise, make background green */}
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center
             ${isUser ? "bg-blue-500 text-white" : "bg-green-500 text-white"}
-        `}
+          `}
         >
           {isUser ? <User size={22} /> : <FileSpreadsheet size={22} />}
         </div>

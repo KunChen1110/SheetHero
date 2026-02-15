@@ -8,11 +8,9 @@
     "build": "vite build && electron-builder",
     "preview": "vite preview",
     "lint": "eslint",
-
     "dev:frontend": "vite",
     "dev:backend": "python ../../main.py",
     "dev:electron": "electron .",
-
     "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\" "
   },
   "dependencies": {
