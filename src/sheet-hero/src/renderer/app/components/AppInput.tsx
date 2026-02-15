@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
 
-// Properties needed for the chat input
-interface ChatInputProperties {
+// Properties needed for the app input
+interface AppInputProperties {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
 }
 
-export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
+export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
   // The input text shown on the input container
   const [input, setInput] = useState("");
 
@@ -21,7 +21,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
     }
   }
 
-  // HTML for the chat input
+  // HTML for the app input
   return (
     <div className="p-6">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
@@ -49,7 +49,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
                 : "Ask me a question"
             }
             style={{
-              minHeight: "48px",
+              minHeight: "50px",
               maxHeight: "150px",
             }}
             onInput={(event) => {
@@ -61,7 +61,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProperties) {
 
           {/* Send input button */}
           <button
-            className="mr-2 p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowe transition-all"
+            className="mr-2 p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             type="submit"
             disabled={!input.trim() || disabled}
           >

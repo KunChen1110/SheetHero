@@ -1,12 +1,12 @@
 import { AlertCircle, Settings } from "lucide-react";
 
-// Properties needed for the missing api overlay
-interface MissingAPIProperties {
+// Properties needed for the app api overlay
+interface AppAPIOverlayProperties {
   onSettingsClick: () => void;
 }
 
-export function MissingAPI({ onSettingsClick }: MissingAPIProperties) {
-  // HTML for the missing api overlay
+export function AppAPIOverlay({ onSettingsClick }: AppAPIOverlayProperties) {
+  // HTML for the app api overlay
   return (
     <div className="bg-linear-to-r from-yellow-900/40 to-red-900/40 border-b border-yellow-600/30 backdrop-blur-sm rounded-3xl">
       <div className="max-w-4xl mx-auto p-5">
