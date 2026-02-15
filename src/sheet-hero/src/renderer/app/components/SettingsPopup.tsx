@@ -102,14 +102,14 @@ export function SettingsPopup({
           <SettingsWidget
             icon={<Bot size={16} />}
             title="Model"
-            description="Specify the model name (e.g., gpt-4-mini, gpt-4o, or your local model name)."
+            description="Specify the model name (e.g., gpt-4o-mini, gpt-4o, or your local model name)."
             required={true}
             input={
               <SettingsInput
                 type="text"
                 value={localModel}
                 onChange={(e) => setLocalModel(e.target.value)}
-                placeholder="e.g., gpt-4-mini, gpt-4o, local-model"
+                placeholder="e.g., gpt-4o-mini, gpt-4o, local-model"
               />
             }
           />

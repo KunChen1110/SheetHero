@@ -200,6 +200,7 @@ export default function App() {
   // Handles specific event types from backend
   function processEvents(events: Record<string, string>[]): string {
     for (const event of events) {
+      console.log(event); // testing, remove this
       const type = event.type;
 
       if (type === "clarification") {
@@ -285,7 +286,7 @@ export default function App() {
       {/* =-=-= Main chat =-=-= */}
       <div className="flex flex-1 flex-col p-12 pb-0">
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
-          <div className="flex-1 overflow-y-auto p-6 relative">
+          <div className="flex-1 overflow-y-auto p-6">
             {/* =-=-=  Missing API key overlay =-=-= */}
             {!hasApiKey && chats.length != 0 && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
