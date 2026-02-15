@@ -13,7 +13,7 @@ ipcMain.handle("open-file-dialog", async () => {
     filters: [
       {
         name: "Spreadsheets",
-        extensions: ["xlsx", "xls", "csv"],
+        extensions: ["xlsx", "xls", "csv"], // TODO: Importing from interfaces doesnt work for some reason, make this not suck
       },
     ],
   });

@@ -6,30 +6,18 @@ import { AppInput } from "@/renderer/app/components/AppInput";
 import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
 import { AppAPIOverlay } from "./components/AppAPIOverlay";
 import { useSettings } from "@/util/storage";
+import { MessageCircle } from "lucide-react";
 import { api } from "@/util/api";
-
-const DEFAULT_CHAT: Chat = {
-  id: Date.now().toString(),
-  title: "Getting Started",
-  messages: [
-    {
-      id: Date.now().toString(),
-      role: Role.ASSISTANT,
-      content:
-        "Hello! I'm SheetHero. Upload or drag & drop your Excel files to get started!",
-    },
-  ],
-};
 
 export default function App() {
   // Save and load settings utility
   const { settings, saveSettings } = useSettings();
 
   // The array of chat histories
-  const [chats, setChats] = useState<Chat[]>([DEFAULT_CHAT]);
+  const [chats, setChats] = useState<Chat[]>([]);
 
   // The current active chat id
-  const [activeChatId, setActiveChatId] = useState<string>(DEFAULT_CHAT.id);
+  const [activeChatId, setActiveChatId] = useState<string>();
 
   // The array of excel file interfaces active being used for query
   const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
@@ -47,7 +35,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Reference used to scroll to the bottom of the chat box
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollReference = useRef<HTMLDivElement>(null);
 
   // The currently active chat
   const activeChat = chats.find((chat) => chat.id === activeChatId);
@@ -83,7 +71,7 @@ export default function App() {
 
   // Scrolls to the bottom of the dialogue box
   function scrollToBottom(): void {
-    messagesEndRef.current?.scrollIntoView({
+    scrollReference.current?.scrollIntoView({
       behavior: "smooth",
     });
   }
@@ -96,7 +84,8 @@ export default function App() {
   // Creates a basic chat title for the chat history
   function generateChatTitle(firstMessage: string): string {
     const words = firstMessage.split(" ").slice(0, 4).join(" ");
-    return words.length > 30 ? words.substring(0, 30) + "..." : words;
+    if (words.length > 30) return words.substring(0, 30) + "...";
+    else return words;
   }
 
   function createNewChat(): void {
@@ -107,13 +96,13 @@ export default function App() {
         {
           id: Date.now().toString(),
           role: Role.ASSISTANT,
-          content: "How can I help you today?",
+          content:
+            "Hello! I'm SheetHero. Upload or drag & drop your Excel files to get started!",
         },
       ],
     };
     setChats((prev) => [newChat, ...prev]);
     setActiveChatId(newChat.id);
-    // Reset session for new chat
     setSessionId(null);
     setIsWaiting(false);
   }
@@ -145,13 +134,9 @@ export default function App() {
     try {
       let assistantContent: string;
 
-      if (isWaiting && sessionId) {
-        // This is a reply to a clarification question
-        assistantContent = await sendReply(content);
-      } else {
-        // This is a new conversation start
-        assistantContent = await startConversation(content);
-      }
+      // Start the session if one doesnt exist, otherwise reply to the existing session
+      if (isWaiting && sessionId) assistantContent = await sendReply(content);
+      else assistantContent = await startConversation(content);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -185,6 +170,7 @@ export default function App() {
     }
   }
 
+  // Creates a new session conversation
   async function startConversation(userMessage: string): Promise<string> {
     const newSessionId = Date.now().toString();
     setSessionId(newSessionId);
@@ -201,11 +187,8 @@ export default function App() {
     return processEvents(result.data.events);
   }
 
+  // Sends a reply to an existing session
   async function sendReply(userReply: string): Promise<string> {
-    if (!sessionId) {
-      throw new Error("No active session");
-    }
-
     const result = await api.post("/sheet-hero/reply", {
       session_id: sessionId,
       user_reply: userReply,
@@ -214,6 +197,7 @@ export default function App() {
     return processEvents(result.data.events);
   }
 
+  // Handles specific event types from backend
   function processEvents(events: Record<string, string>[]): string {
     for (const event of events) {
       const type = event.type;
@@ -236,16 +220,64 @@ export default function App() {
     return "Processing...";
   }
 
+  // Renders the chat if there are existing chats
+  function renderChat() {
+    return (
+      <div className="max-w-4xl mx-auto space-y-5 py-5">
+        {messages.map((message) => (
+          <AppMessage
+            key={message.id}
+            role={message.role}
+            content={message.content}
+          />
+        ))}
+        <div ref={scrollReference} />
+      </div>
+    );
+  }
+
+  // Renders instructions to create a chat if there are no existing chats
+  function renderEmptyChat() {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center text-center px-6">
+        {/* Icon */}
+        <div className="bg-green-600/20 text-green-500 rounded-full p-4 mb-4">
+          <MessageCircle size={36} />
+        </div>
+
+        {/* Header */}
+        <h2 className="text-2xl font-bold text-gray-200 mb-2">
+          Start a New Conversation
+        </h2>
+
+        {/* Instructions */}
+        <p className="text-gray-400 mb-6">
+          You don’t have any chats yet. Click the{" "}
+          <label className="font-semibold text-green-400">New Chat </label>
+          button in the sidebar to get started.
+        </p>
+
+        {/* Create new chat button */}
+        <button
+          onClick={createNewChat}
+          className="px-6 py-3 bg-green-500 text-gray-900 rounded-lg font-medium hover:bg-green-600 transition-colors"
+        >
+          + New Chat
+        </button>
+      </div>
+    );
+  }
+
   // HTML for the app
   return (
     <div className="h-full flex bg-gray-950">
       {/* =-=-= Sidebar =-=-=*/}
       <Sidebar
-        onSettingsClick={handleSettingsClick}
-        files={excelFiles}
-        onFilesChange={setExcelFiles}
         chats={chats}
         activeChat={activeChatId}
+        files={excelFiles}
+        onSettingsClick={handleSettingsClick}
+        onFilesChange={setExcelFiles}
         onChatSelect={handleChatSelect}
         onNewChat={createNewChat}
       />
@@ -258,17 +290,8 @@ export default function App() {
             {!hasApiKey && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
             )}
-            <div className="max-w-4xl mx-auto space-y-5 py-5">
-              {/* =-=-=  Messages container =-=-= */}
-              {messages.map((message) => (
-                <AppMessage
-                  key={message.id}
-                  role={message.role}
-                  content={message.content}
-                />
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
+            {/* =-=-=  Messages container =-=-= */}
+            {chats.length === 0 ? renderEmptyChat() : renderChat()}
           </div>
         </div>
         <AppInput
