@@ -1,17 +1,17 @@
 import { Role } from "@/util/interfaces";
 import { FileSpreadsheet, User } from "lucide-react";
 
-// Properties needed for the chat message
-interface ChatMessageProperties {
+// Properties needed for the app message
+interface AppMessageProperties {
   role: Role;
   content: string;
 }
 
-export function ChatMessage({ role, content }: ChatMessageProperties) {
+export function AppMessage({ role, content }: AppMessageProperties) {
   // Check if the role of the message is the user
   const isUser = role === Role.USER;
 
-  // HTML for the chat message
+  // HTML for the app message
   return (
     <div
       className={`flex gap-4 p-6

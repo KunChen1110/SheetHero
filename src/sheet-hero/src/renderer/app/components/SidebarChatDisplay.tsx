@@ -2,20 +2,20 @@ import { Chat } from "@/util/interfaces";
 import { MessageSquare } from "lucide-react";
 import { SidebarWidget } from "./SidebarWidget";
 
-// Properties needed for the chat display
-interface ChatDisplayProperties {
+// Properties needed for the sidebar chat display
+interface SidebarChatDisplayProperties {
   chats: Chat[];
   activeChat?: string;
   onChatSelect: (chatId: string) => void;
   onNewChat: () => void;
 }
 
-export function ChatDisplay({
+export function SidebarChatDisplay({
   chats,
   activeChat,
   onChatSelect,
-}: ChatDisplayProperties) {
-  // HTML for the chat display
+}: SidebarChatDisplayProperties) {
+  // HTML for the sidebar chat display
   return (
     <div className="p-3">
       <div className="space-y-1">
@@ -23,11 +23,7 @@ export function ChatDisplay({
         {chats.map((chat) => (
           <SidebarWidget
             className={`
-              ${
-                activeChat === chat.id
-                  ? "bg-green-900 hover:bg-green-900 border-green-500"
-                  : "hover:bg-gray-800/20"
-              }
+              ${activeChat === chat.id && "bg-green-900/50 hover:bg-green-900/50 border-green-400"}
             `}
             key={chat.id}
             onWidgetClick={() => onChatSelect?.(chat.id)}
@@ -39,7 +35,7 @@ export function ChatDisplay({
                     ${
                       activeChat === chat.id
                         ? "text-green-400"
-                        : "text-gray-400 group-hover:text-green-400"
+                        : "text-gray-400"
                     }
                   `}
               />

@@ -1,6 +1,6 @@
 import { ExcelFile, Chat } from "@/util/interfaces";
-import { FileDisplay } from "@/renderer/app/components/FileDisplay";
-import { ChatDisplay } from "./ChatDisplay";
+import { SidebarFileDisplay } from "@/renderer/app/components/SidebarFileDisplay";
+import { SidebarChatDisplay } from "./SidebarChatDisplay";
 import { SidebarHeader } from "./SidebarHeader";
 import { FileSpreadsheet, Settings, Upload } from "lucide-react";
 import { SidebarWidget } from "./SidebarWidget";
@@ -130,7 +130,7 @@ export function Sidebar({
         content={<div className="text-xs text-gray-500">{files.length}</div>}
       />
 
-      <FileDisplay
+      <SidebarFileDisplay
         files={files}
         onAddFiles={addFiles}
         onRemoveFile={removeFile}
@@ -151,7 +151,7 @@ export function Sidebar({
 
       {/* Scroll container with listed chats */}
       <div className="flex-1 overflow-y-auto relative">
-        <ChatDisplay
+        <SidebarChatDisplay
           chats={chats}
           activeChat={activeChat}
           onChatSelect={onChatSelect}

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
-import { ChatMessage } from "@/renderer/app/components/ChatMessage";
-import { ChatInput } from "@/renderer/app/components/ChatInput";
+import { AppMessage } from "@/renderer/app/components/AppMessage";
+import { AppInput } from "@/renderer/app/components/AppInput";
 import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
-import { MissingAPI } from "./components/MissingAPI";
+import { AppAPIOverlay } from "./components/AppAPIOverlay";
 import { useSettings } from "@/util/storage";
 import { api } from "@/util/api";
 
@@ -255,11 +255,13 @@ export default function App() {
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
             {/* =-=-=  Missing API key overlay =-=-=  */}
-            {!hasApiKey && <MissingAPI onSettingsClick={handleSettingsClick} />}
+            {!hasApiKey && (
+              <AppAPIOverlay onSettingsClick={handleSettingsClick} />
+            )}
             <div className="max-w-4xl mx-auto space-y-5 py-5">
               {/* =-=-=  Messages container =-=-=  */}
               {messages.map((message) => (
-                <ChatMessage
+                <AppMessage
                   key={message.id}
                   role={message.role}
                   content={message.content}
@@ -269,7 +271,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        <ChatInput
+        <AppInput
           onSendMessage={createNewMessage}
           disabled={isTyping || !hasApiKey}
         />
