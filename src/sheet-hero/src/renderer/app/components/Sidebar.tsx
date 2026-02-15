@@ -1,11 +1,9 @@
-import { ExcelFile, Chat } from "@/util/interfaces";
+import { ExcelFile, Chat, FILE_EXTENSIONS } from "@/util/interfaces";
 import { SidebarFileDisplay } from "@/renderer/app/components/SidebarFileDisplay";
 import { SidebarChatDisplay } from "./SidebarChatDisplay";
 import { SidebarHeader } from "./SidebarHeader";
 import { FileSpreadsheet, Settings, Upload } from "lucide-react";
 import { SidebarWidget } from "./SidebarWidget";
-
-const ACCEPTED_FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
 
 // Properties needed for the sidebar
 interface SidebarProperties {
@@ -20,9 +18,7 @@ interface SidebarProperties {
 
 // Checks if a file type is valid
 function isAcceptedFileType(extension: string): boolean {
-  return ACCEPTED_FILE_EXTENSIONS.some(
-    (ext) => ext === extension.toLowerCase(),
-  );
+  return FILE_EXTENSIONS.some((ext) => ext === extension.toLowerCase());
 }
 
 // Gets the extension name of a file
@@ -31,6 +27,12 @@ function getFileExtension(fileName: string): string {
 
   if (extension.length > 1) return extension.pop()!;
   else return "";
+}
+
+// Gets the current max index of files
+function getCurrentMaxIndex(files: ExcelFile[]): number {
+  if (files.length > 0) return Math.max(...files.map((f) => f.index));
+  else return 0;
 }
 
 export function Sidebar({
@@ -43,13 +45,12 @@ export function Sidebar({
   activeChat,
 }: SidebarProperties) {
   // This uses the preload.js to open a file dialog
-  // This is needed to get the file path for the selected files
+  // Handles the uploading of files manually through a file dialog
   async function handleUploadClick() {
     try {
       const filePaths = await window.electronAPI.openFileDialog();
 
       if (filePaths && filePaths.length > 0) {
-        // Filter only accepted file types
         const validFilePaths = filePaths.filter((filePath) => {
           const fileName = filePath.split(/[\\/]/).pop() || "";
           return isAcceptedFileType(getFileExtension(fileName));
@@ -57,19 +58,18 @@ export function Sidebar({
 
         if (validFilePaths.length === 0) return;
 
-        const currentMaxIndex =
-          files.length > 0 ? Math.max(...files.map((f) => f.index)) : 0;
+        const excelFiles: ExcelFile[] = validFilePaths.map(
+          (filePath, index) => {
+            const fileName = filePath.split(/[\\/]/).pop() || filePath;
 
-        const excelFiles: ExcelFile[] = validFilePaths.map((filePath, idx) => {
-          const fileName = filePath.split(/[\\/]/).pop() || filePath;
-
-          return {
-            id: `${Date.now()}-${idx}`,
-            name: fileName,
-            index: currentMaxIndex + idx + 1,
-            path: filePath,
-          };
-        });
+            return {
+              id: `${Date.now()}-${index}`,
+              name: fileName,
+              index: getCurrentMaxIndex(files) + index + 1,
+              path: filePath,
+            };
+          },
+        );
 
         onFilesChange([...files, ...excelFiles]);
       }
@@ -78,25 +78,17 @@ export function Sidebar({
     }
   }
 
-  // Adds a file to the file list
+  // TODO: this does not work with drag and drop, and is not used at all with manual selection
   function addFiles(newFiles: File[]): void {
-    const currentMaxIndex =
-      files.length > 0 ? Math.max(...files.map((f) => f.index)) : 0;
-    const excelFiles: ExcelFile[] = newFiles.map((file, idx) => ({
-      id: `${Date.now()} - ${idx}`,
-      name: file.name,
-      index: currentMaxIndex + idx + 1,
-      path: file.name,
-    }));
-    onFilesChange([...files, ...excelFiles]);
+    console.log(newFiles);
   }
 
   // Removes a file from the file list
   function removeFile(id: string): void {
-    const updatedFiles = files.filter((f) => f.id !== id);
-    const reindexedFiles = updatedFiles.map((file, idx) => ({
+    const updatedFiles = files.filter((file) => file.id !== id);
+    const reindexedFiles = updatedFiles.map((file, index) => ({
       ...file,
-      index: idx + 1,
+      index: index + 1,
     }));
     onFilesChange(reindexedFiles);
   }
@@ -121,7 +113,7 @@ export function Sidebar({
         <SidebarWidget
           title="Upload Files"
           onWidgetClick={handleUploadClick}
-          icon={<Upload size={18} className="text-gray-400" />}
+          icon={<Upload size={18} />}
         />
       </div>
 
@@ -166,7 +158,7 @@ export function Sidebar({
         <SidebarWidget
           title="Settings"
           onWidgetClick={onSettingsClick}
-          icon={<Settings size={18} className="text-gray-400" />}
+          icon={<Settings size={18} />}
         />
       </div>
     </div>
