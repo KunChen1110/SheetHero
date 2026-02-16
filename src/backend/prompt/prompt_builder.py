@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from .prompt_data import ExecutionPrompts, UnderstandingPrompts, ValidationPrompts
+from .prompt_data import (ExecutionPrompts, UnderstandingPrompts, ValidationPrompts,
+                          QAPrompts, DiagnosePrompts, CleaningPrompts, InteractPrompts)
 
 
 class PromptBuilder:
@@ -13,14 +14,26 @@ class PromptBuilder:
     _default_understanding = UnderstandingPrompts()
     _default_execution = ExecutionPrompts()
     _default_validation = ValidationPrompts()
+    _default_qa = QAPrompts()
+    _default_diagnose = DiagnosePrompts()
+    _default_cleaning = CleaningPrompts()
+    _default_interact = InteractPrompts()
 
     def __init__(self,
                  understanding: Optional[UnderstandingPrompts] = None,
                  execution: Optional[ExecutionPrompts] = None,
-                 validation: Optional[ValidationPrompts] = None):
+                 validation: Optional[ValidationPrompts] = None,
+                 qa: Optional[QAPrompts] = None,
+                 diagnose: Optional[DiagnosePrompts] = None,
+                 cleaning: Optional[CleaningPrompts] = None,
+                 interact: Optional[InteractPrompts] = None):
         self._understanding = understanding or self._default_understanding
         self._execution = execution or self._default_execution
         self._validation = validation or self._default_validation
+        self._qa = qa or self._default_qa
+        self._diagnose = diagnose or self._default_diagnose
+        self._cleaning = cleaning or self._default_cleaning
+        self._interact = interact or self._default_interact
 
     def _render(self, template: str, values: Dict[str, Any]) -> str:
         result = template
@@ -30,11 +43,131 @@ class PromptBuilder:
         return result
 
     def build_understanding_prompt(self, user_question: str,
-                                   excel_context_understanding: str) -> str:
+                                   excel_context_understanding: str,
+                                   session_context_understanding: str = "") -> str:
         template = self._understanding.prompt
         return self._render(template, {
             "user_question": user_question,
+            "excel_context_understanding": excel_context_understanding,
+            "session_context_understanding": session_context_understanding
+        })
+
+    def build_quality_diagnosis_prompt(self, excel_context_understanding: str) -> str:
+        template = self._understanding.quality_prompt
+        return self._render(template, {
             "excel_context_understanding": excel_context_understanding
+        })
+
+    def build_understanding_context_match_prompt(self, user_question: str,
+                                                 session_context_understanding: str) -> str:
+        template = self._understanding.context_match_prompt
+        return self._render(template, {
+            "user_question": user_question,
+            "session_context_understanding": session_context_understanding
+        })
+
+    def build_diagnose_code_prompt(self, schema_summary: str, user_task: str) -> str:
+        return self._render(self._diagnose.code_prompt, {
+            "schema_summary": schema_summary
+            ,
+            "user_task": user_task
+        })
+
+    def build_diagnose_prompt(self, user_task: str, scan_report: str) -> str:
+        return self._render(self._diagnose.prompt, {
+            "user_task": user_task,
+            "scan_report": scan_report,
+        })
+
+    def build_diagnose_prioritize_prompt(self, user_task: str,
+                                         questions: list[str]) -> str:
+        candidates = "\n".join(f"{idx}. {question}" for idx, question in enumerate(questions, start=1))
+        if not candidates:
+            candidates = "(none)"
+        return self._render(self._diagnose.prioritize_prompt, {
+            "user_task": user_task,
+            "candidate_questions": candidates,
+        })
+
+    def build_diagnose_router_prompt(self, user_question: str,
+                                     understanding_output: str) -> str:
+        return self._render(self._diagnose.router_prompt, {
+            "user_question": user_question,
+            "understanding_output": understanding_output
+        })
+
+    def build_cleaning_code_prompt(self, schema_summary: str, actions: list[str]) -> str:
+        actions_text = "\n".join(f"- {item}" for item in actions) if actions else "(none)"
+        return self._render(self._cleaning.code_prompt, {
+            "schema_summary": schema_summary,
+            "actions": actions_text
+        })
+
+    def build_qa_prompt(self, quality_table: str,
+                        original_question: str,
+                        user_reply: Optional[str]) -> str:
+        template = self._qa.prompt
+        return self._render(template, {
+            "quality_table": quality_table,
+            "original_question": original_question,
+            "user_reply": user_reply or ""
+        })
+
+    def build_qa_question_prompt(self, quality_table: str,
+                                 current_problem: str) -> str:
+        template = self._qa.question_prompt
+        return self._render(template, {
+            "quality_table": quality_table,
+            "current_problem": current_problem
+        })
+
+    def build_qa_decision_prompt(self, quality_table: str,
+                                 original_question: str,
+                                 answers_summary: str) -> str:
+        template = self._qa.decision_prompt
+        return self._render(template, {
+            "quality_table": quality_table,
+            "original_question": original_question,
+            "answers_summary": answers_summary
+        })
+
+    def build_qa_actions_prompt(self, quality_table: str,
+                                answers_summary: str) -> str:
+        template = self._qa.actions_prompt
+        return self._render(template, {
+            "quality_table": quality_table,
+            "answers_summary": answers_summary
+        })
+
+    def build_qa_match_prompt(self, question: str, reply: str) -> str:
+        template = self._qa.match_prompt
+        return self._render(template, {
+            "question": question,
+            "reply": reply
+        })
+
+    def build_qa_instruction_prompt(self, problem: str, reply: str) -> str:
+        template = self._qa.instruction_prompt
+        return self._render(template, {
+            "problem": problem,
+            "reply": reply
+        })
+
+    def build_interact_needs_spreadsheet_prompt(self, user_message: str) -> str:
+        return self._render(self._interact.needs_spreadsheet_prompt, {
+            "user_message": user_message
+        })
+
+    def build_interact_context_match_prompt(self, user_message: str,
+                                            context_understanding: str) -> str:
+        return self._render(self._interact.context_match_prompt, {
+            "user_message": user_message,
+            "context_understanding": context_understanding
+        })
+
+    def build_interact_context_summary_prompt(self, user_message: str) -> str:
+        return self._render(self._interact.context_summary_prompt, {
+            "user_message": user_message
         })
 
     def build_enhanced_understanding_prompt(self, understanding_output: str,
@@ -62,18 +195,19 @@ class PromptBuilder:
         system_parts.append("\n\n".join(helper_parts))
         return "".join(system_parts)
 
-    def build_execution_user_prompt(self, excel_context_execution: str,
-                                    understanding_output: str,
-                                    user_question: str) -> str:
+    def build_execution_user_prompt(self, execution_context: str,
+                                    user_query: str,
+                                    understanding_output: str) -> str:
         template = self._execution.user_prompt
         return self._render(template, {
-            "excel_context_execution": excel_context_execution,
-            "understanding_output": understanding_output,
-            "user_question": user_question
+            "execution_context": execution_context,
+            "user_query": user_query,
+            "understanding_output": understanding_output
         })
 
-    def build_validation_prompt(self, user_question: str,
+    def build_validation_prompt(self, user_query: str,
                                 excel_context_understanding: str,
+                                execution_context: str,
                                 execution_success: bool,
                                 total_turns: int,
                                 final_answer: str,
@@ -81,8 +215,9 @@ class PromptBuilder:
                                 conversation_history_text: str) -> str:
         template = self._validation.prompt
         return self._render(template, {
-            "user_question": user_question,
+            "user_query": user_query,
             "excel_context_understanding": excel_context_understanding,
+            "execution_context": execution_context,
             "execution_success": execution_success,
             "total_turns": total_turns,
             "final_answer": final_answer,
