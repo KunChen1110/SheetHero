@@ -1,5 +1,7 @@
 .idea/workspace.xml
 .idea/inspectionProfiles/Project_Default.xml
+.venv
+.vscode
 *.xml
 __pycache__/
 venv/
@@ -7,3 +9,19 @@ venv/
 env/
 .env/
 .DS_Store
+# local env
+.venv/
+# artifacts
+artifacts/loggers/
+.idea/
+
+# local python env
+.venv/
+
+# logs / artifacts
+artifacts/loggers/
+artifacts/test/
+artifacts/test_report/
+
+# IDE
+.idea/

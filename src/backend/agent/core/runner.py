@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict
 
 from ..io.report import RunReportBuilder
-from ...prompt.prompt_builder import PromptBuilder
+from ...stages.understanding.context_builder import ExcelContextBuilder
 from ...log.logger_registry import LoggerRegistry
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -13,9 +13,10 @@ logger = LoggerRegistry.setup_logger(__name__)
 class AgentRunner:
     """Runs the Understanding -> Execution -> Validation loop."""
 
-    def __init__(self, max_turns: int, progress_logger=None):
+    def __init__(self, max_turns: int, progress_logger=None, token_budget: int = 50000):
         self.max_turns = max_turns
         self.progress_logger = progress_logger
+        self.token_budget = token_budget
 
     def run(self, user_question: str, understanding_module, execution_module, validation_module) -> Dict[str, Any]:
         logger.info("Starting iterative three-stage analysis")
@@ -37,7 +38,16 @@ class AgentRunner:
                 self.progress_logger.log("-" * 40, to_terminal=False)
 
             understanding_start_time = time.time()
-            understanding_output = understanding_module.run(user_question)
+            sandbox = execution_module.runner.sandbox
+            understanding_context = ExcelContextBuilder(
+                sandbox.excel_paths,
+                sandbox.workbooks
+            ).build(self.token_budget)
+            understanding_output = understanding_module.run(
+                user_question,
+                understanding_context,
+                None
+            )
             understanding_duration = time.time() - understanding_start_time
 
             if self.progress_logger:
@@ -72,19 +82,25 @@ class AgentRunner:
 
                 execution_start_time = time.time()
 
+                sandbox = execution_module.runner.sandbox
+                execution_context = ExcelContextBuilder(
+                    sandbox.excel_paths,
+                    sandbox.workbooks
+                ).build(self.token_budget)
                 if iteration > 0 and all_validation_results:
                     last_validation = all_validation_results[-1]
-                    if last_validation.get('improvement_feedback'):
-                        enhanced_understanding = PromptBuilder().build_enhanced_understanding_prompt(
-                            understanding_output,
-                            last_validation
-                        )
-                    else:
-                        enhanced_understanding = understanding_output
+                    enhanced_understanding = understanding_module.enhance(
+                        understanding_output,
+                        last_validation
+                    )
                 else:
                     enhanced_understanding = understanding_output
 
-                execution_result = execution_module.run(enhanced_understanding, user_question)
+                execution_result = execution_module.run(
+                    user_query=user_question,
+                    execution_context=execution_context,
+                    understanding_output=enhanced_understanding
+                )
                 execution_duration = time.time() - execution_start_time
                 all_execution_results.append(execution_result)
 
@@ -114,9 +130,10 @@ class AgentRunner:
 
                 validation_start_time = time.time()
                 validation_result = validation_module.run(
-                    execution_result,
-                    user_question,
-                    understanding_output
+                    execution_result=execution_result,
+                    user_query=user_question,
+                    understanding_output=understanding_output,
+                    execution_context=execution_context
                 )
                 validation_duration = time.time() - validation_start_time
                 all_validation_results.append(validation_result)
