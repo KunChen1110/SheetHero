@@ -8,6 +8,7 @@ from .search import ExcelSearch
 from .sheet_info import ExcelSheetInfo
 from .output import ExcelOutputWriter
 from .cross_workbook import get_workbook, list_all_workbooks, get_sheet_from_workbook, inspector_multi
+from .diagnose import diagnose_format_inconsistencies
 
 __all__ = [
     "ExcelChartManager",
@@ -21,4 +22,5 @@ __all__ = [
     "list_all_workbooks",
     "get_sheet_from_workbook",
     "inspector_multi",
+    "diagnose_format_inconsistencies",
 ]
