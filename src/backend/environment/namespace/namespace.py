@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-from .world import SpreadsheetWorld
+from ..spreadsheet.world import SpreadsheetWorld
 # import tools
-from .tools import (
+from ..spreadsheet.tools import (
     ExcelChartManager,
     ExcelEditor,
     ExcelFormatter,
@@ -16,6 +16,7 @@ from .tools import (
     list_all_workbooks,
     get_sheet_from_workbook,
     inspector_multi,
+    diagnose_format_inconsistencies,
 )
 
 
@@ -88,4 +89,7 @@ class SpreadsheetNamespace:
             list_all_workbooks=lambda: list_all_workbooks(w),
             get_sheet_from_workbook=lambda fp, sn: get_sheet_from_workbook(w, fp, sn),
             inspector_multi=lambda fp, rr, sn=None: inspector_multi(w, fp, rr, sn),
+
+            # ----- diagnose -----
+            diagnose_format_inconsistencies=diagnose_format_inconsistencies,
         )
