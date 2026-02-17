@@ -62,12 +62,14 @@ export default function App() {
     maxTurns: number,
     model: string,
     baseURL: string,
+    outputDir: string,
   ): void {
     saveSettings({
       apiKey: apiKey,
       maxTurns: maxTurns,
       model: model,
       baseURL: baseURL,
+      outputDir: outputDir,
     });
   }
 
@@ -182,6 +184,8 @@ export default function App() {
       api_key: settings.apiKey,
       model: settings.model,
       max_turns: settings.maxTurns,
+      base_url: settings.baseURL,
+      output_file: settings.outputDir,
       prompt: userMessage,
       excel_paths: excelFiles.map((f) => f.path),
     });
@@ -310,6 +314,7 @@ export default function App() {
         maxTurns={settings.maxTurns}
         model={settings.model}
         baseURL={settings.baseURL}
+        outputDir={settings.outputDir}
         onSave={handleSaveSettings}
       />
     </div>

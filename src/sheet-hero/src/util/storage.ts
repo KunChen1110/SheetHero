@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxTurns: 3,
   baseURL: "",
   model: "gpt-4o-mini",
+  outputDir: await window.electronAPI.getDocumentsPath(),
 };
 
 export function useSettings() {

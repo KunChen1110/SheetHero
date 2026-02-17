@@ -29,4 +29,5 @@ export interface AppSettings {
   maxTurns: number;
   baseURL: string;
   model: string;
+  outputDir: string;
 }
