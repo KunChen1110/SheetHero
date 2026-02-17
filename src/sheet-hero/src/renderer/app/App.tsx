@@ -61,11 +61,13 @@ export default function App() {
     apiKey: string,
     maxTurns: number,
     model: string,
+    baseURL: string,
   ): void {
     saveSettings({
       apiKey: apiKey,
       maxTurns: maxTurns,
       model: model,
+      baseURL: baseURL,
     });
   }
 
@@ -307,6 +309,7 @@ export default function App() {
         apiKey={settings.apiKey}
         maxTurns={settings.maxTurns}
         model={settings.model}
+        baseURL={settings.baseURL}
         onSave={handleSaveSettings}
       />
     </div>
