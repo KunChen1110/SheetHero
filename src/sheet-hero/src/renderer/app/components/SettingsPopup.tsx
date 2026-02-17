@@ -8,15 +8,22 @@ interface SettingsPopupProperties {
   isOpen: boolean;
   apiKey: string;
   maxTurns: number;
+  baseURL: string;
   model: string;
   onClose: () => void;
-  onSave: (apiKey: string, maxTurns: number, model: string) => void;
+  onSave: (
+    apiKey: string,
+    maxTurns: number,
+    model: string,
+    baseURL: string,
+  ) => void;
 }
 
 export function SettingsPopup({
   isOpen,
   apiKey,
   maxTurns,
+  baseURL,
   model,
   onClose,
   onSave,
@@ -33,18 +40,27 @@ export function SettingsPopup({
   // The model being used
   const [localModel, setLocalModel] = useState(model);
 
+  // The base url being used
+  const [localBaseURL, setLocalBaseURL] = useState(baseURL);
+
   useEffect(() => {
     setLocalApiKey(apiKey);
     setLocalMaxTurns(maxTurns);
     setLocalModel(model);
-  }, [apiKey, maxTurns, model, isOpen]);
+    setLocalBaseURL(baseURL);
+  }, [apiKey, maxTurns, model, baseURL, isOpen]);
 
   if (!isOpen) return null;
 
   // Passes arguments to a given "onSave" function, then calls a given "onClose" function
   function handleSave(): void {
-    onSave(localApiKey.trim(), localMaxTurns, localModel.trim());
     onClose();
+    onSave(
+      localApiKey.trim(),
+      localMaxTurns,
+      localModel.trim(),
+      localBaseURL.trim(),
+    );
   }
 
   // If clicking off the menu, call the given "onClose" function
@@ -83,7 +99,7 @@ export function SettingsPopup({
               <SettingsInput
                 type={showApiKey ? "text" : "password"}
                 value={localApiKey}
-                onChange={(e) => setLocalApiKey(e.target.value)}
+                onChange={(event) => setLocalApiKey(event.target.value)}
                 placeholder="Enter your API key"
                 rightElement={
                   <button
@@ -108,7 +124,7 @@ export function SettingsPopup({
               <SettingsInput
                 type="text"
                 value={localModel}
-                onChange={(e) => setLocalModel(e.target.value)}
+                onChange={(event) => setLocalModel(event.target.value)}
                 placeholder="e.g., gpt-4o-mini, gpt-4o, local-model"
               />
             }
@@ -125,9 +141,26 @@ export function SettingsPopup({
                 min="1"
                 max="10"
                 value={localMaxTurns}
-                onChange={(e) =>
-                  setLocalMaxTurns(Math.max(1, parseInt(e.target.value) || 1))
+                onChange={(event) =>
+                  setLocalMaxTurns(
+                    Math.max(1, parseInt(event.target.value) || 1),
+                  )
                 }
+              />
+            }
+          />
+
+          {/* =-=-= Base URL =-=-= */}
+          <SettingsWidget
+            icon={<Hash size={16} />}
+            title="Base URL"
+            description="The root API endpoint used to send model requests."
+            input={
+              <SettingsInput
+                type="string"
+                value={localBaseURL}
+                onChange={(event) => setLocalBaseURL(event.target.value)}
+                placeholder="e.g., https://api.openai.com/v1"
               />
             }
           />
