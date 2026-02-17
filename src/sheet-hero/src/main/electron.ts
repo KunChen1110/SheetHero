@@ -6,8 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Is exposed through the preload files,
-// it is used for opening file dialog with specific file extensions
-ipcMain.handle("open-file-dialog", async () => {
+// It is used for opening file dialog with specific file extensions
+ipcMain.handle("dialog:selectFiles", async () => {
   const result = await dialog.showOpenDialog({
     properties: ["openFile", "multiSelections"],
     filters: [
@@ -19,6 +19,21 @@ ipcMain.handle("open-file-dialog", async () => {
   });
 
   return result.filePaths;
+});
+
+// Is exposed through the preload files,
+// It is used to select a directory for output
+ipcMain.handle("dialog:selectDirectory", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+// Is exposed through the preload files,
+// It is used to get the operating systems default documents path
+ipcMain.handle("app:getDocumentsPath", () => {
+  return app.getPath("documents");
 });
 
 // Creates the main window

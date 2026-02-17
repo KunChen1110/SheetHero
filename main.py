@@ -27,6 +27,8 @@ class SheetHeroStartRequest(BaseModel):
     model: str
     max_turns: int
     prompt: str
+    base_url: str
+    output_file: str
     excel_paths: List[str]
 
 
@@ -41,6 +43,8 @@ def start_sheet_hero(request: SheetHeroStartRequest):
         api_key=request.api_key,
         deployment=request.model,
         max_turns=request.max_turns,
+        base_url=request.base_url,
+        output_file=request.output_file
     ))
 
     driver = StreamDialogueDriver(service)

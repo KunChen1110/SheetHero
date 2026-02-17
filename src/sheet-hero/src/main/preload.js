@@ -3,5 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 // This exposes an api used for communication between the renderer and the main process
 contextBridge.exposeInMainWorld("electronAPI", {
-  openFileDialog: () => ipcRenderer.invoke("open-file-dialog"),
+  selectFiles: () => ipcRenderer.invoke("dialog:selectFiles"),
+  selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
+  getDocumentsPath: () => ipcRenderer.invoke("app:getDocumentsPath"),
 });

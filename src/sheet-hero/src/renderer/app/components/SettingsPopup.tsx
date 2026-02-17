@@ -1,4 +1,4 @@
-import { X, Key, Hash, Bot } from "lucide-react";
+import { X, Key, Hash, Bot, FolderInput, Link } from "lucide-react";
 import { useState, useEffect } from "react";
 import { SettingsWidget } from "./SettingsWidget";
 import { SettingsInput } from "./SettingsInput";
@@ -8,14 +8,16 @@ interface SettingsPopupProperties {
   isOpen: boolean;
   apiKey: string;
   maxTurns: number;
-  baseURL: string;
   model: string;
+  baseURL: string;
+  outputDir: string;
   onClose: () => void;
   onSave: (
     apiKey: string,
     maxTurns: number,
     model: string,
     baseURL: string,
+    outputDirectory: string,
   ) => void;
 }
 
@@ -23,8 +25,9 @@ export function SettingsPopup({
   isOpen,
   apiKey,
   maxTurns,
-  baseURL,
   model,
+  baseURL,
+  outputDir,
   onClose,
   onSave,
 }: SettingsPopupProperties) {
@@ -43,12 +46,16 @@ export function SettingsPopup({
   // The base url being used
   const [localBaseURL, setLocalBaseURL] = useState(baseURL);
 
+  // The output directory of generated files
+  const [localOutputDir, setlocalOutputDir] = useState(outputDir);
+
   useEffect(() => {
     setLocalApiKey(apiKey);
     setLocalMaxTurns(maxTurns);
     setLocalModel(model);
     setLocalBaseURL(baseURL);
-  }, [apiKey, maxTurns, model, baseURL, isOpen]);
+    setlocalOutputDir(outputDir);
+  }, [apiKey, maxTurns, model, baseURL, outputDir, isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,6 +67,7 @@ export function SettingsPopup({
       localMaxTurns,
       localModel.trim(),
       localBaseURL.trim(),
+      localOutputDir.trim(),
     );
   }
 
@@ -89,6 +97,34 @@ export function SettingsPopup({
         </div>
 
         <div className="p-6 space-y-4">
+          {/* =-=-= Output directory =-=-= */}
+          <SettingsWidget
+            icon={<FolderInput size={16} />}
+            title="Output directory"
+            required={true}
+            description="The directory of where generated files should be outputted"
+            input={
+              <SettingsInput
+                type="string"
+                value={localOutputDir}
+                onChange={(event) => setlocalOutputDir(event.target.value)}
+                placeholder="e.g., C:\Some_folder"
+                rightElement={
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-green-400 transition-colors"
+                    type="button"
+                    onClick={async () => {
+                      const dir = await window.electronAPI.selectDirectory();
+                      if (dir) setlocalOutputDir(dir);
+                    }}
+                  >
+                    Browse
+                  </button>
+                }
+              />
+            }
+          />
+
           {/* =-=-= API Key =-=-= */}
           <SettingsWidget
             icon={<Key size={16} />}
@@ -152,7 +188,7 @@ export function SettingsPopup({
 
           {/* =-=-= Base URL =-=-= */}
           <SettingsWidget
-            icon={<Hash size={16} />}
+            icon={<Link size={16} />}
             title="Base URL"
             description="The root API endpoint used to send model requests."
             input={

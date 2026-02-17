@@ -48,7 +48,7 @@ export function Sidebar({
   // Handles the uploading of files manually through a file dialog
   async function handleUploadClick() {
     try {
-      const filePaths = await window.electronAPI.openFileDialog();
+      const filePaths = await window.electronAPI.selectFiles();
 
       if (filePaths && filePaths.length > 0) {
         const validFilePaths = filePaths.filter((filePath) => {
