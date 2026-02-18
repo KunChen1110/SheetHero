@@ -48,13 +48,17 @@ class SheetHero:
             first_input = self.excel_paths[0] if self.excel_paths else "output"
             base_name = os.path.splitext(os.path.basename(first_input))[0]
             task_dir = os.path.basename(os.path.dirname(first_input)) or "output"
+            project_root = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../../../..")
+            )
             artifacts_dir = os.path.join(
-                "/home/scygl3/GRP/team29_project",
+                project_root,
                 "artifacts",
                 task_dir
             )
             os.makedirs(artifacts_dir, exist_ok=True)
             self._output_path = os.path.join(artifacts_dir, f"{base_name}_output.xlsx")
+        self._output_existed_before = os.path.exists(self._output_path)
 
         self.output_instruction = self._build_output_instruction()
 
@@ -488,7 +492,8 @@ class SheetHero:
             "final_answer": validation_result.get(
                 "verified_answer",
                 execution_result.get("answer", "")
-            )
+            ),
+            "edited_existing_file": self._output_existed_before,
         }
 
         extracted_context = ContextExtractor.extract_workbook_purpose_domain(
