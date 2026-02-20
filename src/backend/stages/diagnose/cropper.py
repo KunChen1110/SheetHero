@@ -101,7 +101,7 @@ def _geometric_scan_indices(df: pd.DataFrame,
                             budget_cells: int,
                             tau: float = 0.7,
                             p_at_dist1: float = 0.8,
-                            lambda_decay: float = 5.0,
+                            lambda_decay: float = 3.0,
                             debug_hook=None) -> List[int]:
     total_rows = len(df)
     if total_rows <= 0:

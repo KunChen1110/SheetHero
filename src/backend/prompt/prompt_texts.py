@@ -149,7 +149,7 @@ Instructions:
 """)
 
 _QA_QUESTION_PROMPT = textwrap.dedent("""\
-You are a QA agent. Your job is to ask ONE clarification question for the given data issue.
+You are a Quality Assurance agent. Your job is to ask ONE clarification question for the given data issue, and provide THREE short answer options plus an "Other" option.
 
 Detected data issues:
 <<quality_table>>
@@ -159,16 +159,24 @@ Current issue to clarify:
 
 Rules:
 - Output a single question only.
-- Do NOT include any extra text.
-- You MUST preserve the decision space of the original question.
-- Do NOT introduce new choices like drop/remove/ignore unless the issue explicitly asks that.
-- For normalization issues, ask “what standard/format should be applied,” not “should we drop/keep.”
-- Only paraphrase; do not reinterpret.
-- Use plain, natural language that a non-technical user can answer.
-- Avoid technical phrases like “numeric validity,” “validity standard,” or “data quality.”
+- Then output EXACTLY three short answer options labeled A), B), C) plus D) Other
+- Format: "Question text? A) [option1] B) [option2] C) [option3] D) Other (please specify)"
+- Each A/B/C option should be 2-5 words maximum
+- D) Other must always be included as the last option
+- Do NOT include any extra text or explanations
+- You MUST preserve the decision space of the original question
+- Do NOT introduce new choices like drop/remove/ignore unless the issue explicitly asks that
+- For normalization issues, ask "what standard/format should be applied," not "should we drop/keep"
+- Only paraphrase; do not reinterpret
+- Use plain, natural language that a non-technical user can answer
+- Avoid technical phrases like "numeric validity," "validity standard," or "data quality"
 - If the issue is about missing/blank values, ask directly what to do (e.g., fill, leave blank),
-  without adding new choices beyond the issue itself.
+  without adding new choices beyond the issue itself
+
+Example output:
+Should we standardize the date format? A) Use ISO 8601 B) Use US format (MM/DD/YYYY) C) Keep as-is D) Other (please specify)
 """)
+
 
 _QA_ACTIONS_PROMPT = textwrap.dedent("""\
 You are a QA agent. Produce a list of cleaning actions to apply to the spreadsheets.
@@ -381,33 +389,28 @@ User message:
 """)
 
 _QA_MATCH_PROMPT = textwrap.dedent("""\
-You are checking whether a user's reply matches a specific data-cleaning question.
+You are checking whether a user's reply matches one of the provided options for a data-cleaning question.
 
-Question:
-<<question>>
+Question asked:
+<<questions>>
 
 User reply:
 <<reply>>
 
-You MUST reason in this order:
-STEP 1 — Interpret user reply
-- Rewrite the user reply into a full explicit answer using the question context.
-- This is required especially when the reply is short, numeric, yes/no, or implicit.
-
-STEP 2 — Match decision
-- Decide whether the interpreted answer directly addresses the question.
-
-STEP 3 — Action extraction
-- If MATCH=YES, extract one clear cleaning instruction.
-- If the interpreted answer means "no change needed", output ACTION as NO_OP.
-
-Output Rules:
-- Output exactly two lines.
+Rules:
+- Accept if reply matches option A, B, C, or D (or their text)
+- Accept if reply is a number (1, 2, 3, 4) corresponding to A, B, C, D
+- Accept if reply is "other" or "none of the above" → match D
+- Accept if reply semantically matches one of the options
+- If reply is free-form text that doesn't match A/B/C, assume D (Other) and extract the intent
+- Output exactly three lines.
 - Line 1: MATCH: YES or NO
-- Line 2: ACTION: <one clear cleaning instruction sentence>, NO_OP, or ACTION:
-- If the interpreted answer indicates no change is needed, treat as MATCH = YES and ACTION = NO_OP.
-- If YES and ACTION is not NO_OP, it must specify file, sheet, column(s), and operation.
-- If NO, ACTION should be empty.
+- Line 2: OPTION: A, B, C, D, or NONE (which option was selected)
+- Line 3: ACTION: <one clear cleaning instruction sentence>, NO_OP, ASK_CLARIFICATION, or empty
+- If D (Other) is selected, ACTION should be ASK_CLARIFICATION to get more details
+- If the reply indicates no change is needed, treat as MATCH = YES, OPTION: C (or last option), ACTION = NO_OP
+- If YES and ACTION is not NO_OP/ASK_CLARIFICATION, it must specify file, sheet, column(s), and operation
+- If NO, OPTION should be NONE and ACTION should be empty
 """)
 
 _QA_INSTRUCTION_PROMPT = textwrap.dedent("""\
