@@ -97,9 +97,9 @@ class AgentRunner:
                     enhanced_understanding = understanding_output
 
                 execution_result = execution_module.run(
-                    user_query=user_question,
-                    execution_context=execution_context,
-                    understanding_output=enhanced_understanding
+                    understanding_output=enhanced_understanding,
+                    user_question=user_question,
+                    max_turns=self.max_turns
                 )
                 execution_duration = time.time() - execution_start_time
                 all_execution_results.append(execution_result)
@@ -131,9 +131,8 @@ class AgentRunner:
                 validation_start_time = time.time()
                 validation_result = validation_module.run(
                     execution_result=execution_result,
-                    user_query=user_question,
-                    understanding_output=understanding_output,
-                    execution_context=execution_context
+                    user_question=user_question,
+                    understanding_output=understanding_output
                 )
                 validation_duration = time.time() - validation_start_time
                 all_validation_results.append(validation_result)
