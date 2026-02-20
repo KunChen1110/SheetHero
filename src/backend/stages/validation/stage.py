@@ -18,6 +18,6 @@ class ValidationStage(Stage):
             progress_log_file=progress_log_file
         )
 
-    def run(self, execution_result: Dict[str, Any], user_query: str,
-            understanding_output: str, execution_context: str = "") -> Dict[str, Any]:
-        return self.runner.run(execution_result, user_query, understanding_output, execution_context)
+    def run(self, execution_result: Dict[str, Any], user_question: str,
+            understanding_output: str) -> Dict[str, Any]:
+        return self.runner.run(execution_result, user_question, understanding_output)

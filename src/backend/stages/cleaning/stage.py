@@ -45,6 +45,8 @@ class DataCleaningStage:
             schema_summary=schema_summary,
             actions=actions
         )
+        if self.progress_logger:
+            self.progress_logger.log_raw("### [CLEANING PROMPT]\n" + prompt_text)
 
         self._log_progress("[CLEANING] generating cleaning code")
         response = self.client.chat.completions.create(

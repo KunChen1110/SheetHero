@@ -23,22 +23,17 @@ class ValidationRuntime(StageRuntime):
         self.llm_client = ValidationLLMClient(client, deployment)
         self.parser = ValidationResponseParser()
 
-    def run(self, execution_result: Dict[str, Any], user_query: str,
-            understanding_output: str, execution_context: str = "") -> Dict[str, Any]:
+    def run(self, execution_result: Dict[str, Any], user_question: str,
+            understanding_output: str) -> Dict[str, Any]:
         logger.info("Starting validation on execution results")
-        self._log_to_file(
-            f"[VALIDATION] user_query={self._truncate(user_query)} "
-            f"context_len={len(execution_context)}"
-        )
 
         conversation_history = execution_result.get("conversation_history", [])
         conversation_history_text = self.history_formatter.format(conversation_history)
 
-        context_for_validation = execution_context or self.excel_context_understanding
         prompt_text = PromptBuilder().build_validation_prompt(
-            user_query=user_query,
-            excel_context_understanding=context_for_validation,
-            execution_context=execution_context or "",
+            user_query=user_question,
+            excel_context_understanding=self.excel_context_understanding,
+            execution_context=understanding_output,
             execution_success=execution_result.get("success", False),
             total_turns=execution_result.get("total_turns", 0),
             final_answer=execution_result.get("answer", "No answer provided"),
@@ -86,12 +81,3 @@ class ValidationRuntime(StageRuntime):
                 "verified_answer": "",
                 "requires_reexecution": False
             }
-
-    @staticmethod
-    def _truncate(value: str, limit: int = 300) -> str:
-        if value is None:
-            return ""
-        text = str(value)
-        if len(text) <= limit:
-            return text
-        return text[:limit] + "..."
