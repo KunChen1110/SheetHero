@@ -22,12 +22,12 @@ class ExecutionResponseParser(BaseResponseParser):
         return content.strip(), None
 
     @staticmethod
-    def extract_final_answer(text: str) -> Optional[str]:
-        if not text:
+    def extract_final_answer(thought: str) -> Optional[str]:
+        if not thought:
             return None
-        if "Final Answer:" in text or "FINAL ANSWER:" in text:
-            final_answer_match = re.search(r"Final Answer:\s*(.*?)$", text, re.DOTALL | re.IGNORECASE)
+        if "Final Answer:" in thought:
+            final_answer_match = re.search(r"Final Answer:\s*(.*?)$", thought, re.DOTALL)
             if final_answer_match:
                 return final_answer_match.group(1).strip()
-            return re.sub(r"Final Answer:\s*", "", text, flags=re.IGNORECASE).strip()
+            return thought.replace("Final Answer:", "").strip()
         return None
