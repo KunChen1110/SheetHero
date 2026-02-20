@@ -29,7 +29,3 @@ class SheetHeroSession:
     ui_thought_cursor: int = 0
     pending_execution_result: Optional[Dict[str, Any]] = None
     pending_execution_context: Optional[str] = None
-
-    def get_active_workbooks(self) -> Optional[Dict[str, Any]]:
-        """Return task-bound workbook facts."""
-        return self.current_workbooks

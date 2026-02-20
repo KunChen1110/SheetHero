@@ -147,7 +147,7 @@ class SheetHeroService:
         context = (self._session.context_understanding or "").strip()
         if context:
             self._memory.last_context_understanding = context
-        active = self._session.get_active_workbooks()
+        active = self._session.current_workbooks
         if active:
             self._memory.last_workbooks = active
 
