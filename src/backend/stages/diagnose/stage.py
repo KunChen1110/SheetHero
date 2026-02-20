@@ -1,5 +1,6 @@
 """Read-only diagnose stage for question list generation."""
 
+import os
 from typing import List, Optional
 
 from ...log.logger_registry import LoggerRegistry
@@ -24,6 +25,7 @@ class DiagnoseStage:
 
     def run_readonly(self, workbooks, user_task: str = "") -> List[str]:
         workbook_source = workbooks or {}
+        geom_debug_enabled = os.getenv("DIAGNOSE_GEOM_DEBUG") == "1"
         debug_lines: List[str] = []
         def _debug_hook(message: str) -> None:
             debug_lines.append(message)
@@ -38,10 +40,17 @@ class DiagnoseStage:
 
         if self.progress_logger:
             self.progress_logger.log("[DIAGNOSE] Generating diagnostic issues", to_terminal=False)
+            debug_sections: List[str] = []
+            if geom_debug_enabled:
+                debug_sections.append(
+                    "\n".join(["### [DIAGNOSE SAMPLED TABLES]", scan_report or "No scan results."])
+                )
             if debug_lines:
-                self.progress_logger.log_raw(
+                debug_sections.append(
                     "\n".join(["### [DIAGNOSE GEOM DEBUG]"] + debug_lines)
                 )
+            if debug_sections:
+                self.progress_logger.log_raw("\n\n".join(debug_sections))
 
         try:
             response = self.client.chat.completions.create(
