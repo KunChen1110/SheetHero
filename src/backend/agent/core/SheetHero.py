@@ -439,9 +439,9 @@ class SheetHero:
         ).build(self.config.total_token_budget)
         self._append_ui_thought(session, "executing", "running", "Generating and running execution code")
         execution_result = self.execution_module.run(
-            user_query=user_query,
-            execution_context=execution_context,
-            understanding_output=understanding_output
+            understanding_output=understanding_output,
+            user_question=user_query,
+            max_turns=self.config.max_turns
         )
         self._append_ui_thought(
             session,
@@ -470,9 +470,8 @@ class SheetHero:
         self._append_ui_thought(session, "validation", "running", "Validating execution result")
         validation_result = self.validation_module.run(
             execution_result=execution_result,
-            user_query=user_query,
-            understanding_output=understanding_output,
-            execution_context=execution_context
+            user_question=user_query,
+            understanding_output=understanding_output
         )
         self._append_ui_thought(
             session,
