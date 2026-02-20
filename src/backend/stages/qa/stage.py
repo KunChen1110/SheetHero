@@ -25,17 +25,25 @@ class QualityAssuranceStage:
         self.qa_rounds = 0
         self.last_mismatch = ""
 
+    def reset(self) -> None:
+        """Reset all QA runtime state for a fresh clarification flow."""
+        self.quality_table = []
+        self.original_question = ""
+        self.unresolved_problems = []
+        self.current_problem = None
+        self.answers = []
+        self.cleaning_actions = []
+        self.qa_rounds = 0
+        self.last_mismatch = ""
+
     def start(self, question_list: Optional[list], original_question: str) -> None:
+        self.reset()
         self.quality_table = self._filter_format_questions(question_list or [])
         self.original_question = original_question
         self.unresolved_problems = [
             {"id": idx, "description": self._problem_description(item)}
             for idx, item in enumerate(self.quality_table)
         ]
-        self.current_problem = None
-        self.answers = []
-        self.cleaning_actions = []
-        self.qa_rounds = 0
         self._log_progress(
             f"[QA] Started with {len(self.unresolved_problems)} issue(s) to clarify."
         )
