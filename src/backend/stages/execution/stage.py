@@ -12,17 +12,16 @@ class ExecutionStage(Stage):
     """
 
     def __init__(self, client, deployment: str, sandbox,
-                 excel_context_execution: str,
                  output_instruction: Optional[str] = None, progress_log_file=None):
         self.runner = ExecutionRuntime(
             client,
             deployment,
             sandbox,
-            excel_context_execution,
             output_instruction=output_instruction,
             progress_log_file=progress_log_file
         )
 
-    def run(self, understanding_output: str, user_question: str,
+    def run(self, user_query: str, execution_context: str,
+            understanding_output: str,
             max_turns: int = 20) -> Dict[str, Any]:
-        return self.runner.run(understanding_output, user_question, max_turns=max_turns)
+        return self.runner.run(user_query, execution_context, understanding_output, max_turns=max_turns)

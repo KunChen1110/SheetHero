@@ -48,7 +48,18 @@ class UnderstandingStage(Stage):
             spreadsheet_context,
             session_context
         )
-    
+        if self.progress_logger:
+            prompt_text = messages[0].get("content", "") if messages else ""
+            self.progress_logger.log_raw(
+                "\n".join(["### [UNDERSTANDING EXCEL CONTEXT]", spreadsheet_context])
+            )
+            if session_context:
+                self.progress_logger.log_raw(
+                    "\n".join(["### [UNDERSTANDING SESSION CONTEXT]", session_context])
+                )
+            self.progress_logger.log_raw(
+                "\n".join(["### [UNDERSTANDING PROMPT]", prompt_text])
+            )
         understanding_output = self._get_llm_response(messages)
         if self.progress_logger:
             self.progress_logger.log_raw(

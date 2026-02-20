@@ -139,13 +139,12 @@ class PromptBuilder:
             "answers_summary": answers_summary
         })
 
-    def build_qa_match_prompt(self, question: str, reply: str) -> str:
+    def build_qa_match_prompt(self, questions: str, reply: str) -> str:
         template = self._qa.match_prompt
         return self._render(template, {
-            "question": question,
+            "questions": questions,
             "reply": reply
         })
-
     def build_qa_instruction_prompt(self, problem: str, reply: str) -> str:
         template = self._qa.instruction_prompt
         return self._render(template, {
