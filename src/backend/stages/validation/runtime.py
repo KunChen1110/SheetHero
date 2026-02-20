@@ -31,8 +31,9 @@ class ValidationRuntime(StageRuntime):
         conversation_history_text = self.history_formatter.format(conversation_history)
 
         prompt_text = PromptBuilder().build_validation_prompt(
-            user_question=user_question,
+            user_query=user_question,
             excel_context_understanding=self.excel_context_understanding,
+            execution_context=understanding_output,
             execution_success=execution_result.get("success", False),
             total_turns=execution_result.get("total_turns", 0),
             final_answer=execution_result.get("answer", "No answer provided"),
