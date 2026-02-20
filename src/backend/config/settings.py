@@ -11,7 +11,6 @@ class Config:
 
     # === Processing Configuration ===
     max_turns: int = 3
-    max_qa_rounds: int = 5
     total_token_budget: int = 5000
 
     # === Output ===

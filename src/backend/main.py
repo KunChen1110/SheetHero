@@ -107,34 +107,36 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
     stream = driver.start(buffer.prompt or "", buffer.excel_paths)
 
     while True:
-        stream_terminated = True
         for event in stream:
-            stream_terminated = False
-            event_type = str(event.get("type") or "")
+            event_type = event.get("type", "")
             stage = event.get("stage")
+
             if stage:
                 print(f"[{event_type}] stage={stage}")
-            elif event_type == "progress":
-                print("[progress]")
+            else:
+                print(f"[{event_type}]")
 
             thoughts = event.get("ui_thoughts")
-            if isinstance(thoughts, list) and thoughts:
+            if thoughts:
                 print(f"[ui_thoughts] +{len(thoughts)}")
 
             if event_type == "clarification":
-                question = str(event.get("message") or "Please clarify your request.")
+                question = event.get("message") or "Please clarify your request."
                 user_reply = input(f"Agent: {question}\nYou: ")
                 stream = driver.reply(user_reply)
-                break
+                break  # restart loop with new stream
 
             if event_type in {"final", "error"}:
                 print(f"Agent: {event.get('message')}")
-                if event_type != "error":
+                if event_type == "final":
                     buffer.clear()
                 return
-        if stream_terminated:
-            print("Error: stream ended without clarification/final/error.")
+
+        else:
+            # for-loop exhausted without break → stream ended unexpectedly
+            print("Error: stream ended without final/error.")
             return
+
 
 
 def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line: str) -> None:
@@ -172,7 +174,14 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
 
 
 def main() -> None:
-    service = SheetHeroService(config=Config())
+    root = Path(__file__).resolve().parents[2]
+    default_output_dir = root / "artifacts" / "output"
+
+    config = Config()
+    config.output_mode = "file"
+    config.output_file = str(default_output_dir)
+
+    service = SheetHeroService(config=config)
     buffer = InputBuffer()
 
     print("SheetHero CLI (debug mode)")

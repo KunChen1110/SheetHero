@@ -18,11 +18,13 @@ class ExecutionRuntime(StageRuntime):
     """Runs the execution loop with LLM responses and code execution."""
 
     def __init__(self, client, deployment: str, sandbox,
+                 excel_context_execution: str,
                  output_instruction: Optional[str] = None, progress_log_file=None):
         super().__init__(progress_log_file)
         self.client = client
         self.deployment = deployment
         self.sandbox = sandbox
+        self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
 
         self.llm_client = ExecutionLLMClient(client, deployment)
@@ -39,41 +41,23 @@ class ExecutionRuntime(StageRuntime):
         )
         return {"role": "system", "content": system_content}
 
-    @staticmethod
-    def _truncate(value: str, limit: int = 300) -> str:
-        if value is None:
-            return ""
-        text = str(value)
-        if len(text) <= limit:
-            return text
-        return text[:limit] + "..."
-
-    def _create_initial_user_prompt(self, execution_context: str,
-                                    user_query: str,
-                                    understanding_output: str) -> dict:
+    def _create_initial_user_prompt(self, understanding_output: str,
+                                    user_question: str) -> dict:
         user_content = PromptBuilder().build_execution_user_prompt(
-            execution_context,
-            user_query,
-            understanding_output
+            self.excel_context_execution,
+            understanding_output,
+            user_question
         )
         return {"role": "user", "content": user_content}
 
-    def run(self, user_query: str, execution_context: str,
-            understanding_output: str,
+    def run(self, understanding_output: str, user_question: str,
             max_turns: int = 20) -> Dict[str, Any]:
-        self._log_to_file(
-            f"[EXECUTION] user_query={self._truncate(user_query)} "
-            f"context_len={len(execution_context)}"
-        )
-        self._log_to_file(
-            f"[EXECUTION] understanding_output={self._truncate(understanding_output)}"
-        )
+        logger.info(f"Starting multi-turn analysis for: '{user_question}'")
 
         self.conversation_history = [self._get_system_prompt()]
         initial_prompt = self._create_initial_user_prompt(
-            execution_context,
-            user_query,
-            understanding_output
+            understanding_output,
+            user_question
         )
         self.conversation_history.append(initial_prompt)
 
@@ -95,7 +79,7 @@ class ExecutionRuntime(StageRuntime):
                     )
 
                 if code_action is None:
-                    final_answer = self.parser.extract_final_answer(response_message.content)
+                    final_answer = self.parser.extract_final_answer(thought)
                     if final_answer is not None:
                         logger.info(f"Final answer found: {final_answer}")
                         self._log_to_file(
@@ -167,10 +151,7 @@ class ExecutionRuntime(StageRuntime):
                         "success": False
                     })
 
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": "The previous code failed. Try a different approach.\n" + error_message
-                    })
+                    self.conversation_history.append({"role": "user", "content": error_message})
 
             except Exception as e:
                 logger.error(f"LLM Error: {str(e)}")
