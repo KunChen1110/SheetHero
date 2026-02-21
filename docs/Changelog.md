@@ -133,3 +133,32 @@
   - Online execution is now code-only and must always write an Output sheet and save the workbook via `save_workbook_to(output_path)`, returning the saved file path.
   - Offline execution is now strictly code-only as well, disallowing free-form natural language "Final Answer" responses.
 - Refactored `prompt_data.py` to import shared building blocks from `prompt_texts_online.py` and offline-only pieces from `prompt_texts_offline.py`.
+
+## 21/2/2026
+### --- Added ---
+- Added bounded error routing for offline execution in `stages/execution/runtime.py`
+  - Detects common failure patterns and sends targeted minimal-fix feedback (e.g., wrong `inspector_multi` signature, undefined names, invalid helper imports).
+  - Added consecutive-forbidden handling with a hard-reset code template to break repeated forbidden loops.
+- Added explicit bounded forbidden rules in `stages/execution/executor.py`
+  - Blocks `common_functions` imports and invalid `inspector_multi` call styles (keyword `range_ref`, missing required range argument).
+
+### --- Changed ---
+- Reworked offline bounded strategy from strict sentinel/format gating to bounded-lite guardrails
+  - Kept function-level safety checks and runtime feedback loops.
+  - Removed brittle sentinel-driven blocking that caused format oscillation.
+- Simplified and refocused `prompt_texts_offline.py`
+  - Kept concise high-value rules and helper signatures.
+  - Added concrete correct-call examples for `inspector_multi`.
+- Updated `prompt/prompt_builder.py` so offline mode uses offline-specific execution helper sections only (without online heavy sections).
+- Updated parser behavior in `stages/execution/parser.py`
+  - Prioritizes Python code-block extraction before `Final Answer` text detection.
+- Updated output instruction text in `agent/core/SheetHero.py`
+  - Aligns offline output behavior with `SAVED_FILE`/saved-path execution flow.
+
+### --- Fixed ---
+- Fixed runtime success/error accounting in `stages/execution/runtime.py`
+  - Execution results containing traceback are now handled as failures and fed back into bounded repair flow instead of being treated as successful turns.
+- Fixed repeated local-model dead loops caused by over-strict path blocking
+  - Relaxed hard-blocking on absolute path literals to avoid immediate re-block when local models copy context paths.
+- Added environment override for bounded mode in `agent/core/SheetHero.py`
+  - `SHEETHERO_BOUNDED_MODE=0/1` can force disable/enable bounded behavior for quick A/B debugging.

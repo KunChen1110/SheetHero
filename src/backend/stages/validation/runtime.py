@@ -23,6 +23,16 @@ class ValidationRuntime(StageRuntime):
         self.llm_client = ValidationLLMClient(client, deployment)
         self.parser = ValidationResponseParser()
 
+    @staticmethod
+    def _looks_like_file_path(s: str) -> bool:
+        """True if s looks like a file path (e.g. ends with .xlsx or starts with / or contains \)."""
+        if not s or not isinstance(s, str):
+            return False
+        s = s.strip()
+        if ".xlsx" in s or ".xls" in s or s.startswith("/") or "\\" in s or s.startswith("C:"):
+            return True
+        return False
+
     def run(self, execution_result: Dict[str, Any], user_question: str,
             understanding_output: str) -> Dict[str, Any]:
         logger.info("Starting validation on execution results")
@@ -49,6 +59,20 @@ class ValidationRuntime(StageRuntime):
             )
 
             validation_result = self.parser.parse(validation_analysis)
+
+            # Rule-based: if final answer is a file path, execution stdout must contain save line
+            final_answer = execution_result.get("answer", "") or ""
+            if final_answer and self._looks_like_file_path(final_answer):
+                steps = execution_result.get("execution_summary", {}).get("execution_steps", [])
+                all_results = " ".join(str(s.get("result") or "") for s in steps)
+                if "Workbook saved to:" not in all_results:
+                    validation_result["validation_passed"] = False
+                    validation_result["issues_found"] = list(validation_result.get("issues_found") or [])
+                    validation_result["issues_found"].append(
+                        "Final answer is a file path but no 'Workbook saved to:' line found in execution output. "
+                        "Execution must use save_workbook_to(output_path) and produce the save confirmation."
+                    )
+                    logger.warning("Validation overridden: path answer without save confirmation in stdout")
 
             logger.info(
                 f"Validation completed. Confidence: {validation_result['confidence_score']:.2f}"
