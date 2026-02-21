@@ -180,12 +180,20 @@ class PromptBuilder:
             "issues_to_address": issues,
         })
 
-    def build_execution_system_prompt(self, output_instruction: str) -> str:
+    def build_execution_system_prompt(
+        self,
+        output_instruction: str,
+        use_bounded_execution: bool = False
+    ) -> str:
         system_intro = self._execution.system_intro
-        helper_parts = [
-            self._execution.helper_sections_part1,
-            self._execution.helper_sections_part2,
-        ]
+        helper_part1 = (
+            self._execution.helper_sections_part1_offline
+            if use_bounded_execution
+            else self._execution.helper_sections_part1
+        )
+        helper_parts = [helper_part1]
+        if not use_bounded_execution:
+            helper_parts.append(self._execution.helper_sections_part2)
 
         system_parts = [system_intro]
         if output_instruction:
@@ -196,13 +204,13 @@ class PromptBuilder:
         return "".join(system_parts)
 
     def build_execution_user_prompt(self, execution_context: str,
-                                    user_query: str,
-                                    understanding_output: str) -> str:
+                                    understanding_output: str,
+                                    user_query: str) -> str:
         template = self._execution.user_prompt
         return self._render(template, {
             "execution_context": execution_context,
-            "user_query": user_query,
-            "understanding_output": understanding_output
+            "understanding_output": understanding_output,
+            "user_query": user_query
         })
 
     def build_validation_prompt(self, user_query: str,
