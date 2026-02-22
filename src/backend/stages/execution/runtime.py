@@ -58,6 +58,7 @@ class ExecutionRuntime(StageRuntime):
     def _get_system_prompt(self) -> dict:
         system_content = self.prompt_builder.build_execution_system_prompt(
             self.output_instruction,
+            use_bounded_execution=self.use_bounded_execution,
         )
         return {"role": "system", "content": system_content}
 
