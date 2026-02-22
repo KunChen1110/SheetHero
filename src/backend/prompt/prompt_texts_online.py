@@ -707,7 +707,7 @@ CRITICAL REQUIREMENTS:
 - Complex calculations, aggregations, or statistical analysis is required
 - Data transformation, filtering, or manipulation is needed
 - **JOIN/MERGE operations** are needed (combining tables with common keys)
-- **Multi-condition filtering** is required (e.g., score >= 60 AND major == '计算机')
+- **Multi-condition filtering** is required (e.g., score >= 60 AND major == 'Computer Science')
 - Need to edit/modify the Excel file
 - Need to search across large datasets
 - Verification of calculations through code is specifically requested
@@ -841,12 +841,12 @@ When working with multiple Excel files:
      df2 = pd.DataFrame(table2_data[1:], columns=table2_data[0])
      
      # JOIN on common key (e.g., student ID)
-     merged = pd.merge(df1, df2, on='学生ID', how='inner')
+     merged = pd.merge(df1, df2, on='Student ID', how='inner')
      
-     # Apply filters (e.g., score >= 60 AND major == '计算机')
-     result = merged[(merged['均分'] >= 60) & (merged['专业'] == '计算机')]
+     # Apply filters (e.g., score >= 60 AND major == 'Computer Science')
+     result = merged[(merged['Average Score'] >= 60) & (merged['Major'] == 'Computer Science')]
      
-     print(f"符合条件的学生数: {len(result)}")
+     print(f"Qualified student count: {len(result)}")
      print(result)
      ```
    - Pay attention to file names in the Sheet Content preview to identify which file contains which data
@@ -955,6 +955,10 @@ You are an expert Excel data analysis validator. Your task is to thoroughly revi
 **USER QUERY END:**
 
 **YOUR VALIDATION TASKS:**
+
+Language constraint:
+- Output must be in English only.
+- Do not use Chinese or mixed-language sentences.
 
 1. **Answer Quality:**
 - Does the final answer directly address the user's question?
