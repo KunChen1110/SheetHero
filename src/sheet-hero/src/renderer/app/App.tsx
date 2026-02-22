@@ -271,7 +271,7 @@ export default function App() {
 
         {/* Header */}
         <h2 className="text-2xl font-bold text-(--sh-white) mb-2">
-          Start a New Conversation
+          Create a New Conversation
         </h2>
 
         {/* Instructions */}
@@ -309,10 +309,12 @@ export default function App() {
       <div className="flex flex-1 flex-col p-5 pl-0">
         {/* =-=-=  Main container =-=-= */}
         <div className="h-full rounded-3xl border border-(--sh-border-grey) flex flex-col overflow-hidden bg-(--sh-dark-blue)">
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 relative">
             {/* Missing API key overlay */}
             {!hasApiKey && chats.length != 0 && (
-              <AppAPIOverlay onSettingsClick={handleSettingsClick} />
+              <div className="absolute top-0 left-0 right-0 p-2">
+                <AppAPIOverlay onSettingsClick={handleSettingsClick} />
+              </div>
             )}
 
             {/* Chats container */}

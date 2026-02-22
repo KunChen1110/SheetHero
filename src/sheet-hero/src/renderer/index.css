@@ -15,22 +15,21 @@
   --sh-black: #000000;
   --sh-white: #fefefe;
 
-  --sh-darker-blue: #08101b;
-  --sh-dark-blue: #101721;
-  --sh-blue: #147e8b;
+  --sh-darker-blue: #0a0f1b;
+  --sh-dark-blue: #111b2d;
+  --sh-blue: #0f766e;
 
-  --sh-green-highlight: #19c37d;
-  --sh-green: #1da482;
-  --sh-green-hover: #198f71;
-  --sh-dark-green: #147e8b;
+  --sh-green-highlight: #14b8a6;
+  --sh-green: #0d9488;
+  --sh-green-hover: #0d7377;
+  --sh-dark-green: #0a524a;
 
-  --sh-grey: #c5c1c1;
-  --sh-medium-grey: #7a7777;
-  --sh-dark-grey: #3d3b3b;
-  --sh-border-grey: #1e3133;
+  --sh-grey: #d1d5db;
+  --sh-medium-grey: #6b7280;
+  --sh-dark-grey: #374151;
+  --sh-border-grey: #1f2937;
 
-  --sh-red: #e74c3c;
-  --sh-red-highlight: #e74c3c;
+  --sh-red: #ef4444;
 }
 
 @layer base {
@@ -38,11 +37,5 @@
   body,
   #root {
     height: 100%;
-  }
-
-  button {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
   }
 }

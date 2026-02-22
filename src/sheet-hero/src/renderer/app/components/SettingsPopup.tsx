@@ -215,7 +215,7 @@ export function SettingsPopup({
         <div className="flex items-center justify-end gap-3 p-6 border-t border-(--sh-border-grey)">
           <button
             onClick={onClose}
-            className="p-3 rounded-lg text-sm font-medium text-(--sh-grey) hover:bg-(--sh-dark-grey) transition-colors"
+            className="p-3 rounded-lg text-sm font-medium text-(--sh-grey) hover:bg-(--sh-red) transition-colors"
           >
             Cancel
           </button>
