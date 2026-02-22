@@ -2,6 +2,7 @@ import platform
 import subprocess
 import textwrap
 from tkinter import messagebox
+import re
 
 import threading
 from typing import List, Optional
@@ -19,6 +20,10 @@ from frontend.components.chat_bubble import ChatBubble
 
 # Opens a file specific to user's operating system
 def open_file(path: str):
+    if not path or not os.path.exists(path):
+        messagebox.showerror("File Not Found", f"The file does not exist:\n{path}")
+        return
+
     system = platform.system()
     # Windows open file
     if system == "Windows":
@@ -34,6 +39,47 @@ def open_file(path: str):
             subprocess.run(["xdg-open", path], check=True)
         except FileNotFoundError:
             subprocess.run(["less",path])
+
+
+def _extract_saved_file_from_execution_results(result: dict) -> Optional[str]:
+    """Get last saved xlsx path from execution step outputs."""
+    try:
+        all_exec = result.get("all_execution_results") or []
+        for exec_result in reversed(all_exec):
+            summary = (exec_result or {}).get("execution_summary") or {}
+            steps = summary.get("execution_steps") or []
+            for step in reversed(steps):
+                result_text = str((step or {}).get("result") or "")
+                for pattern in (r"Workbook saved to:\s*(.+?)(?:\n|$)", r"SAVED_FILE:\s*(.+?)(?:\n|$)"):
+                    match = re.search(pattern, result_text)
+                    if match:
+                        candidate = match.group(1).strip()
+                        if candidate and os.path.exists(candidate):
+                            return candidate
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_output_file_path(result: dict, configured_output_path: Optional[str]) -> Optional[str]:
+    """Resolve the best output file path for the Open Excel Output button."""
+    # 1) Prefer validated answer if it is an existing file
+    answer = str(result.get("answer") or "").strip()
+    if answer and os.path.exists(answer):
+        return answer
+
+    # 2) Use configured output path (file or directory)
+    if configured_output_path:
+        configured_output_path = os.path.expanduser(configured_output_path)
+        if os.path.isfile(configured_output_path):
+            return configured_output_path
+        if os.path.isdir(configured_output_path):
+            candidate = os.path.join(configured_output_path, "output.xlsx")
+            if os.path.isfile(candidate):
+                return candidate
+
+    # 3) Parse execution logs for saved path
+    return _extract_saved_file_from_execution_results(result)
 
 
 # Page for prompting the model with selected files and config settings
@@ -338,10 +384,11 @@ class PromptPage(ctk.CTkFrame):
                             lambda path=result["verbose_log_path"]: open_file(path)
                         ))
 
-                    if config.output_file and os.path.exists(config.output_file):
+                    output_file_path = _resolve_output_file_path(result, config.output_file)
+                    if output_file_path and os.path.exists(output_file_path):
                         buttons.append((
                             "Open Excel Output",
-                            lambda path=config.output_file: open_file(result['answer'])
+                            lambda path=output_file_path: open_file(path)
                         ))
 
                     # Send the result, with the buttons if there are any.
@@ -359,4 +406,3 @@ class PromptPage(ctk.CTkFrame):
 
         # Start the worker on another thread
         threading.Thread(target=worker, daemon=True).start()
-

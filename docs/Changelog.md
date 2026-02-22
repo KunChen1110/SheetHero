@@ -112,3 +112,86 @@
   - Removed verbose comments from `core/__init__.py`
   - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
 
+## 6/2/2026
+### --- Added ---
+- Added local LLM integration layer
+  - Implemented interface to call local LLM backends
+  - Extended runtime pipeline to support local inference execution
+
+## 12/2/2026
+### --- Added ---
+- Introduced dedicated prompt modules for online and offline modes
+  - `prompt_texts_online.py` now contains all default/online prompt templates.
+  - `prompt_texts_offline.py` defines stricter offline prompts with verification-heavy guardrails.
+- Added offline-specific execution guardrails and merge playbook
+  - Enforced 6-step offline execution checklist (inventory, schema resolution, type checks, coverage proof, and output writing).
+  - Added explicit column alias resolution, missing-value policy, and date coverage checks.
+  - Added an offline merge/concat playbook to reduce hallucinations around multi-file joins.
+
+### --- Changed ---
+- Updated execution response formats for both online and offline modes
+  - Online execution is now code-only and must always write an Output sheet and save the workbook via `save_workbook_to(output_path)`, returning the saved file path.
+  - Offline execution is now strictly code-only as well, disallowing free-form natural language "Final Answer" responses.
+- Refactored `prompt_data.py` to import shared building blocks from `prompt_texts_online.py` and offline-only pieces from `prompt_texts_offline.py`.
+
+## 21/2/2026
+### --- Added ---
+- Added bounded error routing for offline execution in `stages/execution/runtime.py`
+  - Detects common failure patterns and sends targeted minimal-fix feedback (e.g., wrong `inspector_multi` signature, undefined names, invalid helper imports).
+  - Added consecutive-forbidden handling with a hard-reset code template to break repeated forbidden loops.
+- Added explicit bounded forbidden rules in `stages/execution/executor.py`
+  - Blocks `common_functions` imports and invalid `inspector_multi` call styles (keyword `range_ref`, missing required range argument).
+
+### --- Changed ---
+- Reworked offline bounded strategy from strict sentinel/format gating to bounded-lite guardrails
+  - Kept function-level safety checks and runtime feedback loops.
+  - Removed brittle sentinel-driven blocking that caused format oscillation.
+- Simplified and refocused `prompt_texts_offline.py`
+  - Kept concise high-value rules and helper signatures.
+  - Added concrete correct-call examples for `inspector_multi`.
+- Updated `prompt/prompt_builder.py` so offline mode uses offline-specific execution helper sections only (without online heavy sections).
+- Updated parser behavior in `stages/execution/parser.py`
+  - Prioritizes Python code-block extraction before `Final Answer` text detection.
+- Updated output instruction text in `agent/core/SheetHero.py`
+  - Aligns offline output behavior with `SAVED_FILE`/saved-path execution flow.
+
+### --- Fixed ---
+- Fixed runtime success/error accounting in `stages/execution/runtime.py`
+  - Execution results containing traceback are now handled as failures and fed back into bounded repair flow instead of being treated as successful turns.
+- Fixed repeated local-model dead loops caused by over-strict path blocking
+  - Relaxed hard-blocking on absolute path literals to avoid immediate re-block when local models copy context paths.
+- Added environment override for bounded mode in `agent/core/SheetHero.py`
+  - `SHEETHERO_BOUNDED_MODE=0/1` can force disable/enable bounded behavior for quick A/B debugging.
+
+## 22/2/2026
+### --- Added ---
+- Added strict prompt profile routing for execution environments
+  - Introduced profile-based prompt packs (`offline_strict`, `online_rich`) and centralized selection in prompt builder.
+  - Local/custom endpoint runs now route to `offline_strict`; hosted OpenAI runs keep `online_rich`.
+- Added offline `Output Contract` in understanding prompt
+  - Understanding stage now emits machine-readable intent flags:
+    - `requires_detailed_table`
+    - `requires_highlight`
+    - `requires_summary_metrics`
+  - Contract is used by runtime for output-shape validation instead of keyword guessing.
+- Added stronger bounded forbidden checks in execution
+  - Blocks invalid partial-patch placeholders like `... (previous code remains unchanged)`.
+  - Added explicit guards for common drift patterns (`get_workbook(None)`, `wb.save`, `sheet.cell`, invalid `inspector_multi` kwargs).
+
+### --- Changed ---
+- Fully decoupled offline prompt texts from online prompt texts
+  - `prompt_texts_offline.py` is now self-contained and no longer composed from online blocks.
+  - Reorganized offline instructions around one stable helper-only pipeline.
+- Reworked offline output-intent enforcement
+  - Runtime now validates saved output against understanding `Output Contract`.
+  - For merge/highlight/table-transform tasks, metric-only mini outputs are rejected and forced to repair.
+- Updated output requirement wording in `SheetHero`
+  - Clarified intent-priority: merge/highlight/table tasks require detailed table + highlight + summary.
+
+### --- Fixed ---
+- Fixed false-positive validation passes in offline mode
+  - Fast-pass now respects intent contract and no longer passes metric-only outputs for merge/highlight tasks.
+- Fixed unstable table construction from wide range reads (`A1:Z200`)
+  - Offline prompt now enforces shape-safe header/row extraction to remove empty headers and blank rows before DataFrame creation.
+- Fixed repeated malformed code continuation behavior
+  - Runtime now rejects non-executable "patch-style" continuation responses and requires full executable blocks each turn.

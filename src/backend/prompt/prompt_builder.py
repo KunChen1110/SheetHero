@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Literal
 
 from .prompt_data import (ExecutionPrompts, UnderstandingPrompts, ValidationPrompts,
                           QAPrompts, DiagnosePrompts, CleaningPrompts, InteractPrompts)
+from .prompt_texts_offline import (
+    UNDERSTANDING_PROMPT_OFFLINE,
+    _ENHANCED_UNDERSTANDING_PROMPT_OFFLINE,
+    _UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
+    _EXECUTION_SYSTEM_INTRO_OFFLINE,
+    _EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
+    _EXECUTION_HELPER_SECTIONS_PART2_OFFLINE,
+    _EXECUTION_USER_PROMPT_OFFLINE,
+    _VALIDATION_PROMPT_OFFLINE,
+)
+
+PromptProfile = Literal["offline_strict", "online_rich"]
 
 
 class PromptBuilder:
@@ -20,6 +32,7 @@ class PromptBuilder:
     _default_interact = InteractPrompts()
 
     def __init__(self,
+                 profile: PromptProfile = "online_rich",
                  understanding: Optional[UnderstandingPrompts] = None,
                  execution: Optional[ExecutionPrompts] = None,
                  validation: Optional[ValidationPrompts] = None,
@@ -27,9 +40,32 @@ class PromptBuilder:
                  diagnose: Optional[DiagnosePrompts] = None,
                  cleaning: Optional[CleaningPrompts] = None,
                  interact: Optional[InteractPrompts] = None):
-        self._understanding = understanding or self._default_understanding
-        self._execution = execution or self._default_execution
-        self._validation = validation or self._default_validation
+        self.profile = profile
+
+        if profile == "offline_strict":
+            self._understanding = understanding or UnderstandingPrompts(
+                prompt=UNDERSTANDING_PROMPT_OFFLINE,
+                verify_before_infer_offline=_UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
+                enhanced_prompt=_ENHANCED_UNDERSTANDING_PROMPT_OFFLINE,
+                quality_prompt=self._default_understanding.quality_prompt,
+                diagnose_code_prompt=self._default_understanding.diagnose_code_prompt,
+                context_match_prompt=self._default_understanding.context_match_prompt,
+            )
+            self._execution = execution or ExecutionPrompts(
+                system_intro=_EXECUTION_SYSTEM_INTRO_OFFLINE,
+                helper_sections_part1=_EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
+                helper_sections_part1_offline=_EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
+                helper_sections_part2=_EXECUTION_HELPER_SECTIONS_PART2_OFFLINE,
+                user_prompt=_EXECUTION_USER_PROMPT_OFFLINE,
+            )
+            self._validation = validation or ValidationPrompts(
+                prompt=_VALIDATION_PROMPT_OFFLINE
+            )
+        else:
+            self._understanding = understanding or self._default_understanding
+            self._execution = execution or self._default_execution
+            self._validation = validation or self._default_validation
+
         self._qa = qa or self._default_qa
         self._diagnose = diagnose or self._default_diagnose
         self._cleaning = cleaning or self._default_cleaning
@@ -180,12 +216,20 @@ class PromptBuilder:
             "issues_to_address": issues,
         })
 
-    def build_execution_system_prompt(self, output_instruction: str) -> str:
+    def build_execution_system_prompt(
+        self,
+        output_instruction: str,
+        use_bounded_execution: bool = False
+    ) -> str:
         system_intro = self._execution.system_intro
-        helper_parts = [
-            self._execution.helper_sections_part1,
-            self._execution.helper_sections_part2,
-        ]
+        helper_part1 = (
+            self._execution.helper_sections_part1_offline
+            if use_bounded_execution
+            else self._execution.helper_sections_part1
+        )
+        helper_parts = [helper_part1]
+        if not use_bounded_execution:
+            helper_parts.append(self._execution.helper_sections_part2)
 
         system_parts = [system_intro]
         if output_instruction:
@@ -196,13 +240,13 @@ class PromptBuilder:
         return "".join(system_parts)
 
     def build_execution_user_prompt(self, execution_context: str,
-                                    user_query: str,
-                                    understanding_output: str) -> str:
+                                    understanding_output: str,
+                                    user_query: str) -> str:
         template = self._execution.user_prompt
         return self._render(template, {
             "execution_context": execution_context,
-            "user_query": user_query,
-            "understanding_output": understanding_output
+            "understanding_output": understanding_output,
+            "user_query": user_query
         })
 
     def build_validation_prompt(self, user_query: str,
