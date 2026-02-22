@@ -23,7 +23,7 @@ export function SidebarChatDisplay({
         {chats.map((chat) => (
           <SidebarWidget
             className={`
-              ${activeChat === chat.id && "bg-green-900/50 hover:bg-green-900/50 border-green-400"}
+              ${activeChat === chat.id && "bg-(--sh-green) hover:bg-(--sh-green-hover)/50 border-(--sh-green-highlight) text-(--sh-white)"}
             `}
             key={chat.id}
             onWidgetClick={() => onChatSelect?.(chat.id)}
@@ -34,8 +34,8 @@ export function SidebarChatDisplay({
                 className={`shrink-0 
                     ${
                       activeChat === chat.id
-                        ? "text-green-400"
-                        : "text-gray-400"
+                        ? "text-(--sh-green-highlight)"
+                        : "text-(--sh-medium-grey)"
                     }
                   `}
               />

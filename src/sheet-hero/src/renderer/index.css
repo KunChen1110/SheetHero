@@ -6,11 +6,31 @@
   line-height: 1.5;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.87);
-  background-color: var(--color-black);
+  background-color: var(--sh-darker-blue);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --sh-black: #000000;
+  --sh-white: #fefefe;
+
+  --sh-darker-blue: #08101b;
+  --sh-dark-blue: #101721;
+  --sh-blue: #147e8b;
+
+  --sh-green-highlight: #19c37d;
+  --sh-green: #1da482;
+  --sh-green-hover: #198f71;
+  --sh-dark-green: #147e8b;
+
+  --sh-grey: #c5c1c1;
+  --sh-medium-grey: #7a7777;
+  --sh-dark-grey: #3d3b3b;
+  --sh-border-grey: #1e3133;
+
+  --sh-red: #e74c3c;
+  --sh-red-highlight: #e74c3c;
 }
 
 @layer base {

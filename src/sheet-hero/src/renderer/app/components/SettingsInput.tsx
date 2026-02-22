@@ -15,7 +15,7 @@ export function SettingsInput({
     <div className="relative">
       <input
         {...props}
-        className={`w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-green-500/50 transition-colors
+        className={`w-full px-4 py-3 bg-(--sh-dark-blue) border border-(--sh-border-grey) rounded-lg text-(--sh-white) placeholder-(--sh-grey) focus:outline-none focus:border-(--sh-green-highlight) transition-colors
           ${rightElement ? "pr-16" : ""}
           ${className}
         `}

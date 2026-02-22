@@ -81,22 +81,22 @@ export function SettingsPopup({
   // HTML for the settings popup
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 bg-(--sh-black)/60 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={handleOverlayClick}
     >
-      <div className="bg-gray-900 border border-gray-700/50 rounded-2xl max-w-md w-full">
+      <div className="bg-(--sh-dark-blue) border border-(--sh-dark-grey)/50 rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col">
         {/* =-=-= Header =-=-= */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800/50">
+        <div className="flex items-center justify-between p-6 border-b border-(--sh-dark-grey)/50">
           <h2 className="text-xl font-semibold text-white">Settings</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
+            className="p-2 rounded-lg hover:bg-(--sh-dark-grey) transition-colors text-(--sh-grey) hover:text-white"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* =-=-= Output directory =-=-= */}
           <SettingsWidget
             icon={<FolderInput size={16} />}
@@ -111,7 +111,7 @@ export function SettingsPopup({
                 placeholder="e.g., C:\Some_folder"
                 rightElement={
                   <button
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-green-400 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-(--sh-grey) hover:text-(--sh-green-highlight) transition-colors"
                     type="button"
                     onClick={async () => {
                       const dir = await window.electronAPI.selectDirectory();
@@ -141,7 +141,7 @@ export function SettingsPopup({
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-green-400 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-(--sh-grey) hover:text-(--sh-green-highlight) transition-colors"
                   >
                     {showApiKey ? "Hide" : "Show"}
                   </button>
@@ -176,12 +176,21 @@ export function SettingsPopup({
                 type="number"
                 min="1"
                 max="10"
-                value={localMaxTurns}
-                onChange={(event) =>
-                  setLocalMaxTurns(
-                    Math.max(1, parseInt(event.target.value) || 1),
-                  )
-                }
+                value={localMaxTurns || ""}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  if (val === "") {
+                    setLocalMaxTurns(0);
+                  } else {
+                    const parsed = parseInt(val, 10);
+                    setLocalMaxTurns(
+                      Math.min(10, Math.max(1, isNaN(parsed) ? 1 : parsed)),
+                    );
+                  }
+                }}
+                onBlur={() => {
+                  if (localMaxTurns === 0) setLocalMaxTurns(1);
+                }}
               />
             }
           />
@@ -203,17 +212,17 @@ export function SettingsPopup({
         </div>
 
         {/* =-=-= Footer =-=-=*/}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-800/50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-(--sh-border-grey)">
           <button
             onClick={onClose}
-            className="p-3 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors"
+            className="p-3 rounded-lg text-sm font-medium text-(--sh-grey) hover:bg-(--sh-dark-grey) transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!localApiKey.trim()}
-            className="p-3 rounded-lg text-sm font-medium bg-linear-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-green-500 disabled:hover:to-green-600 transition-all"
+            className="p-3 rounded-lg text-sm font-medium bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Save Settings
           </button>

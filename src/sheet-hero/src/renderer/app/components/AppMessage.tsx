@@ -13,24 +13,25 @@ export function AppMessage({ role, content }: AppMessageProperties) {
 
   // HTML for the app message
   return (
-    <div
-      className={`flex gap-4 p-6
-        ${isUser ? "bg-gray-800" : "bg-gray-800/50"}
-    `}
-    >
-      <div className="shrink-0">
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center
-            ${isUser ? "bg-blue-500 text-white" : "bg-green-500 text-white"}
-          `}
-        >
-          {isUser ? <User size={22} /> : <FileSpreadsheet size={22} />}
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`flex ${isUser ? "flex-row-reverse" : "flex-row"} gap-4 p-4 max-w-xl rounded-2xl border border-(--sh-border-grey)
+      `}
+      >
+        <div className="shrink-0">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center
+              ${isUser ? "bg-(--sh-blue) text-(--sh-white)" : "bg-(--sh-green-highlight) text-(--sh-white)"}
+            `}
+          >
+            {isUser ? <User size={22} /> : <FileSpreadsheet size={22} />}
+          </div>
         </div>
-      </div>
 
-      {/* Message contents */}
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-gray-100 py-1">{content}</div>
+        {/* Message contents */}
+        <div className="flex-1 min-w-0">
+          <div className="text-md text-(--sh-white) py-1">{content}</div>
+        </div>
       </div>
     </div>
   );

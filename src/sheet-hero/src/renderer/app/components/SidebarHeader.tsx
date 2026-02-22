@@ -10,7 +10,7 @@ export function SidebarHeader({ title, content }: SidebarHeaderProperties) {
   // HTML for the sidebar header
   return (
     <div className="flex items-center justify-between p-3">
-      <h3 className="text-xs font-semibold text-gray-400">{title}</h3>
+      <h3 className="text-xs text-(--sh-medium-grey)">{title}</h3>
       {content}
     </div>
   );

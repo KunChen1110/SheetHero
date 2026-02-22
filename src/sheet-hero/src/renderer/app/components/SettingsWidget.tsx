@@ -19,13 +19,13 @@ export function SettingsWidget({
   // HTML for the settings widget
   return (
     <div>
-      <label className="flex items-center gap-2 text-sm font-medium text-gray-200 py-2">
-        <div className="text-green-400">{icon}</div>
+      <label className="flex items-center gap-2 text-sm font-medium text-(--sh-white) py-2">
+        <div className="text-(--sh-green-highlight)">{icon}</div>
         {title}
-        <div className={required ? "text-red-500" : "invisible"}>*</div>
+        <div className={required ? "text-(--sh-red)" : "invisible"}>*</div>
       </label>
       <div className="relative">{input}</div>
-      <p className="mt-2 text-xs text-gray-500">{description}</p>
+      <p className="mt-2 text-xs text-(--sh-medium-grey)">{description}</p>
     </div>
   );
 }
