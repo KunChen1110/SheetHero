@@ -97,14 +97,7 @@ export default function App() {
     const newChat: Chat = {
       id: Date.now().toString(),
       title: "New Chat",
-      messages: [
-        {
-          id: Date.now().toString(),
-          role: Role.ASSISTANT,
-          content:
-            "Hello! I'm SheetHero. Upload or drag & drop your Excel files to get started!",
-        },
-      ],
+      messages: [],
     };
     setChats((prev) => [newChat, ...prev]);
     setActiveChatId(newChat.id);
@@ -228,10 +221,10 @@ export default function App() {
     return "Processing...";
   }
 
-  // Renders the chat if there are existing chats
+  // Renders the chat if there are existing chats with messages
   function renderChat() {
     return (
-      <div className="max-w-4xl mx-auto space-y-5 py-5">
+      <div className="max-w-3xl mx-auto space-y-4 py-5">
         {messages.map((message) => (
           <AppMessage
             key={message.id}
@@ -244,31 +237,53 @@ export default function App() {
     );
   }
 
+  // Renders instructions to begin the conversation if there is an active chat but no messages
+  function renderChatEmptyMessages() {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center text-center px-6">
+        {/* Icon */}
+        <div className="bg-(--sh-green) text-(--sh-white) rounded-full p-4 mb-4">
+          <MessageCircle size={36} />
+        </div>
+
+        {/* Header */}
+        <h2 className="text-2xl font-bold text-(--sh-white) mb-2">
+          Start the Conversation
+        </h2>
+
+        {/* Instructions */}
+        <p className="text-(--sh-grey) mb-6 max-w-xs">
+          Type a message below to begin chatting with SheetHero about your Excel
+          files.
+        </p>
+      </div>
+    );
+  }
+
   // Renders instructions to create a chat if there are no existing chats
   function renderEmptyChat() {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center text-center px-6">
         {/* Icon */}
-        <div className="bg-green-600/20 text-green-500 rounded-full p-4 mb-4">
+        <div className="bg-(--sh-green) text-(--sh-white) rounded-full p-4 mb-4">
           <MessageCircle size={36} />
         </div>
 
         {/* Header */}
-        <h2 className="text-2xl font-bold text-gray-200 mb-2">
+        <h2 className="text-2xl font-bold text-(--sh-white) mb-2">
           Start a New Conversation
         </h2>
 
         {/* Instructions */}
-        <p className="text-gray-400 mb-6">
-          You don’t have any chats yet. Click the{" "}
-          <label className="font-semibold text-green-400">New Chat </label>
-          button in the sidebar to get started.
+        <p className="text-(--sh-grey) mb-6 max-w-xs">
+          You don’t have any chats yet. Click the New Chat button in the
+          sidebar, or the button below to get started.
         </p>
 
         {/* Create new chat button */}
         <button
           onClick={createNewChat}
-          className="px-6 py-3 bg-green-500 text-gray-900 rounded-lg font-medium hover:bg-green-600 transition-colors"
+          className="px-6 py-3 bg-(--sh-green) text-(--sh-white) rounded-lg font-medium hover:bg-(--sh-green-hover) transition-colors"
         >
           + New Chat
         </button>
@@ -278,7 +293,7 @@ export default function App() {
 
   // HTML for the app
   return (
-    <div className="h-full flex bg-gray-950">
+    <div className="h-full flex">
       {/* =-=-= Sidebar =-=-=*/}
       <Sidebar
         chats={chats}
@@ -290,30 +305,35 @@ export default function App() {
         onNewChat={createNewChat}
       />
 
-      {/* =-=-= Main chat =-=-= */}
-      <div className="flex flex-1 flex-col p-12 pb-0 ">
-        <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
+      {/* =-=-= Main content =-=-= */}
+      <div className="flex flex-1 flex-col p-5 pl-0">
+        {/* =-=-=  Main container =-=-= */}
+        <div className="h-full rounded-3xl border border-(--sh-border-grey) flex flex-col overflow-hidden bg-(--sh-dark-blue)">
           <div className="flex-1 overflow-y-auto p-6">
-            {/* =-=-=  Missing API key overlay =-=-= */}
+            {/* Missing API key overlay */}
             {!hasApiKey && chats.length != 0 && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
             )}
 
-            {/* =-=-=  Messages container =-=-= */}
-            {chats.length === 0 ? renderEmptyChat() : renderChat()}
+            {/* Chats container */}
+            {chats.length === 0
+              ? renderEmptyChat()
+              : messages.length === 0
+                ? renderChatEmptyMessages()
+                : renderChat()}
 
-            {/* =-=-=  Typing indicator =-=-= */}
+            {/* Typing indicator */}
             {isTyping && (
               <div className="flex justify-center">
                 <AppTypingIndicator />
               </div>
             )}
           </div>
+          <AppInput
+            onSendMessage={createNewMessage}
+            disabled={isTyping || !hasApiKey}
+          />
         </div>
-        <AppInput
-          onSendMessage={createNewMessage}
-          disabled={isTyping || !hasApiKey}
-        />
       </div>
       {/* =-=-= Settings =-=-= */}
       <SettingsPopup

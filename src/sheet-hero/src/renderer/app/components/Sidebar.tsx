@@ -95,17 +95,19 @@ export function Sidebar({
 
   // HTML for the sidebar
   return (
-    <div className="w-75 bg-gray-900/80 border-r border-gray-800/50 flex flex-col h-full">
+    <div className="w-75 flex flex-col h-full pl-4 pr-4 bg-(--sh-darker-blue)">
       {/* =-=-= Header =-=-=*/}
-      <div className="p-3 border-b border-gray-800/50">
+      <div className="p-3 border-b border-(--sh-border-grey)">
         {/* Logo and title */}
         <div className="flex items-center p-3 gap-3">
-          <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
-            <FileSpreadsheet size={26} className="text-white" />
+          <div className="w-10 h-10 rounded-lg bg-(--sh-green-highlight) flex items-center justify-center">
+            <FileSpreadsheet size={26} className="text-(--sh-white)" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-semibold text-white">Sheet Hero</div>
-            <div className="text-xs text-green-400">Spreadsheet AI</div>
+            <div className="text-base font-semibold text-(--sh-white)">
+              Sheet Hero
+            </div>
+            <div className="text-xs text-(--sh-green)">Spreadsheet AI</div>
           </div>
         </div>
 
@@ -120,7 +122,9 @@ export function Sidebar({
       {/* =-=-= File display =-=-= */}
       <SidebarHeader
         title="FILES"
-        content={<div className="text-xs text-gray-500">{files.length}</div>}
+        content={
+          <div className="text-xs text-(--sh-medium-grey)">{files.length}</div>
+        }
       />
 
       <SidebarFileDisplay
@@ -134,7 +138,7 @@ export function Sidebar({
         title="CHATS"
         content={
           <button
-            className="text-xs text-gray-500 hover:text-green-400 transition-colors"
+            className="text-xs text-(--sh-medium-grey) hover:text-(--sh-green-highlight) transition-colors"
             onClick={onNewChat}
           >
             + New
@@ -153,7 +157,7 @@ export function Sidebar({
       </div>
 
       {/* =-=-= Footer =-=-= */}
-      <div className="p-4 border-t border-gray-800/50">
+      <div className="p-4 border-t border-(--sh-border-grey)">
         {/* Settings button */}
         <SidebarWidget
           title="Settings"

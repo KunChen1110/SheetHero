@@ -25,14 +25,10 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
   return (
     <div className="p-6">
       <form className="max-w-4xl mx-auto" onSubmit={handleSubmit}>
-        <div
-          className={`flex items-center bg-gray-800 rounded-2xl border transition-all 
-            ${disabled ? "border-gray-700/50 opacity-60" : "border-gray-700"}
-          `}
-        >
+        <div className="flex items-center bg-(--sh-darker-blue) rounded-2xl border transition-all border-(--sh-border-grey)">
           {/* Text input area */}
           <textarea
-            className="flex-1 resize-none p-4 text-sm text-gray-100 placeholder-gray-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 resize-none p-4 text-sm text-(--sh-white) placeholder-(--sh-grey) focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
             disabled={disabled}
             rows={1}
@@ -61,7 +57,7 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
 
           {/* Send input button */}
           <button
-            className="mr-2 p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="mr-2 p-2 rounded-lg bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             type="submit"
             disabled={!input.trim() || disabled}
           >
