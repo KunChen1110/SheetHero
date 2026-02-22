@@ -20,7 +20,7 @@ class SandboxRunner:
             sys.stdout = stdout_capture
             sys.stderr = stderr_capture
 
-            # ✅ 正确做法：直接在真实 globals / locals 中执行
+            # Execute directly in the provided globals/locals namespaces.
             exec(code, globals_dict, locals_dict)
 
             return {
