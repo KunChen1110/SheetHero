@@ -20,7 +20,7 @@ class Config:
 
     # === Timeouts and Retries ===
     max_retries: int = 3
-    timeout: int = 30
+    timeout: int = 120  # seconds per LLM request (Ollama/local can be slow; avoid infinite hang)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert this config instance to dictionary for UI rendering."""

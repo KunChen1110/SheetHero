@@ -1,5 +1,6 @@
 """LLM client wrapper for execution retries and rate limits."""
 
+import os
 import random
 import re
 import time
@@ -18,18 +19,24 @@ class ExecutionLLMClient(BaseLLMClient):
 
     def __init__(self, client, deployment: str):
         super().__init__(client, deployment)
+        self._max_backoff_seconds = int(os.getenv("SHEETHERO_MAX_BACKOFF_SECONDS", "20"))
 
     def get_response(self, messages: list, max_retries: int = 5,
-                     base_delay: float = 1.0):
+                     base_delay: float = 1.0, max_tokens: Optional[int] = None):
         last_exception = None
+        create_kwargs = {
+            "model": self.deployment,
+            "messages": messages,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            create_kwargs["max_tokens"] = max_tokens
 
         for attempt in range(max_retries):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.deployment,
-                    messages=messages,
-                )
-
+                response = self.client.chat.completions.create(**create_kwargs)
+                if not getattr(response, "choices", None) or len(response.choices) == 0:
+                    raise ValueError("LLM returned no choices (empty response)")
                 return response.choices[0].message
 
             except RateLimitError as e:
@@ -42,10 +49,10 @@ class ExecutionLLMClient(BaseLLMClient):
 
                 if attempt < max_retries - 1:
                     if wait_time:
-                        delay = wait_time + random.uniform(1, 3)
+                        delay = min(wait_time, self._max_backoff_seconds) + random.uniform(0.5, 1.5)
                         logger.info(f"Waiting {delay:.1f} seconds as suggested by API")
                     else:
-                        delay = 10
+                        delay = min(10, self._max_backoff_seconds)
                         logger.info(f"Waiting {delay:.1f} seconds (exponential backoff)")
                     time.sleep(delay)
                 else:
@@ -62,6 +69,7 @@ class ExecutionLLMClient(BaseLLMClient):
 
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    delay = min(delay, self._max_backoff_seconds)
                     logger.info(f"Waiting {delay:.1f} seconds before retry")
                     time.sleep(delay)
                 else:
