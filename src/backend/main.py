@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -138,16 +139,49 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
             return
 
 
+def _build_task_output_filename(task: dict[str, Any], index: int) -> str:
+    task_id = str(task.get("task_id") or f"task{index}")
+    normalized = re.sub(r"[^A-Za-z0-9_-]+", "", task_id).lower()
+    if not normalized:
+        normalized = f"task{index}"
+    return f"{normalized}_output.xlsx"
+
+
+def _resolve_dataset_output_path(
+    root: Path,
+    task: dict[str, Any],
+    index: int,
+    output_path_arg: str | None,
+) -> Path:
+    default_output_dir = root / "artifacts" / "output"
+    filename = _build_task_output_filename(task, index)
+
+    if output_path_arg is None or output_path_arg.strip() == "":
+        return (default_output_dir / filename).resolve()
+
+    candidate = Path(output_path_arg).expanduser()
+    if not candidate.is_absolute():
+        candidate = default_output_dir / candidate
+
+    if candidate.suffix.lower() == ".xlsx":
+        return candidate.resolve()
+    return (candidate / filename).resolve()
+
+
 
 def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line: str) -> None:
     parser = argparse.ArgumentParser(prog="!dataset", add_help=False)
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--index", type=int)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--output_path", type=str, default=None)
     try:
         args = parser.parse_args(shlex.split(line)[1:])
     except SystemExit:
-        print("Error: usage `!dataset --list` or `!dataset --index N [--prepare]`")
+        print(
+            "Error: usage `!dataset --list` or "
+            "`!dataset --index N [--prepare] [--output_path PATH]`"
+        )
         return
 
     if args.list:
@@ -169,6 +203,24 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
         print(f"Error: {e}")
         return
 
+    if loaded:
+        try:
+            tasks, _ = _load_tasks()
+            task = tasks[args.index - 1]
+            root = Path(__file__).resolve().parents[2]
+            resolved_output = _resolve_dataset_output_path(
+                root=root,
+                task=task,
+                index=args.index,
+                output_path_arg=args.output_path
+            )
+            service.config.output_mode = "file"
+            service.config.output_file = str(resolved_output)
+            print(f"[output path set] {resolved_output}")
+        except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
+            print(f"Error: failed to resolve output path: {e}")
+            return
+
     if loaded and not args.prepare and buffer.ready():
         _execute_turn(service, buffer)
 
@@ -188,7 +240,7 @@ def main() -> None:
     print("Type `exit` to quit.")
     print("Type `run` to execute the current turn.")
     print("Type `!dataset --list` to list dataset tasks.")
-    print("Type `!dataset --index N` to load and run a dataset task.")
+    print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
 
     while True:
         line = input(">>> ").strip()
