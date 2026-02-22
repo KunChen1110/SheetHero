@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { Sidebar } from "@/renderer/app/components/Sidebar";
-import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
-import { AppMessage } from "@/renderer/app/components/AppMessage";
-import { AppInput } from "@/renderer/app/components/AppInput";
-import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
-import { AppAPIOverlay } from "./components/AppAPIOverlay";
-import { useSettings } from "@/util/storage";
-import { MessageCircle } from "lucide-react";
 import { api } from "@/util/api";
+import { useSettings } from "@/util/storage";
+import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
+import { MessageCircle } from "lucide-react";
+import { Sidebar } from "@/renderer/app/components/Sidebar";
+import { AppInput } from "@/renderer/app/components/AppInput";
+import { AppMessage } from "@/renderer/app/components/AppMessage";
+import { SettingsPopup } from "@/renderer/app/components/SettingsPopup";
+import { AppAPIOverlay } from "@/renderer/app/components/AppAPIOverlay";
+import { AppTypingIndicator } from "@/renderer/app/components/AppTypingIndicator";
 
 export default function App() {
   // Save and load settings utility
@@ -290,15 +291,23 @@ export default function App() {
       />
 
       {/* =-=-= Main chat =-=-= */}
-      <div className="flex flex-1 flex-col p-12 pb-0">
+      <div className="flex flex-1 flex-col p-12 pb-0 ">
         <div className="h-full rounded-3xl border border-gray-700/50 flex flex-col overflow-hidden bg-gray-900">
           <div className="flex-1 overflow-y-auto p-6">
             {/* =-=-=  Missing API key overlay =-=-= */}
             {!hasApiKey && chats.length != 0 && (
               <AppAPIOverlay onSettingsClick={handleSettingsClick} />
             )}
+
             {/* =-=-=  Messages container =-=-= */}
             {chats.length === 0 ? renderEmptyChat() : renderChat()}
+
+            {/* =-=-=  Typing indicator =-=-= */}
+            {isTyping && (
+              <div className="flex justify-center">
+                <AppTypingIndicator />
+              </div>
+            )}
           </div>
         </div>
         <AppInput
@@ -310,12 +319,12 @@ export default function App() {
       <SettingsPopup
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        onSave={handleSaveSettings}
         apiKey={settings.apiKey}
         maxTurns={settings.maxTurns}
         model={settings.model}
         baseURL={settings.baseURL}
         outputDir={settings.outputDir}
-        onSave={handleSaveSettings}
       />
     </div>
   );
