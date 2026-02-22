@@ -14,7 +14,7 @@ class ExecutionStage(Stage):
     def __init__(self, client, deployment: str, sandbox,
                  excel_context_execution: str,
                  output_instruction: Optional[str] = None, progress_log_file=None,
-                 use_bounded_execution: bool = False):
+                 prompt_profile: str = "offline_strict"):
         self.runner = ExecutionRuntime(
             client,
             deployment,
@@ -22,7 +22,7 @@ class ExecutionStage(Stage):
             excel_context_execution,
             output_instruction=output_instruction,
             progress_log_file=progress_log_file,
-            use_bounded_execution=use_bounded_execution,
+            prompt_profile=prompt_profile,
         )
 
     def run(self, understanding_output: str, user_question: str,

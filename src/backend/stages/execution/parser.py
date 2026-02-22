@@ -11,10 +11,26 @@ class ExecutionResponseParser(BaseResponseParser):
 
     def parse(self, content: str) -> Tuple[Optional[str], Optional[str]]:
         """Extract thought and code from LLM response."""
-        code_match = re.search(r"```python\s*(.*?)\s*```", content, re.DOTALL)
+        if not content:
+            return None, None
+
+        # Preferred: closed fenced code block (python/py/unspecified), case-insensitive.
+        code_match = re.search(r"```(?:python|py)?\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
         if code_match:
             code = code_match.group(1).strip()
-            return None, code
+            if code:
+                return None, code
+
+        # Fallback: opening fence exists but closing fence may be truncated by the model.
+        open_only_match = re.search(r"```(?:python|py)?\s*(.*)$", content, re.DOTALL | re.IGNORECASE)
+        if open_only_match:
+            code = open_only_match.group(1).strip()
+            if code:
+                return None, code
+
+        # Last resort for bounded mode style outputs: content may be plain code without fences.
+        if re.search(r"^\s*(import\s+\w+|from\s+\w+\s+import|all_files\s*=|create_output_sheet\s*\()", content):
+            return None, content.strip()
 
         if "Final Answer:" in content:
             return content.strip(), None
