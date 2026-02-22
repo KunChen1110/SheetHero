@@ -42,7 +42,9 @@ class Sandbox:
             "output_path": self.output_path,
             "namespaces": SimpleNamespace(),
         }
-        self.code_locals = {}
+        # Use a shared scope so top-level variables remain visible inside
+        # user-defined functions across exec turns.
+        self.code_locals = self.code_globals
         self.workbooks = {}
         self.runner = SandboxRunner()
         self.world = None
