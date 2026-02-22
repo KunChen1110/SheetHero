@@ -18,12 +18,12 @@ export function SidebarChatDisplay({
   // HTML for the sidebar chat display
   return (
     <div className="p-3">
-      <div className="space-y-1">
+      <div className="space-y-2">
         {/* List of all chats */}
         {chats.map((chat) => (
           <SidebarWidget
             className={`
-              ${activeChat === chat.id && "bg-(--sh-green) hover:bg-(--sh-green-hover)/50 border-(--sh-green-highlight) text-(--sh-white)"}
+              ${activeChat === chat.id && "border-(--sh-green)"}
             `}
             key={chat.id}
             onWidgetClick={() => onChatSelect?.(chat.id)}
@@ -34,7 +34,7 @@ export function SidebarChatDisplay({
                 className={`shrink-0 
                     ${
                       activeChat === chat.id
-                        ? "text-(--sh-green-highlight)"
+                        ? "text-(--sh-green)"
                         : "text-(--sh-medium-grey)"
                     }
                   `}

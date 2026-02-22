@@ -52,10 +52,10 @@ export function SidebarFileDisplay({
         {files.map((file) => (
           <div
             key={file.id}
-            className="flex items-center gap-2 p-2 rounded-lg bg-(--sh-dark-blue)/80 border border-(--sh-border-grey) hover:border-(--sh-green-highlight)"
+            className="flex items-center gap-2 p-2 rounded-lg bg-(--sh-dark-blue)/80 border border-(--sh-border-grey) transition-all"
           >
             {/* File index */}
-            <div className="w-5 h-5 rounded bg-(--sh-green-highlight)/20 flex items-center justify-center text-xs font-bold text-(--sh-green-highlight)">
+            <div className="w-5 h-5 rounded bg-(--sh-green) flex items-center justify-center text-xs font-bold text-(--sh-white)">
               {file.index}
             </div>
 
@@ -66,13 +66,10 @@ export function SidebarFileDisplay({
 
             {/* File remove button */}
             <button
-              className="p-1 hover:bg-red-500/20 rounded"
+              className="p-1 hover:bg-(--sh-red) rounded"
               onClick={() => onRemoveFile(file.id)}
             >
-              <X
-                size={16}
-                className="text-(--sh-medium-grey) hover:(--sh-red-highlight)"
-              />
+              <X size={16} className="text-(--sh-medium-grey)" />
             </button>
           </div>
         ))}
