@@ -162,3 +162,36 @@
   - Relaxed hard-blocking on absolute path literals to avoid immediate re-block when local models copy context paths.
 - Added environment override for bounded mode in `agent/core/SheetHero.py`
   - `SHEETHERO_BOUNDED_MODE=0/1` can force disable/enable bounded behavior for quick A/B debugging.
+
+## 22/2/2026
+### --- Added ---
+- Added strict prompt profile routing for execution environments
+  - Introduced profile-based prompt packs (`offline_strict`, `online_rich`) and centralized selection in prompt builder.
+  - Local/custom endpoint runs now route to `offline_strict`; hosted OpenAI runs keep `online_rich`.
+- Added offline `Output Contract` in understanding prompt
+  - Understanding stage now emits machine-readable intent flags:
+    - `requires_detailed_table`
+    - `requires_highlight`
+    - `requires_summary_metrics`
+  - Contract is used by runtime for output-shape validation instead of keyword guessing.
+- Added stronger bounded forbidden checks in execution
+  - Blocks invalid partial-patch placeholders like `... (previous code remains unchanged)`.
+  - Added explicit guards for common drift patterns (`get_workbook(None)`, `wb.save`, `sheet.cell`, invalid `inspector_multi` kwargs).
+
+### --- Changed ---
+- Fully decoupled offline prompt texts from online prompt texts
+  - `prompt_texts_offline.py` is now self-contained and no longer composed from online blocks.
+  - Reorganized offline instructions around one stable helper-only pipeline.
+- Reworked offline output-intent enforcement
+  - Runtime now validates saved output against understanding `Output Contract`.
+  - For merge/highlight/table-transform tasks, metric-only mini outputs are rejected and forced to repair.
+- Updated output requirement wording in `SheetHero`
+  - Clarified intent-priority: merge/highlight/table tasks require detailed table + highlight + summary.
+
+### --- Fixed ---
+- Fixed false-positive validation passes in offline mode
+  - Fast-pass now respects intent contract and no longer passes metric-only outputs for merge/highlight tasks.
+- Fixed unstable table construction from wide range reads (`A1:Z200`)
+  - Offline prompt now enforces shape-safe header/row extraction to remove empty headers and blank rows before DataFrame creation.
+- Fixed repeated malformed code continuation behavior
+  - Runtime now rejects non-executable "patch-style" continuation responses and requires full executable blocks each turn.
