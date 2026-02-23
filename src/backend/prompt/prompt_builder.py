@@ -44,7 +44,7 @@ class PromptBuilder:
     _default_interact = InteractPrompts()
 
     def __init__(self,
-                 profile: PromptProfile = "online_rich",
+                 profile: PromptProfile = "offline_strict",
                  understanding: Optional[UnderstandingPrompts] = None,
                  execution: Optional[ExecutionPrompts] = None,
                  validation: Optional[ValidationPrompts] = None,
