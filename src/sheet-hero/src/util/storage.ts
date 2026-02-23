@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxTurns: 3,
   baseURL: "",
   model: "gpt-4o-mini",
-  outputDir: await window.electronAPI.getDocumentsPath(),
+  outputDir: "",
 };
 
 export function useSettings() {
@@ -18,6 +18,15 @@ export function useSettings() {
   // Load settings on start
   useEffect(() => {
     loadSettings();
+
+    const loadPath = async () => {
+      const docsPath = await window.electronAPI.getDocumentsPath();
+      setSettings(prev => ({
+        ...prev,
+        outputDir: docsPath
+      }));
+    };
+  loadPath();
   }, []);
 
   // Loads settings from local storage

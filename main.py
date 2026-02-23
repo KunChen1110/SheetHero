@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 from src.backend.agent.core.SheetHero import SheetHero
@@ -9,7 +9,7 @@ from src.backend.config.settings import Config
 from src.backend.service.sheethero_service import SheetHeroService
 from src.backend.service.stream_dialogue_driver import StreamDialogueDriver
 
-sessions: Dict[str, StreamDialogueDriver] = {}
+sessions: dict[str, StreamDialogueDriver] = {}
 
 app = FastAPI()
 origins = ["http://localhost:3480"]
@@ -27,7 +27,7 @@ class SheetHeroStartRequest(BaseModel):
     model: str
     max_turns: int
     prompt: str
-    base_url: str
+    base_url: Optional[str] = None 
     output_file: str
     excel_paths: List[str]
 
