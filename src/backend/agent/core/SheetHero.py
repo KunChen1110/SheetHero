@@ -115,7 +115,8 @@ class SheetHero:
             self.client,
             self.config.deployment,
             self.sandbox,
-            self.output_instruction,
+            excel_context_execution="",
+            output_instruction=self.output_instruction,
             progress_log_file=self.progress_logger.file,
             prompt_profile=self.prompt_profile,
         )
@@ -182,10 +183,10 @@ class SheetHero:
         qa_stage = self.qa_stage
         current_request = user_input if user_input is not None else session.original_query
     
-        log_session_context(self.progress_logger, session, current_request)
 
         # ========== INIT ==========
         if session.state == "init":
+            log_session_context(self.progress_logger, session, current_request)
             init_result = self._handle_init(session, current_request)
             if init_result is not None:
                 return init_result
@@ -291,15 +292,16 @@ class SheetHero:
 
     def _handle_understanding(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
         active_workbooks = session.current_workbooks
-        excel_context = ExcelContextBuilder(
-            self._get_context_paths(session),
-            active_workbooks
-        ).build(self.config.total_token_budget)
+        if not (session.spreadsheet_summary or "").strip():
+            session.spreadsheet_summary = ExcelContextBuilder(
+                self._get_context_paths(session),
+                active_workbooks
+            ).build(self.config.total_token_budget)
 
         append_ui_thought(session, "understanding", "running", "Understanding workbook/task context")
         session.understanding = self.understanding_module.run(
             current_request,
-            excel_context,
+            session.spreadsheet_summary or "",
             session.context_understanding
         )
         append_ui_thought(session, "understanding", "done", session.understanding or "")
@@ -380,6 +382,10 @@ class SheetHero:
         append_ui_thought(session, "cleaning", "done", actions)
         if qa_stage:
             qa_stage.clear_cleaning_actions()
+        session.spreadsheet_summary = ExcelContextBuilder(
+            self._get_context_paths(session),
+            session.current_workbooks
+        ).build(self.config.total_token_budget)
         session.state = "executing"
         return {"type": "progress", "stage": "executing"}
 
@@ -389,12 +395,16 @@ class SheetHero:
         if not understanding_output:
             return {"type": "error", "message": "Understanding missing before execution."}
         user_query = current_request
-        active_workbooks = session.current_workbooks
-        execution_context = ExcelContextBuilder(
-            self._get_context_paths(session),
-            active_workbooks
-        ).build(self.config.total_token_budget)
+        if not (session.spreadsheet_summary or "").strip():
+            session.spreadsheet_summary = ExcelContextBuilder(
+                self._get_context_paths(session),
+                session.current_workbooks
+            ).build(self.config.total_token_budget)
+        execution_context = session.spreadsheet_summary or ""
+        self.execution_module.runner.excel_context_execution = execution_context
         append_ui_thought(session, "executing", "running", "Generating and running execution code")
+        
+        self._log(f"The max turn is {self.config.max_turns}", True)
         execution_result = self.execution_module.run(
             understanding_output=understanding_output,
             user_question=user_query,
