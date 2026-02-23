@@ -15,6 +15,7 @@ class SheetHeroSession:
 
     # temporary understanding from the agent
     understanding: Optional[str] = None
+    spreadsheet_summary: Optional[str] = None
 
     # understanding of context (stable)
     context_understanding: Optional[str] = None

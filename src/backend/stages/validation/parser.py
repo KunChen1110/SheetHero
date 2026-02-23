@@ -13,8 +13,43 @@ logger = LoggerRegistry.setup_logger(__name__)
 class ValidationResponseParser(BaseResponseParser):
     """Extract structured validation data from LLM response text."""
 
+    @staticmethod
+    def _coerce_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "passed", "pass", "yes", "1"}
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return False
+
+    @staticmethod
+    def _extract_json_payload(validation_text: str) -> Dict[str, Any]:
+        candidates = [validation_text.strip()]
+
+        fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", validation_text, re.IGNORECASE)
+        if fenced:
+            candidates.append(fenced.group(1).strip())
+
+        obj_match = re.search(r"\{[\s\S]*\}", validation_text)
+        if obj_match:
+            candidates.append(obj_match.group(0).strip())
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                continue
+
+        return {}
+
     def parse(self, validation_text: str) -> Dict[str, Any]:
         try:
+            text = validation_text or ""
             result = {
                 "validation_passed": False,
                 "confidence_score": 0.0,
@@ -25,14 +60,102 @@ class ValidationResponseParser(BaseResponseParser):
                 "requires_reexecution": False
             }
 
-            text = validation_text or ""
+            parsed_json = self._extract_json_payload(validation_text)
+            if parsed_json:
+                if "validation_passed" in parsed_json:
+                    result["validation_passed"] = self._coerce_bool(
+                        parsed_json.get("validation_passed")
+                    )
+                if "confidence_score" in parsed_json:
+                    try:
+                        result["confidence_score"] = float(parsed_json.get("confidence_score", 0.0))
+                    except (TypeError, ValueError):
+                        result["confidence_score"] = 0.0
+                if isinstance(parsed_json.get("issues_found"), list):
+                    result["issues_found"] = [
+                        str(issue).strip() for issue in parsed_json["issues_found"] if str(issue).strip()
+                    ]
+                if "improvement_feedback" in parsed_json:
+                    feedback = parsed_json.get("improvement_feedback")
+                    if isinstance(feedback, list):
+                        result["improvement_feedback"] = "\n".join(
+                            str(item).strip() for item in feedback if str(item).strip()
+                        )
+                    else:
+                        result["improvement_feedback"] = str(feedback or "").strip()
+                if "final_assessment" in parsed_json:
+                    result["final_assessment"] = str(parsed_json.get("final_assessment") or "").strip()
 
-            # 1) Prefer strict JSON if model returns object output.
-            json_obj = self._try_parse_json_object(text)
-            if isinstance(json_obj, dict):
-                self._merge_from_json(result, json_obj)
+                return result
 
-            # 2) Legacy label format: VALIDATION_STATUS / CONFIDENCE_SCORE / ...
+            # Fallback: tolerate markdown key-value style like
+            # "1. **validation_passed**: true"
+            parsed_from_kv = False
+
+            kv_bool = re.search(
+                r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?validation_passed(?:\*\*)?[ \t]*:[ \t]*([^\n]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if kv_bool:
+                bool_raw = kv_bool.group(1).strip()
+                if bool_raw and bool_raw != "**":
+                    result["validation_passed"] = self._coerce_bool(bool_raw)
+                    parsed_from_kv = True
+
+            kv_conf = re.search(
+                r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?confidence_score(?:\*\*)?[ \t]*:[ \t]*([0-9]*\.?[0-9]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if kv_conf:
+                result["confidence_score"] = float(kv_conf.group(1))
+                parsed_from_kv = True
+
+            kv_issues = re.search(
+                r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?issues_found(?:\*\*)?[ \t]*:[ \t]*([^\n]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if kv_issues:
+                issues_raw = kv_issues.group(1).strip()
+                if issues_raw.lower().strip() in {
+                    "[]", "none", "none.", "none identified", "none identified."
+                }:
+                    result["issues_found"] = []
+                    parsed_from_kv = True
+                elif issues_raw:
+                    if issues_raw != "**":
+                        # Keep as a single issue line when non-empty plain text is returned.
+                        result["issues_found"] = [issues_raw]
+                        parsed_from_kv = True
+
+            kv_feedback = re.search(
+                r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?improvement_feedback(?:\*\*)?[ \t]*:[ \t]*([^\n]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if kv_feedback:
+                feedback_raw = kv_feedback.group(1).strip()
+                if feedback_raw and feedback_raw != "**":
+                    result["improvement_feedback"] = feedback_raw
+                    parsed_from_kv = True
+
+            kv_assessment = re.search(
+                r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?final_assessment(?:\*\*)?[ \t]*:[ \t]*([^\n]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if kv_assessment:
+                assessment_raw = kv_assessment.group(1).strip()
+                if assessment_raw and assessment_raw != "**":
+                    result["final_assessment"] = assessment_raw
+                    parsed_from_kv = True
+
+            # If markdown key-value already yielded a decision, return now.
+            if parsed_from_kv:
+                return result
+
             validation_match = re.search(
                 r'(\*\*)?VALIDATION_STATUS:(\*\*)?\s*\[?(PASSED|FAILED)\]?',
                 text,
@@ -70,9 +193,12 @@ class ValidationResponseParser(BaseResponseParser):
                     for line in issues_text.split('\n')
                     if line.strip().startswith('-')
                 ]
+                def _is_none_issue(s: str) -> bool:
+                    normalized = s.strip().lower().rstrip(".! ")
+                    return normalized in {"none", "none identified"}
                 result["issues_found"] = [
                     issue for issue in issues
-                    if issue and issue.lower() != "none identified"
+                    if issue and not _is_none_issue(issue)
                 ]
             elif not result["issues_found"]:
                 issues_key_section = re.search(
