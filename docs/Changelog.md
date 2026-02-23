@@ -195,3 +195,16 @@
   - Offline prompt now enforces shape-safe header/row extraction to remove empty headers and blank rows before DataFrame creation.
 - Fixed repeated malformed code continuation behavior
   - Runtime now rejects non-executable "patch-style" continuation responses and requires full executable blocks each turn.
+
+## 23/2/2026
+### --- Added --- 
+- Updated offline prompts for `understanding`, `execution`, and `validation` in `src/backend/prompt/prompt_texts_offline.py`.
+- Tightened `understanding` output constraints: plain-text only, no code blocks, no forbidden API mentions.
+- Added stricter `execution` guidance for date handling and highlight row indexing (flat 1-based integer rows).
+- Added local-model config visibility: `!llm --show`.
+- Added one-step offline switch command: `!llm --switch--offline <model_full_name>`.
+- `--switch--offline` now automatically sets:
+  - `base_url = http://localhost:11434/v1`
+  - clears configured `api_key`
+  - `deployment = <model_full_name>`
+- Kept existing dataset debug workflow unchanged (`!dataset --index N`, `run`).
