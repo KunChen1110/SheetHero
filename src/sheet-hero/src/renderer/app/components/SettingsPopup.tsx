@@ -16,8 +16,8 @@ interface SettingsPopupProperties {
     apiKey: string,
     maxTurns: number,
     model: string,
-    baseURL: string,
     outputDirectory: string,
+    baseURL?: string,
   ) => void;
 }
 
@@ -43,19 +43,19 @@ export function SettingsPopup({
   // The model being used
   const [localModel, setLocalModel] = useState(model);
 
-  // The base url being used
-  const [localBaseURL, setLocalBaseURL] = useState(baseURL);
-
   // The output directory of generated files
   const [localOutputDir, setlocalOutputDir] = useState(outputDir);
+
+  // The base url being used
+  const [localBaseURL, setLocalBaseURL] = useState(baseURL || "");
 
   useEffect(() => {
     setLocalApiKey(apiKey);
     setLocalMaxTurns(maxTurns);
     setLocalModel(model);
-    setLocalBaseURL(baseURL);
     setlocalOutputDir(outputDir);
-  }, [apiKey, maxTurns, model, baseURL, outputDir, isOpen]);
+    setLocalBaseURL(baseURL || "");
+  }, [apiKey, maxTurns, model, outputDir, baseURL, isOpen]);
 
   if (!isOpen) return null;
 
@@ -66,8 +66,8 @@ export function SettingsPopup({
       localApiKey.trim(),
       localMaxTurns,
       localModel.trim(),
-      localBaseURL.trim(),
       localOutputDir.trim(),
+      localBaseURL.trim(),
     );
   }
 
