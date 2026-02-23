@@ -21,6 +21,8 @@ app.add_middleware(
     allow_headers = ["*"],
 )
 
+
+# Request for starting a new conversation
 class SheetHeroStartRequest(BaseModel):
     session_id: str
     api_key: str
@@ -32,13 +34,15 @@ class SheetHeroStartRequest(BaseModel):
     excel_paths: List[str]
 
 
+# Request for replying to a clarification question
 class SheetHeroReplyRequest(BaseModel):
     session_id: str
     user_reply: str
 
+
+# Starts a new conversation
 @app.post("/sheet-hero/start")
 def start_sheet_hero(request: SheetHeroStartRequest):
-    """Start a new conversation"""
     service = SheetHeroService(config=Config(
         api_key=request.api_key,
         deployment=request.model,
@@ -58,9 +62,10 @@ def start_sheet_hero(request: SheetHeroStartRequest):
     events = list(stream)
     return {"events": events}
 
+
+# Replies to a clarification question
 @app.post("/sheet-hero/reply")
 def reply_sheet_hero(request: SheetHeroReplyRequest):
-    """Reply to a clarification question"""
     if request.session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -70,9 +75,10 @@ def reply_sheet_hero(request: SheetHeroReplyRequest):
     events = list(stream)
     return {"events": events}
 
+
+# Cleans up a session
 @app.delete("/sheet-hero/session/{session_id}")
 def end_session(session_id: str):
-    """Clean up a session"""
     if session_id in sessions:
         del sessions[session_id]
     return {"status": "ok"}
