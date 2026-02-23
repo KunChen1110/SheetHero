@@ -33,7 +33,9 @@ ipcMain.handle("dialog:selectDirectory", async () => {
 // Is exposed through the preload files,
 // It is used to get the operating systems default documents path
 ipcMain.handle("app:getDocumentsPath", () => {
-  return app.getPath("documents");
+  const path = app.getPath("documents");
+  console.log("Documents path:", path);
+  return path;
 });
 
 // Creates the main window
