@@ -21,14 +21,16 @@ class DiagnoseDecision:
 class DiagnoseRouter:
     """Decide whether the diagnose stage should run."""
 
-    def __init__(self, client, deployment: str, progress_logger=None):
+    def __init__(self, client, deployment: str, progress_logger=None,
+                 prompt_profile: str = "online_rich"):
         self.client = client
         self.deployment = deployment
         self.progress_logger = progress_logger
+        self.prompt_builder = PromptBuilder(profile=prompt_profile)
 
     def decide(self, user_question: str, understanding_output: str,
                workbook_view) -> DiagnoseDecision:
-        prompt = PromptBuilder().build_diagnose_router_prompt(
+        prompt = self.prompt_builder.build_diagnose_router_prompt(
             user_question=user_question,
             understanding_output=understanding_output
         )

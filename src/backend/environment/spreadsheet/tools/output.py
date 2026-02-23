@@ -129,8 +129,11 @@ class ExcelOutputWriter:
                 )
             sheet = output_wb[sheet_name]
             max_col = sheet.max_column
+            normalized_rows = self._normalize_row_numbers(row_numbers)
+            if not normalized_rows:
+                raise ValueError("No valid row numbers provided for highlighting.")
 
-            for row_num in row_numbers:
+            for row_num in normalized_rows:
                 for col_idx in range(1, max_col + 1):
                     cell = sheet.cell(row=row_num, column=col_idx)
 
@@ -148,7 +151,7 @@ class ExcelOutputWriter:
                     if font_kwargs:
                         cell.font = Font(**font_kwargs)
 
-            message = f"✅ Highlighted row(s) {row_numbers} in sheet '{sheet_name}'"
+            message = f"✅ Highlighted row(s) {normalized_rows} in sheet '{sheet_name}'"
             print(message)
             return message
 
@@ -156,6 +159,46 @@ class ExcelOutputWriter:
             error_msg = f"❌ Error highlighting rows: {str(e)}"
             print(error_msg)
             raise Exception(error_msg)
+
+    def _normalize_row_numbers(self, row_numbers: Any) -> List[int]:
+        """Normalize nested/index-like row inputs into a flat positive-int list."""
+        if row_numbers is None:
+            return []
+
+        def _iter_items(value: Any):
+            if value is None:
+                return
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    yield from _iter_items(item)
+                return
+            if hasattr(value, "tolist"):
+                try:
+                    converted = value.tolist()
+                    yield from _iter_items(converted)
+                    return
+                except Exception:
+                    pass
+            yield value
+
+        normalized: List[int] = []
+        for item in _iter_items(row_numbers):
+            try:
+                row_num = int(item)
+            except Exception:
+                continue
+            if row_num >= 1:
+                normalized.append(row_num)
+
+        # Deduplicate while preserving order.
+        seen = set()
+        deduped: List[int] = []
+        for row in normalized:
+            if row in seen:
+                continue
+            seen.add(row)
+            deduped.append(row)
+        return deduped
 
     def save_workbook_to(self, output_path: str) -> str:
         """Save the output workbook to a specific path."""

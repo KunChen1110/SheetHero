@@ -61,12 +61,18 @@ class SheetHero:
             self._output_path
         )
 
-        if not self.config.api_key:
-            raise ValueError("OpenAI API key is missing in Config")
-        client_kwargs = {"api_key": self.config.api_key}
-        if self.config.base_url:
-            client_kwargs["base_url"] = self.config.base_url
+        api_key = (self.config.api_key or "").strip()
+        base_url = (self.config.base_url or "").strip()
+        if not api_key and not base_url:
+            raise ValueError("API key is missing and base_url is not set in Config")
+
+        # OpenAI-compatible local servers still require a non-empty api_key field.
+        # Use a harmless placeholder when caller chooses base_url-only mode.
+        client_kwargs = {"api_key": api_key or "local-key"}
+        if base_url:
+            client_kwargs["base_url"] = base_url
         self.client = OpenAI(**client_kwargs)
+        self.prompt_profile = self._resolve_prompt_profile()
         
         # initialize the sandbox
         self.sandbox = Sandbox(
@@ -82,7 +88,8 @@ class SheetHero:
         self.understanding_module = UnderstandingStage(
             self.client,
             self.config.deployment,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
         self.interact_module = InteractStage(
             self.client,
@@ -95,30 +102,35 @@ class SheetHero:
             self.excel_paths,
             sandbox=self.sandbox,
             token_budget=self.config.total_token_budget,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
         self.diagnose_router = DiagnoseRouter(
             self.client,
             self.config.deployment,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
         self.execution_module = ExecutionStage(
             self.client,
             self.config.deployment,
             self.sandbox,
             self.output_instruction,
-            progress_log_file=self.progress_logger.file
+            progress_log_file=self.progress_logger.file,
+            prompt_profile=self.prompt_profile,
         )
         self.validation_module = ValidationStage(
             self.client,
             self.config.deployment,
             "",
-            progress_log_file=self.progress_logger.file
+            progress_log_file=self.progress_logger.file,
+            prompt_profile=self.prompt_profile,
         )
         self.qa_stage = QualityAssuranceStage(
             self.client,
             self.config.deployment,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
         self.qa_stage.max_qa_rounds = self.config.max_qa_rounds
         self.cleaning_module = DataCleaningStage(
@@ -127,6 +139,19 @@ class SheetHero:
             token_budget=self.config.total_token_budget,
             progress_logger=self.progress_logger
         )
+
+    def _resolve_prompt_profile(self) -> str:
+        """Select prompt profile for current runtime."""
+        forced = (os.getenv("SHEETHERO_PROMPT_PROFILE") or "").strip().lower()
+        if forced in {"offline", "offline_strict"}:
+            return "offline_strict"
+        if forced in {"online", "online_rich"}:
+            return "online_rich"
+
+        base_url = (self.config.base_url or "").lower()
+        if any(marker in base_url for marker in ("localhost", "127.0.0.1", "11434", "ollama")):
+            return "offline_strict"
+        return "online_rich"
     
     # Run the agent
     def run(self, user_question: str) -> Dict[str, Any]:

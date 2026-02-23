@@ -10,7 +10,7 @@ from .config.settings import Config
 from .service.sheethero_service import SheetHeroService
 from .service.stream_dialogue_driver import StreamDialogueDriver
 
-
+# CLI backend debug mode: python3 -m src.backend.main
 @dataclass
 class InputBuffer:
     excel_paths: list[str] = field(default_factory=list)
@@ -22,6 +22,65 @@ class InputBuffer:
 
     def ready(self) -> bool:
         return self.prompt is not None
+
+
+def _mask_key(api_key: str | None) -> str:
+    key = (api_key or "").strip()
+    if not key:
+        return "(empty)"
+    if len(key) <= 8:
+        return "***"
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def _print_llm_config(config: Config) -> None:
+    base_url = (config.base_url or "").strip() or "(OpenAI default)"
+    print(
+        "[llm config] "
+        f"deployment={config.deployment}, "
+        f"base_url={base_url}, "
+        f"api_key={_mask_key(config.api_key)}"
+    )
+
+
+def _handle_llm_command(service: SheetHeroService, line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!llm", add_help=False)
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("--switch--offline", dest="switch_offline",
+                        nargs="?", const="__PROMPT__", default=None)
+
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print(
+            "Error: usage `!llm --show` or "
+            "`!llm --switch--offline <model_full_name>`"
+        )
+        return
+
+    has_update = args.switch_offline is not None
+    if args.show:
+        _print_llm_config(service.config)
+    if not args.show and not has_update:
+        print("Error: usage `!llm --show` or `!llm --switch--offline <model_full_name>`")
+        return
+
+    if has_update:
+        model_name = args.switch_offline
+        if model_name == "__PROMPT__":
+            model_name = input("Model full name (e.g. qwen2.5-coder:7b-instruct): ").strip()
+        else:
+            model_name = (model_name or "").strip()
+
+        if not model_name:
+            print("Error: model full name is required.")
+            return
+
+        service.config.api_key = ""
+        service.config.base_url = "http://localhost:11434/v1"
+        service.config.deployment = model_name
+        print("[llm switched] offline mode enabled.")
+        _print_llm_config(service.config)
 
 
 def _handle_path(buffer: InputBuffer, line: str) -> None:
@@ -241,6 +300,9 @@ def main() -> None:
     print("Type `run` to execute the current turn.")
     print("Type `!dataset --list` to list dataset tasks.")
     print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
+    print("Type `!llm --show` to view active model endpoint settings.")
+    print("Type `!llm --switch--offline <model_full_name>` to switch to local LLM.")
+    _print_llm_config(config)
 
     while True:
         line = input(">>> ").strip()
@@ -259,6 +321,11 @@ def main() -> None:
 
         if line.startswith("!dataset"):
             _handle_dataset_command(service, buffer, line)
+            continue
+
+
+        if line.startswith("!llm"):
+            _handle_llm_command(service, line)
             continue
 
         if line == "run":
