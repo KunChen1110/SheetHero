@@ -41,6 +41,9 @@ Rules:
 - Do not infer unseen columns, file names, or sheet names.
 - Prefer robust generic steps over task-specific assumptions.
 - Output Contract must be consistent with user question intent.
+- Output plain text only. Do not include code fences, pseudo-code, imports, or executable snippets.
+- Never mention forbidden API names (`pd.read_excel`, `pd.ExcelFile`, `pd.read_csv`, `pd.read_table`, `to_excel`, `openpyxl`).
+- Keep response compact (target <=45 lines).
 """)
 
 _ENHANCED_UNDERSTANDING_PROMPT_OFFLINE = textwrap.dedent("""\
@@ -115,6 +118,13 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
   - `print(file_path.split('/')[-1], df.columns.tolist())`
 - For multi-file questions, read EACH file and combine with `pd.concat(..., ignore_index=True)`.
 - Always verify required columns exist before use.
+- For date filtering:
+  - Parse date column with `pd.to_datetime(..., errors="coerce")`.
+  - Do NOT hard-code year unless user explicitly specifies a year.
+- For highlight row numbers:
+  - `highlight_rows()` expects 1-based integer row numbers in Output sheet.
+  - Convert DataFrame indices to row numbers with header offset (example: `row_numbers = [i + 2 for i in idx_list]`).
+  - Do NOT pass nested lists (forbidden form: `[[...]]`) and do NOT call `.index(...)` as a function.
 
 **QUESTION-INTENT OUTPUT RULES (HARD PRIORITY):**
 - If question asks to **merge/combine/join tables**, **highlight** rows/cells (for example max day in red),
@@ -192,6 +202,8 @@ _OFFLINE_OUTPUT_WORKFLOW = textwrap.dedent("""\
 3. Write with `write_dataframe_to_sheet(...)` according to the inferred intent.
 4. Do not mix dict rows into table rows; all writes must be proper 2D list rows.
 5. Use `highlight_rows(...)` for red highlighting requests (do not use HTML tags).
+   - Build `row_numbers` as flat list of 1-based ints only.
+   - Example: `row_numbers = [i + 2 for i in max_idx_list]`
 6. `saved_file = save_workbook_to(output_path)`
 7. `print("SAVED_FILE:", saved_file)`
 8. Last expression must be `saved_file`
@@ -219,13 +231,13 @@ _EXECUTION_HELPER_SECTIONS_PART2_OFFLINE = textwrap.dedent("""\
 
 _EXECUTION_USER_PROMPT_OFFLINE = textwrap.dedent("""\
 **Sheet Content:**
-<<excel_context_execution>>
+<<execution_context>>
 
 **Understanding Context (low confidence hint):**
 <<understanding_output>>
 
 **User Question:**
-<<user_question>>
+<<user_query>>
 
 Start from schema grounding, then compute.
 If Understanding conflicts with runtime observations/errors, trust runtime observations.
@@ -235,7 +247,7 @@ _VALIDATION_PROMPT_OFFLINE = textwrap.dedent("""\
 You are an OFFLINE validator for spreadsheet execution.
 
 **Original User Question:**
-<<user_question>>
+<<user_query>>
 
 **Excel Context:**
 <<excel_context_understanding>>
@@ -251,18 +263,261 @@ You are an OFFLINE validator for spreadsheet execution.
 **Conversation History:**
 <<conversation_history_text>>
 
-Return concise validation with:
-1. `validation_passed`: true/false
-2. `confidence_score`: 0-1
-3. `issues_found`: list
-4. `improvement_feedback`: short actionable fixes
-5. `final_assessment`: one paragraph
+Return STRICTLY in this exact format (no markdown code fences):
+
+VALIDATION_STATUS: PASSED or FAILED
+CONFIDENCE_SCORE: <0.00-1.00>
+ISSUES_FOUND:
+- <issue 1> (or `- None identified.`)
+IMPROVEMENT_FEEDBACK:
+<short actionable feedback>
+FINAL_ASSESSMENT:
+<one short paragraph>
 
 Rules:
 - If execution failed, validation cannot pass.
 - If final answer is file path, execution must include save evidence.
+- For merge/detail/highlight tasks, writing only `Metric | Value` is not acceptable.
 - Prioritize correctness and reproducibility over style.
 """)
+
+
+_QUALITY_DIAG_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE data quality inspector.
+
+Use ONLY the provided Excel context.
+
+Rules:
+- Output a plain bullet list only.
+- Each line must start with "- ".
+- One issue per line.
+- Keep each issue short and concrete.
+- If no issue is found, output an empty response.
+- Do not infer business intent.
+
+Excel Context:
+<<excel_context_understanding>>
+""")
+
+
+_UNDERSTANDING_CONTEXT_MATCH_PROMPT_OFFLINE = textwrap.dedent("""\
+Decide whether session context is relevant to the current user question.
+
+Rules:
+- Return YES only when the context clearly matches.
+- Return NO for mismatch or uncertainty.
+- Output ONE token only: YES or NO.
+
+User question:
+<<user_question>>
+
+Session context:
+<<session_context_understanding>>
+""")
+
+
+_DIAGNOSE_CODE_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE diagnose code generator.
+
+Goal:
+- Inspect workbook samples and detect blocking data-quality risks.
+
+Inputs:
+- User task:
+<<user_task>>
+- Schema summary:
+<<schema_summary>>
+
+Output requirements:
+- Write Python code only.
+- Do not use markdown fences.
+- Print ONLY one JSON array of strings via json.dumps(...).
+- If no risk is found, print [].
+""")
+
+
+_DIAGNOSE_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE diagnose agent.
+
+Task:
+- Read the user task and sampled workbook text.
+- Return a JSON array of blocking risks that require user clarification.
+
+User task:
+<<user_task>>
+
+Sampled data:
+<<scan_report>>
+
+Rules:
+- Output ONLY valid JSON array, nothing else.
+- Keep each item as one short sentence.
+- Focus on blocking schema/data-quality risks only.
+- Do not propose fixes.
+- If no risk exists, output [].
+
+Each issue should include:
+- file name
+- sheet name
+- column name
+- one row anchor (column=value) when possible
+""")
+
+
+_DIAGNOSE_PRIORITIZE_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE triage agent.
+
+User task:
+<<user_task>>
+
+Candidate issues:
+<<candidate_questions>>
+
+Task:
+- Keep only the minimal blocking set relevant to the user task.
+- Merge duplicate issues that refer to the same column and same decision.
+- Keep at most 6 issues.
+
+Output format:
+- Output ONLY a JSON array of strings.
+- If none, output [].
+""")
+
+
+_DIAGNOSE_ROUTER_PROMPT_OFFLINE = textwrap.dedent("""\
+Decide whether diagnose stage is needed before execution.
+
+Return only YES or NO.
+
+Use YES when:
+- Data cleaning or ambiguity resolution is needed.
+- Missing values / format inconsistency may block correctness.
+
+Use NO when:
+- Task is direct analysis and no clarification is needed.
+- Uncertain.
+
+User question:
+<<user_question>>
+
+Understanding summary:
+<<understanding_output>>
+""")
+
+
+_QA_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE QA agent for data-cleaning decisions.
+
+Detected data issues:
+<<quality_table>>
+
+Original user task:
+<<original_question>>
+
+User reply:
+<<user_reply>>
+
+Rules:
+- Ask one clarification question if decision is unclear.
+- Keep the question short and concrete.
+- Do not invent options outside the issue scope.
+""")
+
+
+_QA_QUESTION_PROMPT_OFFLINE = textwrap.dedent("""\
+Ask ONE clarification question for the current data issue.
+
+Detected issues:
+<<quality_table>>
+
+Current issue:
+<<current_problem>>
+
+Rules:
+- Output one sentence only.
+- No explanation, no heading.
+- Keep the question directly answerable by end users.
+- Do not add new decision branches that are not in the issue.
+""")
+
+
+_QA_MATCH_PROMPT_OFFLINE = textwrap.dedent("""\
+Check whether the user reply directly answers the clarification question.
+
+Question:
+<<question>>
+
+User reply:
+<<reply>>
+
+Decision rules:
+- If reply gives a direct decision, set MATCH to YES.
+- If reply is a single number and the question is about missing numeric value handling, treat as MATCH=YES.
+- If reply means no change (for example: ignore, keep, as is, leave blank), set MATCH=YES and ACTION=NO_OP.
+- If reply is unclear, set MATCH=NO.
+
+Output format (STRICT, EXACTLY 2 LINES):
+MATCH: YES or NO
+ACTION: <instruction sentence or NO_OP or empty>
+
+No markdown. No extra text. No third line.
+""")
+
+
+_QA_INSTRUCTION_PROMPT_OFFLINE = textwrap.dedent("""\
+Convert a user reply into one executable cleaning instruction.
+
+Issue:
+<<problem>>
+
+Reply:
+<<reply>>
+
+Rules:
+- Output one sentence only.
+- Must include target column and operation.
+- If reply means no change, output NO_OP.
+- Do not add explanation.
+""")
+
+
+_QA_ACTIONS_PROMPT_OFFLINE = textwrap.dedent("""\
+Produce cleaning actions from confirmed user clarifications.
+
+Detected issues:
+<<quality_table>>
+
+Clarification summary:
+<<answers_summary>>
+
+Rules:
+- Output a bullet list only.
+- Each bullet must start with "- ".
+- One action per line.
+- If no action is needed, output an empty response.
+""")
+
+
+_QA_DECISION_PROMPT_OFFLINE = textwrap.dedent("""\
+You are an OFFLINE decision agent.
+
+Inputs:
+- Original request:
+<<original_question>>
+- Detected issues:
+<<quality_table>>
+- Clarifications:
+<<answers_summary>>
+
+Task:
+- Produce a clean final task specification (analysis goal only).
+- Keep cleaning decisions out of the task description.
+
+Output:
+- Plain text task specification only.
+- No markdown.
+""")
+
 
 EXECUTION_SYSTEM_PROMPT_OFFLINE: str = (
     _EXECUTION_SYSTEM_INTRO_OFFLINE

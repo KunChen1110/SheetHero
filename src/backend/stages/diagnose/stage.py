@@ -15,13 +15,15 @@ class DiagnoseStage:
     """Generate a question list from read-only workbooks."""
 
     def __init__(self, client, deployment: str, excel_paths, sandbox=None,
-                 token_budget: int = 50000, progress_logger=None):
+                 token_budget: int = 50000, progress_logger=None,
+                 prompt_profile: str = "online_rich"):
         self.client = client
         self.deployment = deployment
         self.excel_paths = excel_paths
         self.sandbox = sandbox
         self.token_budget = token_budget
         self.progress_logger = progress_logger
+        self.prompt_builder = PromptBuilder(profile=prompt_profile)
 
     def run_readonly(self, workbooks, user_task: str = "") -> List[str]:
         workbook_source = workbooks or {}
@@ -35,7 +37,7 @@ class DiagnoseStage:
             debug_hook=_debug_hook if self.progress_logger else None,
         )
         scan_report = build_diagnose_report(sampled)
-        prompt_text = PromptBuilder().build_diagnose_prompt(user_task, scan_report)
+        prompt_text = self.prompt_builder.build_diagnose_prompt(user_task, scan_report)
         messages = [{"role": "user", "content": prompt_text}]
 
         if self.progress_logger:
@@ -83,7 +85,7 @@ class DiagnoseStage:
     def _prioritize_questions(self, user_task: str, questions: List[str]) -> Optional[List[str]]:
         if not questions:
             return []
-        prompt_text = PromptBuilder().build_diagnose_prioritize_prompt(user_task, questions)
+        prompt_text = self.prompt_builder.build_diagnose_prioritize_prompt(user_task, questions)
         messages = [{"role": "user", "content": prompt_text}]
         try:
             response = self.client.chat.completions.create(

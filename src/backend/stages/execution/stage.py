@@ -14,7 +14,7 @@ class ExecutionStage(Stage):
     def __init__(self, client, deployment: str, sandbox,
                  excel_context_execution: str,
                  output_instruction: Optional[str] = None, progress_log_file=None,
-                 prompt_profile: str = "offline_strict"):
+                 prompt_profile: str = "online_rich"):
         self.runner = ExecutionRuntime(
             client,
             deployment,
