@@ -48,7 +48,8 @@ def start_sheet_hero(request: SheetHeroStartRequest):
         deployment=request.model,
         max_turns=request.max_turns,
         base_url=request.base_url,
-        output_file=request.output_file
+        output_file=request.output_file,
+        output_mode="file" # TODO This may need changing 
     ))
 
     driver = StreamDialogueDriver(service)
@@ -67,7 +68,7 @@ def start_sheet_hero(request: SheetHeroStartRequest):
 @app.post("/sheet-hero/reply")
 def reply_sheet_hero(request: SheetHeroReplyRequest):
     if request.session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+        return {"error": "Session not found"}
     
     driver = sessions[request.session_id]
     stream = driver.reply(request.user_reply)

@@ -15,31 +15,38 @@ const DEFAULT_SETTINGS: AppSettings = {
 export function useSettings() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
-  // Load settings on start
+  // Load settings on start.
   useEffect(() => {
     loadSettings();
-
-    // Work-around to fix the default output directory not being set to the users documents folder on first load
-    const loadPath = async () => {
-      const docsPath = await window.electronAPI.getDocumentsPath();
-      setSettings(prev => ({
-        ...prev,
-        outputDir: docsPath
-      }));
-    };
-  loadPath();
   }, []);
 
-  // Loads settings from local storage
+  // Loads settings from local storage.
   function loadSettings(): void {
     try {
       const saved = localStorage.getItem(SETTINGS_KEY);
       if (saved) {
-        setSettings(JSON.parse(saved));
+        const parsed: AppSettings = JSON.parse(saved);
+        setSettings(parsed);
+        if (!parsed.outputDir) {
+          setDefaultDocsPath();
+        }
+      } else {
+        setDefaultDocsPath();
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
     }
+  }
+
+  // Sets the output directory to the user's Documents folder
+  // but only when there is not one configured.
+  function setDefaultDocsPath() {
+    window.electronAPI.getDocumentsPath().then((docsPath) => {
+      setSettings((prev) => ({
+        ...prev,
+        outputDir: prev.outputDir || docsPath,
+      }));
+    });
   }
 
   // Saves settings to local storage

@@ -27,7 +27,7 @@ export interface ExcelFile {
 export interface AppSettings {
   apiKey: string;
   maxTurns: number;
-  baseURL: string;
   model: string;
   outputDir: string;
+  baseURL: string;
 }

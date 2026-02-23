@@ -4,10 +4,15 @@ import { Send } from "lucide-react";
 // Properties needed for the app input
 interface AppInputProperties {
   onSendMessage: (message: string) => void;
-  disabled?: boolean;
+  hasApiKey?: boolean;
+  isTyping?: boolean;
 }
 
-export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
+export function AppInput({
+  onSendMessage,
+  hasApiKey,
+  isTyping,
+}: AppInputProperties) {
   // The input text shown on the input container
   const [input, setInput] = useState("");
 
@@ -15,7 +20,7 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
 
-    if (input.trim() && !disabled) {
+    if (input.trim() && !isTyping && hasApiKey) {
       onSendMessage(input.trim());
       setInput("");
     }
@@ -30,7 +35,7 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
           <textarea
             className="flex-1 resize-none p-4 text-sm text-(--sh-white) placeholder-(--sh-grey) focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
-            disabled={disabled}
+            disabled={!hasApiKey || isTyping}
             rows={1}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -40,9 +45,12 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
               }
             }}
             placeholder={
-              disabled
+              // Different hints depending on state
+              !hasApiKey
                 ? "Configure API key in settings to start..."
-                : "Ask me a question"
+                : isTyping
+                  ? "Thinking of a response..."
+                  : "Ask me a question"
             }
             style={{
               minHeight: "50px",
@@ -59,7 +67,7 @@ export function AppInput({ onSendMessage, disabled }: AppInputProperties) {
           <button
             className="mr-2 p-2 rounded-lg bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             type="submit"
-            disabled={!input.trim() || disabled}
+            disabled={!input.trim() || isTyping || !hasApiKey}
           >
             <Send size={22} />
           </button>

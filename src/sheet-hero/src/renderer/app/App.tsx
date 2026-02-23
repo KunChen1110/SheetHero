@@ -62,15 +62,15 @@ export default function App() {
     apiKey: string,
     maxTurns: number,
     model: string,
-    baseURL: string,
     outputDir: string,
+    baseURL?: string,
   ): void {
     saveSettings({
       apiKey: apiKey,
       maxTurns: maxTurns,
       model: model,
-      baseURL: baseURL,
       outputDir: outputDir,
+      baseURL: baseURL || "",
     });
   }
 
@@ -119,7 +119,7 @@ export default function App() {
               ...chat,
               messages: [...chat.messages, userMessage],
               title:
-                chat.messages.length === 1
+                chat.messages.length === 0
                   ? generateChatTitle(content)
                   : chat.title,
             }
@@ -178,7 +178,7 @@ export default function App() {
       api_key: settings.apiKey,
       model: settings.model,
       max_turns: settings.maxTurns,
-      base_url: settings.baseURL,
+      base_url: settings.baseURL || "",
       output_file: settings.outputDir,
       prompt: userMessage,
       excel_paths: excelFiles.map((f) => f.path),
@@ -333,7 +333,8 @@ export default function App() {
           </div>
           <AppInput
             onSendMessage={createNewMessage}
-            disabled={isTyping || !hasApiKey}
+            hasApiKey={hasApiKey}
+            isTyping={isTyping}
           />
         </div>
       </div>
