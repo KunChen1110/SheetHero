@@ -21,12 +21,14 @@ class UnderstandingStage(Stage):
     def __init__(self,
                  client,
                  deployment: str,
-                 progress_logger=None):
+                 progress_logger=None,
+                 prompt_profile: str = "online_rich"):
         """Initialize the UnderstandingStage."""
 
         self.client = client
         self.deployment = deployment
         self.progress_logger = progress_logger
+        self.prompt_builder = PromptBuilder(profile=prompt_profile)
 
     def run(self, user_question: str, spreadsheet_context: str,
             session_context_understanding: Optional[str] = None) -> str:
@@ -50,6 +52,10 @@ class UnderstandingStage(Stage):
         )
     
         understanding_output = self._get_llm_response(messages)
+        understanding_output = self._sanitize_understanding_output(
+            understanding_output,
+            user_question
+        )
         if self.progress_logger:
             self.progress_logger.log_raw(
                 "\n".join(["### [UNDERSTANDING OUTPUT]", understanding_output or ""])
@@ -60,6 +66,98 @@ class UnderstandingStage(Stage):
             self.progress_logger.log("[UNDERSTANDING] completed", to_terminal=False)
         return understanding_output
 
+    def _sanitize_understanding_output(self, text: str, user_question: str) -> str:
+        """Keep offline understanding concise and machine-usable for downstream stages."""
+        cleaned = (text or "").strip()
+        if not cleaned:
+            cleaned = "### 1. Sheet Summary\n- No understanding output generated."
+
+        # Remove long code snippets that tend to pollute offline planning.
+        cleaned = re.sub(r"```.*?```", "", cleaned, flags=re.DOTALL)
+
+        forbidden_terms = (
+            "pd.read_excel",
+            "pd.excelfile",
+            "pd.read_csv",
+            "pd.read_table",
+            "to_excel",
+            "openpyxl",
+        )
+        kept_lines = []
+        for line in cleaned.splitlines():
+            lower = line.lower()
+            if any(term in lower for term in forbidden_terms):
+                continue
+            kept_lines.append(line.rstrip())
+        cleaned = "\n".join(kept_lines).strip()
+
+        return self._ensure_output_contract(cleaned, user_question)
+
+    @staticmethod
+    def _parse_contract_flag(text: str, key: str) -> Optional[bool]:
+        # Accept both plain and markdown-emphasized keys:
+        # requires_detailed_table: YES
+        # **requires_detailed_table**: YES
+        pattern = rf"(?:\*\*)?\s*{re.escape(key)}\s*(?:\*\*)?\s*:\s*(YES|NO|TRUE|FALSE)"
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            return None
+        return m.group(1).strip().upper() in {"YES", "TRUE"}
+
+    @staticmethod
+    def _infer_contract_from_question(user_question: str) -> dict:
+        q = (user_question or "").lower()
+        detail_terms = (
+            "merge", "combine", "join", "table", "rows", "list", "new spreadsheet",
+            "output", "export"
+        )
+        highlight_terms = ("highlight", "red", "color", "most", "maximum", "max")
+        summary_terms = (
+            "average", "avg", "total", "sum", "count", "minimum", "maximum", "metric"
+        )
+        need_detail = any(t in q for t in detail_terms)
+        need_highlight = any(t in q for t in highlight_terms)
+        need_summary = any(t in q for t in summary_terms)
+        return {
+            "requires_detailed_table": need_detail,
+            "requires_highlight": need_highlight,
+            "requires_summary_metrics": need_summary,
+        }
+
+    def _ensure_output_contract(self, text: str, user_question: str) -> str:
+        current = {
+            "requires_detailed_table": self._parse_contract_flag(text, "requires_detailed_table"),
+            "requires_highlight": self._parse_contract_flag(text, "requires_highlight"),
+            "requires_summary_metrics": self._parse_contract_flag(text, "requires_summary_metrics"),
+        }
+        inferred = self._infer_contract_from_question(user_question)
+        final_flags = {}
+        for key, inferred_value in inferred.items():
+            parsed_value = current.get(key)
+            final_flags[key] = inferred_value if parsed_value is None else parsed_value
+
+        if all(current[k] is not None for k in current):
+            return text
+
+        reason_parts = []
+        if final_flags["requires_detailed_table"]:
+            reason_parts.append("detailed table required")
+        if final_flags["requires_highlight"]:
+            reason_parts.append("highlight required")
+        if final_flags["requires_summary_metrics"]:
+            reason_parts.append("summary metrics required")
+        if not reason_parts:
+            reason_parts.append("scalar output is sufficient")
+
+        contract_block = (
+            "\n\n### 3. Output Contract (MANDATORY, machine-readable)\n"
+            f"requires_detailed_table: {'YES' if final_flags['requires_detailed_table'] else 'NO'}\n"
+            f"requires_highlight: {'YES' if final_flags['requires_highlight'] else 'NO'}\n"
+            f"requires_summary_metrics: {'YES' if final_flags['requires_summary_metrics'] else 'NO'}\n"
+            f"contract_reason: {', '.join(reason_parts)}."
+        )
+        return (text.rstrip() + contract_block).strip()
+
     def enhance(self, understanding_output: str, last_validation: dict) -> str:
         """Refine understanding output based on validation feedback."""
         if not last_validation:
@@ -69,7 +167,7 @@ class UnderstandingStage(Stage):
         if self.progress_logger:
             self.progress_logger.log("[UNDERSTANDING] enhance from validation", to_terminal=False)
 
-        prompt_text = PromptBuilder().build_enhanced_understanding_prompt(
+        prompt_text = self.prompt_builder.build_enhanced_understanding_prompt(
             understanding_output,
             last_validation
         )
@@ -80,7 +178,7 @@ class UnderstandingStage(Stage):
                                   excel_context_understanding: str,
                                   session_context_understanding: str) -> list:
         """Build prompt combining user question with Excel context."""
-        prompt_text = PromptBuilder().build_understanding_prompt(
+        prompt_text = self.prompt_builder.build_understanding_prompt(
             user_question,
             excel_context_understanding,
             session_context_understanding
@@ -90,7 +188,7 @@ class UnderstandingStage(Stage):
     def _context_is_relevant(self, user_question: str, session_context_understanding: str) -> bool:
         if not session_context_understanding:
             return False
-        prompt_text = PromptBuilder().build_understanding_context_match_prompt(
+        prompt_text = self.prompt_builder.build_understanding_context_match_prompt(
             user_question,
             session_context_understanding
         )

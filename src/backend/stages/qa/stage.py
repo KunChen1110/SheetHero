@@ -11,10 +11,12 @@ logger = LoggerRegistry.setup_logger(__name__)
 class QualityAssuranceStage:
     """QA stage for multi-turn clarification."""
 
-    def __init__(self, client, deployment: str, progress_logger=None):
+    def __init__(self, client, deployment: str, progress_logger=None,
+                 prompt_profile: str = "online_rich"):
         self.client = client
         self.deployment = deployment
         self.progress_logger = progress_logger
+        self.prompt_builder = PromptBuilder(profile=prompt_profile)
         self.quality_table = []
         self.original_question = ""
         self.unresolved_problems = []
@@ -63,7 +65,7 @@ class QualityAssuranceStage:
         self._log_progress(
             f"[QA] Question about: {self.current_problem.get('description')}"
         )
-        prompt_text = PromptBuilder().build_qa_question_prompt(
+        prompt_text = self.prompt_builder.build_qa_question_prompt(
             self._format_quality_table(self.quality_table),
             self.current_problem.get("description", str(self.current_problem))
         )
@@ -145,7 +147,7 @@ class QualityAssuranceStage:
         return str(problem)
 
     def _match_reply(self, question: str, reply: str) -> tuple[bool, str, str]:
-        prompt_text = PromptBuilder().build_qa_match_prompt(question, reply)
+        prompt_text = self.prompt_builder.build_qa_match_prompt(question, reply)
         messages = [{"role": "user", "content": prompt_text}]
         try:
             response = self.client.chat.completions.create(
