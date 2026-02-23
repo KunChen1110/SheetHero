@@ -22,7 +22,7 @@ class ExecutionRuntime(StageRuntime):
     def __init__(self, client, deployment: str, sandbox,
                  excel_context_execution: str,
                  output_instruction: Optional[str] = None, progress_log_file=None,
-                 prompt_profile: str = "offline_strict"):
+                 prompt_profile: str = "online_rich"):
         super().__init__(progress_log_file)
         self.client = client
         self.deployment = deployment
@@ -95,6 +95,25 @@ class ExecutionRuntime(StageRuntime):
                 continue
         return rows
 
+    @staticmethod
+    def _extract_highlight_rows(execution_result: str) -> list[int]:
+        """Parse highlighted row numbers from helper logs."""
+        if not execution_result:
+            return []
+        matches = re.findall(
+            r"Highlighted row\(s\)\s*\[([^\]]*)\]",
+            execution_result,
+            flags=re.IGNORECASE
+        )
+        parsed: list[int] = []
+        for raw in matches:
+            for token in re.findall(r"-?\d+", raw):
+                try:
+                    parsed.append(int(token))
+                except Exception:
+                    continue
+        return parsed
+
     def _has_meaningful_output_rows(self, execution_result: str) -> bool:
         """
         Require at least 2 written rows in bounded mode (header + >=1 data row).
@@ -112,7 +131,10 @@ class ExecutionRuntime(StageRuntime):
         """Parse YES/NO contract flags from understanding output."""
         if not understanding_output:
             return None
-        pattern = rf"{re.escape(key)}\s*:\s*(YES|NO|TRUE|FALSE)"
+        # Accept both plain and markdown-emphasized key forms:
+        # requires_detailed_table: YES
+        # **requires_detailed_table**: YES
+        pattern = rf"(?:\*\*)?\s*{re.escape(key)}\s*(?:\*\*)?\s*:\s*(YES|NO|TRUE|FALSE)"
         m = re.search(pattern, understanding_output, flags=re.IGNORECASE)
         if not m:
             return None
@@ -144,9 +166,11 @@ class ExecutionRuntime(StageRuntime):
 
         need_detail = output_contract.get("requires_detailed_table") is True
         need_highlight = output_contract.get("requires_highlight") is True
+        need_summary = output_contract.get("requires_summary_metrics") is True
 
         rows = self._extract_rows_written(execution_result)
         max_rows = max(rows) if rows else 0
+        highlight_rows = self._extract_highlight_rows(execution_result)
         lower_result = (execution_result or "").lower()
 
         if need_detail and max_rows < 6:
@@ -165,6 +189,31 @@ class ExecutionRuntime(StageRuntime):
                 "  highlight_rows(\"Output\", row_numbers, {\"fill_color\": \"red\"})\n"
                 "- Do not use HTML tags for highlighting."
             )
+
+        if need_highlight and highlight_rows and max_rows > 0:
+            invalid_rows = [r for r in highlight_rows if r < 2 or r > max_rows + 2]
+            if invalid_rows:
+                invalid_str = ", ".join(str(v) for v in invalid_rows[:5])
+                return (
+                    "OUTPUT_INTENT_MISMATCH_OFFLINE: highlighted row numbers are out of expected table range.\n"
+                    f"- Invalid highlighted rows: {invalid_str}\n"
+                    f"- Output table rows appear to be around 1..{max_rows}\n"
+                    "- Convert DataFrame indices to Output row numbers with header offset:\n"
+                    "  row_numbers = [i + 2 for i in idx_list]\n"
+                    "- Pass a flat list of ints to highlight_rows(...)."
+                )
+
+        if need_summary:
+            has_summary_signal = (
+                "added summary row" in lower_result or
+                len(rows) >= 2
+            )
+            if not has_summary_signal:
+                return (
+                    "OUTPUT_INTENT_MISMATCH_OFFLINE: summary metrics are required but no summary write evidence found.\n"
+                    "- Add a summary block (Total / Average etc.) after detailed table.\n"
+                    "- Use write_dataframe_to_sheet(summary_data, \"Output\", start_cell) or add_summary_row(...)."
+                )
 
         return None
 
@@ -705,6 +754,59 @@ class ExecutionRuntime(StageRuntime):
                 f"- Missing path: {missing_path}\n"
                 f"- Available input filenames: {available_str}\n"
                 "- Replace with a filename from available list via file_by_name mapping."
+            )
+
+        if "attempt to get argmax of an empty sequence" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: idxmax/argmax called on empty filtered data.\n"
+                "- Before idxmax(), add guard:\n"
+                "  if filtered_df.empty:\n"
+                "      row_numbers = []\n"
+                "  else:\n"
+                "      max_idx = filtered_df['value_col'].idxmax()\n"
+                "- Continue writing detailed table and summary even when highlight set is empty."
+            )
+
+        if "Can only use .str accessor with string values" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `.str` used on non-string date column.\n"
+                "- Prefer datetime logic:\n"
+                "  df['Date'] = pd.to_datetime(df['Date'], errors='coerce')\n"
+                "  filtered = df[df['Date'].dt.month == 11]\n"
+                "- Do not mix `.dt` and `.str` on the same typed column."
+            )
+
+        if "'float' object has no attribute 'isnull'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: scalar float does not have `.isnull()`.\n"
+                "- Replace `x.isnull()` with `pd.isna(x)`.\n"
+                "- Keep the rest unchanged."
+            )
+
+        if "'RangeIndex' object is not callable" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `.index` is a property, not a function.\n"
+                "- Wrong: df.index(...)\n"
+                "- Correct: df[condition].index.tolist()\n"
+                "- For highlight rows, convert to Output row numbers with header offset:\n"
+                "  row_numbers = [i + 2 for i in idx_list]"
+            )
+
+        if "'RangeIndex' object cannot be interpreted as an integer" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `range(df.index)` is invalid because index is not an int.\n"
+                "- Use concrete list of indices:\n"
+                "  idx_list = df[condition].index.tolist()\n"
+                "  row_numbers = [i + 2 for i in idx_list]\n"
+                "- Pass row_numbers directly to highlight_rows(...)."
+            )
+
+        if "Error highlighting rows" in execution_result and "'<' not supported between instances of 'list' and 'int'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: highlight_rows received nested list instead of flat int list.\n"
+                "- Wrong: highlight_rows(\"Output\", [[...]], {...})\n"
+                "- Correct: highlight_rows(\"Output\", [2, 8, 15], {...})\n"
+                "- Ensure each row number is an integer."
             )
 
         syntax_err = re.search(r"SyntaxError:\s*(.+)", execution_result)

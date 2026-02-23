@@ -9,7 +9,19 @@ from .prompt_data import (ExecutionPrompts, UnderstandingPrompts, ValidationProm
 from .prompt_texts_offline import (
     UNDERSTANDING_PROMPT_OFFLINE,
     _ENHANCED_UNDERSTANDING_PROMPT_OFFLINE,
+    _QUALITY_DIAG_PROMPT_OFFLINE,
+    _UNDERSTANDING_CONTEXT_MATCH_PROMPT_OFFLINE,
     _UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
+    _DIAGNOSE_CODE_PROMPT_OFFLINE,
+    _DIAGNOSE_PROMPT_OFFLINE,
+    _DIAGNOSE_PRIORITIZE_PROMPT_OFFLINE,
+    _DIAGNOSE_ROUTER_PROMPT_OFFLINE,
+    _QA_PROMPT_OFFLINE,
+    _QA_QUESTION_PROMPT_OFFLINE,
+    _QA_ACTIONS_PROMPT_OFFLINE,
+    _QA_MATCH_PROMPT_OFFLINE,
+    _QA_INSTRUCTION_PROMPT_OFFLINE,
+    _QA_DECISION_PROMPT_OFFLINE,
     _EXECUTION_SYSTEM_INTRO_OFFLINE,
     _EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
     _EXECUTION_HELPER_SECTIONS_PART2_OFFLINE,
@@ -47,9 +59,9 @@ class PromptBuilder:
                 prompt=UNDERSTANDING_PROMPT_OFFLINE,
                 verify_before_infer_offline=_UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
                 enhanced_prompt=_ENHANCED_UNDERSTANDING_PROMPT_OFFLINE,
-                quality_prompt=self._default_understanding.quality_prompt,
-                diagnose_code_prompt=self._default_understanding.diagnose_code_prompt,
-                context_match_prompt=self._default_understanding.context_match_prompt,
+                quality_prompt=_QUALITY_DIAG_PROMPT_OFFLINE,
+                diagnose_code_prompt=_DIAGNOSE_CODE_PROMPT_OFFLINE,
+                context_match_prompt=_UNDERSTANDING_CONTEXT_MATCH_PROMPT_OFFLINE,
             )
             self._execution = execution or ExecutionPrompts(
                 system_intro=_EXECUTION_SYSTEM_INTRO_OFFLINE,
@@ -61,13 +73,27 @@ class PromptBuilder:
             self._validation = validation or ValidationPrompts(
                 prompt=_VALIDATION_PROMPT_OFFLINE
             )
+            self._qa = qa or QAPrompts(
+                prompt=_QA_PROMPT_OFFLINE,
+                question_prompt=_QA_QUESTION_PROMPT_OFFLINE,
+                actions_prompt=_QA_ACTIONS_PROMPT_OFFLINE,
+                match_prompt=_QA_MATCH_PROMPT_OFFLINE,
+                instruction_prompt=_QA_INSTRUCTION_PROMPT_OFFLINE,
+                decision_prompt=_QA_DECISION_PROMPT_OFFLINE,
+            )
+            self._diagnose = diagnose or DiagnosePrompts(
+                prompt=_DIAGNOSE_PROMPT_OFFLINE,
+                code_prompt=_DIAGNOSE_CODE_PROMPT_OFFLINE,
+                prioritize_prompt=_DIAGNOSE_PRIORITIZE_PROMPT_OFFLINE,
+                router_prompt=_DIAGNOSE_ROUTER_PROMPT_OFFLINE,
+            )
         else:
             self._understanding = understanding or self._default_understanding
             self._execution = execution or self._default_execution
             self._validation = validation or self._default_validation
+            self._qa = qa or self._default_qa
+            self._diagnose = diagnose or self._default_diagnose
 
-        self._qa = qa or self._default_qa
-        self._diagnose = diagnose or self._default_diagnose
         self._cleaning = cleaning or self._default_cleaning
         self._interact = interact or self._default_interact
 
