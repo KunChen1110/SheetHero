@@ -10,7 +10,7 @@ class Config:
     deployment: str = "gpt-4o-mini"
 
     # === Processing Configuration ===
-    max_turns: int = 3
+    max_turns: int = 9
     max_qa_rounds: int = 30
     total_token_budget: int = 5000
 
