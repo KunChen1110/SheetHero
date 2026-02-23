@@ -19,6 +19,7 @@ export function useSettings() {
   useEffect(() => {
     loadSettings();
 
+    // Work-around to fix the default output directory not being set to the users documents folder on first load
     const loadPath = async () => {
       const docsPath = await window.electronAPI.getDocumentsPath();
       setSettings(prev => ({

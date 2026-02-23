@@ -1,4 +1,4 @@
-export const FILE_EXTENSIONS = ["xlsx", "xls", "csv"] as const;
+export const FILE_EXTENSIONS = ["xlsx", "xlsm", "xltx", "xltm", "csv"] as const;
 
 export enum Role {
   USER,

@@ -13,7 +13,7 @@ ipcMain.handle("dialog:selectFiles", async () => {
     filters: [
       {
         name: "Spreadsheets",
-        extensions: ["xlsx", "xls", "csv"], // TODO: Importing from interfaces doesnt work for some reason, make this not suck
+        extensions: ["xlsx", "xlsm", "xltx", "xltm", "csv"], // TODO: Importing from interfaces doesnt work for some reason, make this not suck
       },
     ],
   });
@@ -33,9 +33,7 @@ ipcMain.handle("dialog:selectDirectory", async () => {
 // Is exposed through the preload files,
 // It is used to get the operating systems default documents path
 ipcMain.handle("app:getDocumentsPath", () => {
-  const path = app.getPath("documents");
-  console.log("Documents path:", path);
-  return path;
+  return app.getPath("documents");
 });
 
 // Creates the main window
