@@ -125,19 +125,20 @@ class UnderstandingStage(Stage):
         }
 
     def _ensure_output_contract(self, text: str, user_question: str) -> str:
+        """Normalize output contract for offline reliability.
+
+        In offline mode we prefer deterministic intent extraction from the user
+        question over LLM-written flags, because weak models often output
+        contradictory contracts (e.g. scalar question but requires_highlight=YES).
+        """
         current = {
             "requires_detailed_table": self._parse_contract_flag(text, "requires_detailed_table"),
             "requires_highlight": self._parse_contract_flag(text, "requires_highlight"),
             "requires_summary_metrics": self._parse_contract_flag(text, "requires_summary_metrics"),
         }
         inferred = self._infer_contract_from_question(user_question)
-        final_flags = {}
-        for key, inferred_value in inferred.items():
-            parsed_value = current.get(key)
-            final_flags[key] = inferred_value if parsed_value is None else parsed_value
-
-        if all(current[k] is not None for k in current):
-            return text
+        # Offline-strict: inferred intent is authoritative to prevent noisy flags.
+        final_flags = dict(inferred)
 
         reason_parts = []
         if final_flags["requires_detailed_table"]:
@@ -156,7 +157,14 @@ class UnderstandingStage(Stage):
             f"requires_summary_metrics: {'YES' if final_flags['requires_summary_metrics'] else 'NO'}\n"
             f"contract_reason: {', '.join(reason_parts)}."
         )
-        return (text.rstrip() + contract_block).strip()
+        # Remove any existing contract block emitted by LLM to avoid duplicates/conflicts.
+        cleaned = re.sub(
+            r"\n*###\s*3\.\s*Output Contract\s*\(MANDATORY,\s*machine-readable\)\s*[\s\S]*$",
+            "",
+            text.rstrip(),
+            flags=re.IGNORECASE,
+        ).rstrip()
+        return (cleaned + contract_block).strip()
 
     def enhance(self, understanding_output: str, last_validation: dict) -> str:
         """Refine understanding output based on validation feedback."""

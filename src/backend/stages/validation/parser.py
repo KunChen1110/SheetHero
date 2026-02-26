@@ -91,6 +91,7 @@ class ValidationResponseParser(BaseResponseParser):
             # Fallback: tolerate markdown key-value style like
             # "1. **validation_passed**: true"
             parsed_from_kv = False
+            kv_has_validation_flag = False
 
             kv_bool = re.search(
                 r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?validation_passed(?:\*\*)?[ \t]*:[ \t]*([^\n]+)",
@@ -102,6 +103,7 @@ class ValidationResponseParser(BaseResponseParser):
                 if bool_raw and bool_raw != "**":
                     result["validation_passed"] = self._coerce_bool(bool_raw)
                     parsed_from_kv = True
+                    kv_has_validation_flag = True
 
             kv_conf = re.search(
                 r"(?:^|\n)[ \t]*(?:\d+\.[ \t]*)?(?:\*\*)?confidence_score(?:\*\*)?[ \t]*:[ \t]*([0-9]*\.?[0-9]+)",
@@ -152,8 +154,10 @@ class ValidationResponseParser(BaseResponseParser):
                     result["final_assessment"] = assessment_raw
                     parsed_from_kv = True
 
-            # If markdown key-value already yielded a decision, return now.
-            if parsed_from_kv:
+            # Return early only when KV text includes an explicit pass/fail flag.
+            # Otherwise keep parsing structured headings like
+            # "VALIDATION_STATUS: PASSED" below.
+            if parsed_from_kv and kv_has_validation_flag:
                 return result
 
             validation_match = re.search(
