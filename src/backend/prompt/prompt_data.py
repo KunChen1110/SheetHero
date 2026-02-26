@@ -30,7 +30,6 @@ from .prompt_texts_online import (
 )
 from .prompt_texts_offline import (
     _UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
-    _EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
 )
 
 
@@ -66,7 +65,6 @@ class QAPrompts:
 class ExecutionPrompts:
     system_intro: str = _EXECUTION_SYSTEM_INTRO
     helper_sections_part1: str = _EXECUTION_HELPER_SECTIONS_PART1
-    helper_sections_part1_offline: str = _EXECUTION_HELPER_SECTIONS_PART1_OFFLINE
     helper_sections_part2: str = _EXECUTION_HELPER_SECTIONS_PART2
     user_prompt: str = _EXECUTION_USER_PROMPT
 
