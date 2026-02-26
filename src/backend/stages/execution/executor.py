@@ -27,7 +27,6 @@ _FORBIDDEN_PATTERNS_BOUNDED = [
     (r"inspector_multi\s*\([^)]*\bwb\s*=", "inspector_multi() does not accept keyword 'wb'. Use positional call: inspector_multi(file_path, \"A1:D30\", \"Sheet1\")."),
     (r"inspector_multi\s*\(\s*[^,)\n]+\s*\)", "inspector_multi() requires at least 2 positional args: inspector_multi(file_path, range_ref)."),
     (r"get_workbook\s*\(\s*None\s*\)", "get_workbook(None) is invalid. Pass a file path string from list_all_workbooks()."),
-    (r"\.index\s*\(", "Do not call `.index(...)` as a function on pandas objects. Use `.index.tolist()` from a filtered DataFrame."),
     (r"highlight_rows\s*\(\s*[^,]+,\s*\[\s*[^,\]]*\.index\.tolist\(\)\s*\]", "highlight_rows expects a flat list of ints. Do not wrap index.tolist() in an extra list."),
     (r"save_workbook_to\s*\(\s*['\"]", "Use save_workbook_to(output_path) only. Do not hard-code save paths."),
     (r"\bwb\.save\s*\(", "Do not call wb.save(...). Use save_workbook_to(output_path) only."),
