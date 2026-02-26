@@ -29,7 +29,6 @@ class ExecutionRuntime(StageRuntime):
         self.sandbox = sandbox
         self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
-        self.use_bounded_execution = True
         self.prompt_builder = PromptBuilder(profile=prompt_profile)
 
         self.llm_client = ExecutionLLMClient(client, deployment)
@@ -41,9 +40,8 @@ class ExecutionRuntime(StageRuntime):
         self.conversation_history = []
         self._consecutive_forbidden = 0
         self._consecutive_format_errors = 0
-        self._bounded_exec_max_tokens = (
-            int(os.getenv("SHEETHERO_EXECUTION_MAX_TOKENS", "4096"))
-            if self.use_bounded_execution else None
+        self._bounded_exec_max_tokens = int(
+            os.getenv("SHEETHERO_EXECUTION_MAX_TOKENS", "4096")
         )
         self._max_format_errors = int(os.getenv("SHEETHERO_MAX_FORMAT_ERRORS", "3"))
         self._max_forbidden_before_hard_reset = int(
@@ -58,7 +56,6 @@ class ExecutionRuntime(StageRuntime):
     def _get_system_prompt(self) -> dict:
         system_content = self.prompt_builder.build_execution_system_prompt(
             self.output_instruction,
-            use_bounded_execution=self.use_bounded_execution,
         )
         return {"role": "system", "content": system_content}
 
@@ -116,11 +113,9 @@ class ExecutionRuntime(StageRuntime):
 
     def _has_meaningful_output_rows(self, execution_result: str) -> bool:
         """
-        Require at least 2 written rows in bounded mode (header + >=1 data row).
+        Require at least 2 written rows (header + >=1 data row).
         Prevents false success when model writes placeholder header only.
         """
-        if not self.use_bounded_execution:
-            return True
         rows = self._extract_rows_written(execution_result)
         if not rows:
             return False
@@ -161,9 +156,6 @@ class ExecutionRuntime(StageRuntime):
         Validate that saved output matches question intent.
         Prevents premature success when model writes wrong output shape.
         """
-        if not self.use_bounded_execution:
-            return None
-
         need_detail = output_contract.get("requires_detailed_table") is True
         need_highlight = output_contract.get("requires_highlight") is True
         need_summary = output_contract.get("requires_summary_metrics") is True
@@ -219,33 +211,31 @@ class ExecutionRuntime(StageRuntime):
 
     def _create_initial_user_prompt(self, understanding_output: str,
                                     user_question: str) -> dict:
-        bounded_understanding = understanding_output
-        if self.use_bounded_execution:
-            bounded_understanding = (
-                "Offline bounded mode: treat this section as low-confidence hint only. "
-                "If it conflicts with Sheet Content or runtime errors, ignore it."
-            )
+        _ = understanding_output  # bounded mode always treats understanding as low-confidence hint
+        bounded_understanding = (
+            "Offline bounded mode: treat this section as low-confidence hint only. "
+            "If it conflicts with Sheet Content or runtime errors, ignore it."
+        )
         user_content = self.prompt_builder.build_execution_user_prompt(
             self.excel_context_execution,
             bounded_understanding,
             user_question,
         )
-        if self.use_bounded_execution:
-            basenames = self._available_workbook_basenames()
-            if basenames:
-                file_lines = "\n".join(f"- `{name}`" for name in basenames)
-                user_content += (
-                    "\n\n**AVAILABLE INPUT FILES (STRICT):**\n"
-                    f"{file_lines}\n"
-                    "Use ONLY these names for input lookups."
-                )
-            schema_snapshot = self._build_schema_snapshot()
-            if schema_snapshot:
-                user_content += (
-                    "\n\n**SCHEMA SNAPSHOT (RUNTIME, TRUST THIS):**\n"
-                    f"{schema_snapshot}\n"
-                    "Use these real headers for all select/merge operations. Do not invent columns."
-                )
+        basenames = self._available_workbook_basenames()
+        if basenames:
+            file_lines = "\n".join(f"- `{name}`" for name in basenames)
+            user_content += (
+                "\n\n**AVAILABLE INPUT FILES (STRICT):**\n"
+                f"{file_lines}\n"
+                "Use ONLY these names for input lookups."
+            )
+        schema_snapshot = self._build_schema_snapshot()
+        if schema_snapshot:
+            user_content += (
+                "\n\n**SCHEMA SNAPSHOT (RUNTIME, TRUST THIS):**\n"
+                f"{schema_snapshot}\n"
+                "Use these real headers for all select/merge operations. Do not invent columns."
+            )
         return {"role": "user", "content": user_content}
 
     def _available_workbook_basenames(self) -> list[str]:
@@ -286,8 +276,6 @@ class ExecutionRuntime(StageRuntime):
 
     def _detect_unknown_filename_lookup(self, code_action: str) -> Optional[str]:
         """Detect literal input filename lookups that are not in loaded workbook names."""
-        if not self.use_bounded_execution:
-            return None
         if not code_action or not code_action.strip():
             return None
 
@@ -865,7 +853,7 @@ class ExecutionRuntime(StageRuntime):
             self._log_to_file(f"\n---\n\n### Execution Turn {turn + 1}\n")
 
             try:
-                max_tokens = self._bounded_exec_max_tokens if self.use_bounded_execution else None
+                max_tokens = self._bounded_exec_max_tokens
                 response_message = self.llm_client.get_response(
                     self.conversation_history,
                     max_tokens=max_tokens,
@@ -880,151 +868,116 @@ class ExecutionRuntime(StageRuntime):
                     )
 
                 if code_action is None:
-                    # Bounded/offline: require executable code; ignore thought-only / final-answer-only output
-                    if self.use_bounded_execution:
-                        self._consecutive_format_errors += 1
-                        strict_repair = ""
-                        if self._consecutive_format_errors >= self._max_format_errors:
-                            strict_repair = (
-                                "\nTRUNCATION/FORMAT RECOVERY (MANDATORY):\n"
-                                "- Return ONLY one complete code block.\n"
-                                "- Keep code under 120 lines and avoid long comments.\n"
-                                "- Ensure closing triple backticks are present.\n"
-                                "- Use list_all_workbooks()+inspector_multi(); do not use pandas file readers.\n"
-                            )
-                        format_msg = (
-                            "FORMAT_ERROR_OFFLINE: executable code is required.\n"
-                            "Reply with exactly one ```python ... ``` block.\n"
-                            "Include complete task logic: read -> compute -> write Output -> save_workbook_to(output_path)."
-                            f"{strict_repair}"
+                    self._consecutive_format_errors += 1
+                    strict_repair = ""
+                    if self._consecutive_format_errors >= self._max_format_errors:
+                        strict_repair = (
+                            "\nTRUNCATION/FORMAT RECOVERY (MANDATORY):\n"
+                            "- Return ONLY one complete code block.\n"
+                            "- Keep code under 120 lines and avoid long comments.\n"
+                            "- Ensure closing triple backticks are present.\n"
+                            "- Use list_all_workbooks()+inspector_multi(); do not use pandas file readers.\n"
                         )
-                        logger.warning("Bounded: no code block, executable code required")
-                        self._log_to_file(f"\n**Format error (Turn {turn + 1}):** no code block.\n")
-                        self.conversation_history.append({"role": "user", "content": format_msg})
-                        continue
-                    # Non-bounded: allow Final Answer as termination
-                    final_answer = self.parser.extract_final_answer(thought)
-                    if final_answer is not None:
-                        logger.info(f"Final answer found: {final_answer}")
-                        self._log_to_file(
-                            f"\n**Final Answer (Turn {turn + 1}):**\n{final_answer}\n"
-                        )
-                        return {
-                            "success": True,
-                            "answer": final_answer,
-                            "total_turns": turn + 1,
-                            "conversation_history": self.history_formatter.format_history(
-                                self.conversation_history
-                            ),
-                            "execution_summary": self.summary_builder.build(
-                                execution_steps,
-                                final_answer
-                            )
-                        }
-                    reminder = (
-                        "CRITICAL FORMAT VIOLATION: You must respond in EXACTLY one of these formats:\n\n"
-                        "FORMAT A - Thinking + Code:\n"
-                        "**Thought:** [Your reasoning here]\n\n"
-                        "```python\n# Your code here\n```\n\n"
-                        "FORMAT B - Thinking + Final Answer:\n"
-                        "**Thought:** [Your reasoning here]\n\n"
-                        "Final Answer: Your answer here\n\n"
-                        "NO other text is allowed. Start with **Thought:** ALWAYS."
+                    format_msg = (
+                        "FORMAT_ERROR_OFFLINE: executable code is required.\n"
+                        "Reply with exactly one ```python ... ``` block.\n"
+                        "Include complete task logic: read -> compute -> write Output -> save_workbook_to(output_path)."
+                        f"{strict_repair}"
                     )
-                    self.conversation_history.append({"role": "user", "content": reminder})
+                    logger.warning("Strict mode: no code block, executable code required")
+                    self._log_to_file(f"\n**Format error (Turn {turn + 1}):** no code block.\n")
+                    self.conversation_history.append({"role": "user", "content": format_msg})
                     continue
                 self._consecutive_format_errors = 0
 
-                # Bounded: static forbidden check before execution
-                if self.use_bounded_execution:
-                    forbidden_err = self.executor.check_forbidden_bounded(code_action)
-                    if forbidden_err is not None:
-                        self._consecutive_forbidden += 1
-                        repair_hint = ""
-                        if "to_excel" in forbidden_err or "DataFrame.to_excel" in forbidden_err:
-                            repair_hint = (
-                                "Replacement pattern:\n"
-                                "create_output_sheet(\"Output\")\n"
-                                "data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                                "write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
-                                "saved_file = save_workbook_to(output_path)\n"
-                                "print(\"SAVED_FILE:\", saved_file)\n"
-                            )
-                        elif "read_csv" in forbidden_err or "read_table" in forbidden_err or "read_excel" in forbidden_err:
-                            repair_hint = (
-                                "Do not load files via pandas readers.\n"
-                                "Use preloaded workbooks instead:\n"
-                                "all_files = list_all_workbooks()\n"
-                                "file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                                "file_path = file_by_name['target.csv']\n"
-                                "wb = get_workbook(file_path)\n"
-                                "sheet_name = wb.sheetnames[0]\n"
-                                "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                                "df = pd.DataFrame(raw[1:], columns=raw[0])\n"
-                            )
-                        elif "open()" in forbidden_err or "File I/O" in forbidden_err:
-                            repair_hint = (
-                                "Do not write files with open(). Use write_dataframe_to_sheet(...)\n"
-                                "and save_workbook_to(output_path) instead.\n"
-                            )
-                        if "openpyxl" in forbidden_err:
-                            repair_hint = (
-                                "Do not import openpyxl or pandas Excel readers/writers.\n"
-                                "Only allowed import is: import pandas as pd\n"
-                            )
-                        if "/Users/" in forbidden_err:
-                            repair_hint = (
-                                "Do not hard-code input paths.\n"
-                                "Always use: all_files = list_all_workbooks(); file_path = all_files[i]\n"
-                            )
-                        hard_reset = ""
-                        if self._consecutive_forbidden >= self._max_forbidden_before_hard_reset:
-                            hard_reset = (
-                                "\nHARD RESET (GENERIC, NOT TASK-SPECIFIC):\n"
-                                "- Rebuild from scratch using only allowed helpers.\n"
-                                "- Load files from runtime only: all_files = list_all_workbooks().\n"
-                                "- For each file: wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]; "
-                                "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name).\n"
-                                "- Build DataFrame with explicit header handling: pd.DataFrame(raw[1:], columns=raw[0]).\n"
-                                "- Then run task-specific computation, write Output via write_dataframe_to_sheet, and save with save_workbook_to(output_path).\n"
-                                "- Do not use placeholder outputs; write real result rows."
-                            )
-                        logger.warning(f"Forbidden pattern in code (bounded): {forbidden_err}")
-                        self._log_to_file(
-                            f"\n**Forbidden (Turn {turn + 1}):**\n{forbidden_err}\n"
+                forbidden_err = self.executor.check_forbidden_bounded(code_action)
+                if forbidden_err is not None:
+                    self._consecutive_forbidden += 1
+                    repair_hint = ""
+                    if "to_excel" in forbidden_err or "DataFrame.to_excel" in forbidden_err:
+                        repair_hint = (
+                            "Replacement pattern:\n"
+                            "create_output_sheet(\"Output\")\n"
+                            "data_2d = [df.columns.tolist()] + df.values.tolist()\n"
+                            "write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
+                            "saved_file = save_workbook_to(output_path)\n"
+                            "print(\"SAVED_FILE:\", saved_file)\n"
                         )
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": (
-                                f"FORBIDDEN: {forbidden_err}\n"
-                                "MINIMAL PATCH REQUIRED: modify only forbidden lines.\n"
-                                "Allowed I/O helpers only: list_all_workbooks(), get_workbook(), inspector_multi(), "
-                                "create_output_sheet(), write_dataframe_to_sheet(), save_workbook_to(output_path).\n"
-                                f"{repair_hint}"
-                                f"{hard_reset}"
-                                "Output a single ```python ... ``` block with the corrected full code."
-                            )
-                        })
-                        self._last_error_signature = None
-                        self._same_error_streak = 0
-                        continue
+                    elif "read_csv" in forbidden_err or "read_table" in forbidden_err or "read_excel" in forbidden_err:
+                        repair_hint = (
+                            "Do not load files via pandas readers.\n"
+                            "Use preloaded workbooks instead:\n"
+                            "all_files = list_all_workbooks()\n"
+                            "file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
+                            "file_path = file_by_name['target.csv']\n"
+                            "wb = get_workbook(file_path)\n"
+                            "sheet_name = wb.sheetnames[0]\n"
+                            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
+                            "df = pd.DataFrame(raw[1:], columns=raw[0])\n"
+                        )
+                    elif "open()" in forbidden_err or "File I/O" in forbidden_err:
+                        repair_hint = (
+                            "Do not write files with open(). Use write_dataframe_to_sheet(...)\n"
+                            "and save_workbook_to(output_path) instead.\n"
+                        )
+                    if "openpyxl" in forbidden_err:
+                        repair_hint = (
+                            "Do not import openpyxl or pandas Excel readers/writers.\n"
+                            "Only allowed import is: import pandas as pd\n"
+                        )
+                    if "/Users/" in forbidden_err:
+                        repair_hint = (
+                            "Do not hard-code input paths.\n"
+                            "Always use: all_files = list_all_workbooks(); file_path = all_files[i]\n"
+                        )
+                    hard_reset = ""
+                    if self._consecutive_forbidden >= self._max_forbidden_before_hard_reset:
+                        hard_reset = (
+                            "\nHARD RESET (GENERIC, NOT TASK-SPECIFIC):\n"
+                            "- Rebuild from scratch using only allowed helpers.\n"
+                            "- Load files from runtime only: all_files = list_all_workbooks().\n"
+                            "- For each file: wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]; "
+                            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name).\n"
+                            "- Build DataFrame with explicit header handling: pd.DataFrame(raw[1:], columns=raw[0]).\n"
+                            "- Then run task-specific computation, write Output via write_dataframe_to_sheet, and save with save_workbook_to(output_path).\n"
+                            "- Do not use placeholder outputs; write real result rows."
+                        )
+                    logger.warning(f"Forbidden pattern in code (strict): {forbidden_err}")
+                    self._log_to_file(
+                        f"\n**Forbidden (Turn {turn + 1}):**\n{forbidden_err}\n"
+                    )
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": (
+                            f"FORBIDDEN: {forbidden_err}\n"
+                            "MINIMAL PATCH REQUIRED: modify only forbidden lines.\n"
+                            "Allowed I/O helpers only: list_all_workbooks(), get_workbook(), inspector_multi(), "
+                            "create_output_sheet(), write_dataframe_to_sheet(), save_workbook_to(output_path).\n"
+                            f"{repair_hint}"
+                            f"{hard_reset}"
+                            "Output a single ```python ... ``` block with the corrected full code."
+                        )
+                    })
+                    self._last_error_signature = None
+                    self._same_error_streak = 0
+                    continue
 
-                    unknown_file_ref_err = self._detect_unknown_filename_lookup(code_action)
-                    if unknown_file_ref_err is not None:
-                        logger.warning(f"Unknown input filename reference (bounded): {unknown_file_ref_err}")
-                        self._log_to_file(
-                            f"\n**Grounding violation (Turn {turn + 1}):**\n{unknown_file_ref_err}\n"
+                unknown_file_ref_err = self._detect_unknown_filename_lookup(code_action)
+                if unknown_file_ref_err is not None:
+                    logger.warning(f"Unknown input filename reference (strict): {unknown_file_ref_err}")
+                    self._log_to_file(
+                        f"\n**Grounding violation (Turn {turn + 1}):**\n{unknown_file_ref_err}\n"
+                    )
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": (
+                            f"{unknown_file_ref_err}\n"
+                            "MINIMAL PATCH REQUIRED: replace only unknown input filenames with names from available list.\n"
+                            "Output a single ```python ... ``` block with corrected full code."
                         )
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": (
-                                f"{unknown_file_ref_err}\n"
-                                "MINIMAL PATCH REQUIRED: replace only unknown input filenames with names from available list.\n"
-                                "Output a single ```python ... ``` block with corrected full code."
-                            )
-                        })
-                        continue
-                    self._consecutive_forbidden = 0
+                    })
+                    continue
+                self._consecutive_forbidden = 0
 
                 logger.info(f"Executing Python code:\n{code_action}")
                 self._log_to_file(
@@ -1052,7 +1005,7 @@ class ExecutionRuntime(StageRuntime):
                         "success": not is_execution_error
                     })
 
-                    if is_execution_error and self.use_bounded_execution:
+                    if is_execution_error:
                         error_signature = self._update_error_streak(execution_result)
                         targeted_feedback = self._build_bounded_error_feedback(execution_result)
                         if targeted_feedback is None:
@@ -1079,7 +1032,7 @@ class ExecutionRuntime(StageRuntime):
                     # Auto-stop when we see a successful save in stdout (avoids Turn2+ repeat path)
                     saved_path = self._extract_saved_path_from_result(execution_result)
                     if saved_path is not None:
-                        if self.use_bounded_execution and not self._has_meaningful_output_rows(execution_result):
+                        if not self._has_meaningful_output_rows(execution_result):
                             self.conversation_history.append({
                                 "role": "user",
                                 "content": (
@@ -1126,21 +1079,19 @@ class ExecutionRuntime(StageRuntime):
                         f"\n**Execution error (Turn {turn + 1}):**\n```\n{error_message}\n```\n"
                     )
 
-                    feedback_to_model = error_message
-                    if self.use_bounded_execution:
-                        error_signature = self._update_error_streak(error_message)
-                        targeted_feedback = self._build_bounded_error_feedback(error_message)
-                        if targeted_feedback is not None:
-                            feedback_to_model = targeted_feedback + "\n\n" + error_message
-                        else:
-                            feedback_to_model = (
-                                "MINIMAL FIX REQUIRED: Fix only the smallest necessary part "
-                                "(variable/column/type/range). Do not add new code or invented paths.\n\n"
-                                + error_message
-                            )
-                        if self._same_error_streak >= self._max_same_error_streak:
-                            loop_breaker = self._build_loop_breaker_feedback(error_signature)
-                            feedback_to_model = feedback_to_model + "\n\n" + loop_breaker
+                    error_signature = self._update_error_streak(error_message)
+                    targeted_feedback = self._build_bounded_error_feedback(error_message)
+                    if targeted_feedback is not None:
+                        feedback_to_model = targeted_feedback + "\n\n" + error_message
+                    else:
+                        feedback_to_model = (
+                            "MINIMAL FIX REQUIRED: Fix only the smallest necessary part "
+                            "(variable/column/type/range). Do not add new code or invented paths.\n\n"
+                            + error_message
+                        )
+                    if self._same_error_streak >= self._max_same_error_streak:
+                        loop_breaker = self._build_loop_breaker_feedback(error_signature)
+                        feedback_to_model = feedback_to_model + "\n\n" + loop_breaker
 
                     execution_steps.append({
                         "turn": turn + 1,
