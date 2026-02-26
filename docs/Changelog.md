@@ -208,3 +208,8 @@
   - clears configured `api_key`
   - `deployment = <model_full_name>`
 - Kept existing dataset debug workflow unchanged (`!dataset --index N`, `run`).
+
+
+## 23/2/2026
+### --- Changeed --- 
+- Refactored the execution prompt, execution module in `src/backend/prompt` and `src/backend/stages/execution`.

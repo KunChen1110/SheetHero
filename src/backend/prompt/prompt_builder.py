@@ -66,7 +66,6 @@ class PromptBuilder:
             self._execution = execution or ExecutionPrompts(
                 system_intro=_EXECUTION_SYSTEM_INTRO_OFFLINE,
                 helper_sections_part1=_EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
-                helper_sections_part1_offline=_EXECUTION_HELPER_SECTIONS_PART1_OFFLINE,
                 helper_sections_part2=_EXECUTION_HELPER_SECTIONS_PART2_OFFLINE,
                 user_prompt=_EXECUTION_USER_PROMPT_OFFLINE,
             )
@@ -245,17 +244,9 @@ class PromptBuilder:
     def build_execution_system_prompt(
         self,
         output_instruction: str,
-        use_bounded_execution: bool = False
     ) -> str:
         system_intro = self._execution.system_intro
-        helper_part1 = (
-            self._execution.helper_sections_part1_offline
-            if use_bounded_execution
-            else self._execution.helper_sections_part1
-        )
-        helper_parts = [helper_part1]
-        if not use_bounded_execution:
-            helper_parts.append(self._execution.helper_sections_part2)
+        helper_parts = [self._execution.helper_sections_part1]
 
         system_parts = [system_intro]
         if output_instruction:
