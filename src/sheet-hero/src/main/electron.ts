@@ -52,7 +52,8 @@ function createWindow() {
   });
 
   win.setMenuBarVisibility(false);
-  win.loadURL("http://localhost:3480");
+  // win.loadURL("http://localhost:3480");
+  win.loadFile(path.join(__dirname, "../renderer/dist/index.html"));
 }
 
 // Creates the main window when the app is ready
