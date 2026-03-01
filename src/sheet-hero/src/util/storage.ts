@@ -6,7 +6,7 @@ const SETTINGS_KEY = "app-settings";
 // Default settings used in the app
 const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
-  maxTurns: 3,
+  maxTurns: 5,
   baseURL: "",
   model: "gpt-4o-mini",
   outputDir: "",
