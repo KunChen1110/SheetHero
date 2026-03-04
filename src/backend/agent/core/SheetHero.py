@@ -403,6 +403,7 @@ class SheetHero:
         execution_context = session.spreadsheet_summary or ""
         self.execution_module.runner.excel_context_execution = execution_context
         append_ui_thought(session, "executing", "running", "Generating and running execution code")
+        session.execution_validation_cycles += 1
         
         self._log(f"The max turn is {self.config.max_turns}", True)
         execution_result = self.execution_module.run(
@@ -440,6 +441,24 @@ class SheetHero:
             user_question=user_query,
             understanding_output=understanding_output
         )
+        max_cycles = max(1, int(self.config.max_turns))
+        if (
+            not validation_result.get("validation_passed")
+            and validation_result.get("requires_reexecution", True)
+            and session.execution_validation_cycles >= max_cycles
+        ):
+            issues = list(validation_result.get("issues_found") or [])
+            issues.append(
+                f"Reached max execute-validate cycles ({max_cycles}) in session mode."
+            )
+            validation_result["issues_found"] = issues
+            validation_result["requires_reexecution"] = False
+            feedback = (validation_result.get("improvement_feedback") or "").strip()
+            if not feedback:
+                validation_result["improvement_feedback"] = (
+                    "Stopped after max execute-validate cycles. "
+                    "Please inspect the latest output/log and refine prompt or data."
+                )
         append_ui_thought(
             session,
             "validation",
