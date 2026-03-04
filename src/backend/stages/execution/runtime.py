@@ -1,15 +1,23 @@
 """Execution runtime loop for multi-turn analysis."""
 
 import os
-import re
 from typing import Dict, Any, Optional
 
 from ...log.logger_registry import LoggerRegistry
 from .executor import CodeExecutor
+from .error_feedback import ExecutionErrorFeedbackBuilder
+from .forbidden_policy import (
+    build_forbidden_memory_block,
+    build_forbidden_repair_hint,
+    forbidden_signature,
+    is_immediate_hard_forbidden,
+)
 from .history import ExecutionHistory
 from .llm_client import ExecutionLLMClient
+from .output_contract import OutputContractChecker
 from .parser import ExecutionResponseParser
 from .summary import ExecutionSummary
+from .workbook_grounding import WorkbookGrounding
 from ..base.runtime import StageRuntime
 from ...prompt.prompt_builder import PromptBuilder
 
@@ -29,6 +37,8 @@ class ExecutionRuntime(StageRuntime):
         self.sandbox = sandbox
         self.excel_context_execution = excel_context_execution
         self.output_instruction = output_instruction or ""
+        self.prompt_profile = prompt_profile
+        self._is_offline_strict = (prompt_profile == "offline_strict")
         self.prompt_builder = PromptBuilder(profile=prompt_profile)
 
         self.llm_client = ExecutionLLMClient(client, deployment)
@@ -36,6 +46,13 @@ class ExecutionRuntime(StageRuntime):
         self.executor = CodeExecutor(sandbox)
         self.history_formatter = ExecutionHistory()
         self.summary_builder = ExecutionSummary()
+        self.grounding = WorkbookGrounding(sandbox)
+        self.output_contract_checker = OutputContractChecker()
+        self.error_feedback = ExecutionErrorFeedbackBuilder(
+            available_workbook_basenames_fn=self._available_workbook_basenames,
+            observed_header_set_fn=self._observed_header_set,
+            build_schema_snapshot_fn=self._build_schema_snapshot,
+        )
 
         self.conversation_history = []
         self._consecutive_forbidden = 0
@@ -45,13 +62,19 @@ class ExecutionRuntime(StageRuntime):
         )
         self._max_format_errors = int(os.getenv("SHEETHERO_MAX_FORMAT_ERRORS", "3"))
         self._max_forbidden_before_hard_reset = int(
-            os.getenv("SHEETHERO_MAX_FORBIDDEN_BEFORE_RESET", "2")
+            os.getenv("SHEETHERO_MAX_FORBIDDEN_BEFORE_RESET", "4")
+        )
+        self._max_same_forbidden_before_hard_reset = int(
+            os.getenv("SHEETHERO_MAX_SAME_FORBIDDEN_BEFORE_RESET", "2")
         )
         self._max_same_error_streak = int(
             os.getenv("SHEETHERO_MAX_SAME_ERROR_STREAK", "2")
         )
         self._last_error_signature: Optional[str] = None
         self._same_error_streak = 0
+        self._forbidden_signature_counts: Dict[str, int] = {}
+        self._last_forbidden_signature: Optional[str] = None
+        self._same_forbidden_streak = 0
 
     def _get_system_prompt(self) -> dict:
         system_content = self.prompt_builder.build_execution_system_prompt(
@@ -61,295 +84,210 @@ class ExecutionRuntime(StageRuntime):
 
     @staticmethod
     def _extract_saved_path_from_result(execution_result: str) -> Optional[str]:
-        """Extract saved file path from executor stdout (auto-stop when save detected)."""
-        if not execution_result:
-            return None
-        # Match with or without emoji/prefix: "Workbook saved to: /path" or "💾 Workbook saved to: /path"
-        # Allow any leading non-newline (e.g. emoji + space) before "Workbook saved to:"
-        m = re.search(r"Workbook saved to:\s*(.+?)(?:\n|$)", execution_result)
-        if m:
-            path = m.group(1).strip()
-            if path and not path.startswith("("):
-                return path
-        m = re.search(r"SAVED_FILE:\s*(.+?)(?:\n|$)", execution_result)
-        if m:
-            path = m.group(1).strip()
-            if path:
-                return path
-        return None
+        return OutputContractChecker.extract_saved_path_from_result(execution_result)
 
     @staticmethod
     def _extract_rows_written(execution_result: str) -> list[int]:
-        """Parse row counts from helper logs like 'Wrote N rows to Output!A1:B10'."""
-        if not execution_result:
-            return []
-        matches = re.findall(r"Wrote\s+(\d+)\s+rows\s+to", execution_result, flags=re.IGNORECASE)
-        rows = []
-        for m in matches:
-            try:
-                rows.append(int(m))
-            except Exception:
-                continue
-        return rows
+        return OutputContractChecker._extract_rows_written(execution_result)
 
     @staticmethod
     def _extract_highlight_rows(execution_result: str) -> list[int]:
-        """Parse highlighted row numbers from helper logs."""
-        if not execution_result:
-            return []
-        matches = re.findall(
-            r"Highlighted row\(s\)\s*\[([^\]]*)\]",
-            execution_result,
-            flags=re.IGNORECASE
-        )
-        parsed: list[int] = []
-        for raw in matches:
-            for token in re.findall(r"-?\d+", raw):
-                try:
-                    parsed.append(int(token))
-                except Exception:
-                    continue
-        return parsed
+        return OutputContractChecker._extract_highlight_rows(execution_result)
 
     def _has_meaningful_output_rows(self, execution_result: str) -> bool:
-        """
-        Require at least 2 written rows (header + >=1 data row).
-        Prevents false success when model writes placeholder header only.
-        """
-        rows = self._extract_rows_written(execution_result)
-        if not rows:
-            return False
-        return max(rows) >= 2
+        return self.output_contract_checker.has_meaningful_output_rows(execution_result)
 
     @staticmethod
     def _parse_output_contract_flag(understanding_output: str, key: str) -> Optional[bool]:
-        """Parse YES/NO contract flags from understanding output."""
-        if not understanding_output:
-            return None
-        # Accept both plain and markdown-emphasized key forms:
-        # requires_detailed_table: YES
-        # **requires_detailed_table**: YES
-        pattern = rf"(?:\*\*)?\s*{re.escape(key)}\s*(?:\*\*)?\s*:\s*(YES|NO|TRUE|FALSE)"
-        m = re.search(pattern, understanding_output, flags=re.IGNORECASE)
-        if not m:
-            return None
-        value = m.group(1).strip().upper()
-        return value in {"YES", "TRUE"}
+        return OutputContractChecker._parse_flag(understanding_output, key)
 
     def _extract_output_contract(self, understanding_output: str) -> Dict[str, Optional[bool]]:
-        """Extract structured output intent contract from understanding stage text."""
-        return {
-            "requires_detailed_table": self._parse_output_contract_flag(
-                understanding_output, "requires_detailed_table"
-            ),
-            "requires_highlight": self._parse_output_contract_flag(
-                understanding_output, "requires_highlight"
-            ),
-            "requires_summary_metrics": self._parse_output_contract_flag(
-                understanding_output, "requires_summary_metrics"
-            ),
-        }
+        return self.output_contract_checker.extract_output_contract(understanding_output)
+
+    def _update_forbidden_memory(self, forbidden_err: str) -> str:
+        """Track forbidden signature frequency and repetition streak."""
+        signature = forbidden_signature(forbidden_err)
+        self._forbidden_signature_counts[signature] = self._forbidden_signature_counts.get(signature, 0) + 1
+        if signature == self._last_forbidden_signature:
+            self._same_forbidden_streak += 1
+        else:
+            self._last_forbidden_signature = signature
+            self._same_forbidden_streak = 1
+        return signature
+
+    def _forbidden_memory_text(self) -> str:
+        return build_forbidden_memory_block(
+            self._forbidden_signature_counts,
+            self._last_forbidden_signature
+        )
+
+    @staticmethod
+    def _forbidden_hard_reset_text() -> str:
+        return (
+            "\nHARD RESET (GENERIC, NOT TASK-SPECIFIC):\n"
+            "- Rebuild from scratch using only allowed helpers.\n"
+            "- Load files from runtime only: all_files = list_all_workbooks().\n"
+            "- For each file: wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]; "
+            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name).\n"
+            "- Build DataFrame with explicit header handling: pd.DataFrame(raw[1:], columns=raw[0]).\n"
+            "- Then run task-specific computation, write Output via write_dataframe_to_sheet, "
+            "and save with save_workbook_to(output_path).\n"
+            "- Do not use placeholder outputs; write real result rows."
+        )
+
+    def _handle_offline_forbidden(
+        self,
+        code_action: str,
+        turn: int,
+    ) -> tuple[bool, str]:
+        """Handle bounded forbidden/grounding checks. Return (should_continue, soft_warning)."""
+        if not self._is_offline_strict:
+            return False, ""
+
+        forbidden_err = self.executor.check_forbidden_bounded(code_action)
+        if forbidden_err is not None:
+            self._consecutive_forbidden += 1
+            signature = self._update_forbidden_memory(forbidden_err)
+            immediate_hard = is_immediate_hard_forbidden(forbidden_err)
+            reach_forbidden_limit = (
+                self._consecutive_forbidden >= self._max_forbidden_before_hard_reset
+            )
+            repeated_same_forbidden = (
+                self._same_forbidden_streak >= self._max_same_forbidden_before_hard_reset
+            )
+            hard_block = immediate_hard or reach_forbidden_limit or repeated_same_forbidden
+            forbidden_memory = self._forbidden_memory_text()
+            if forbidden_memory:
+                forbidden_memory = "\n" + forbidden_memory + "\n"
+
+            if hard_block:
+                repair_hint = build_forbidden_repair_hint(forbidden_err)
+                hard_reset = ""
+                if reach_forbidden_limit or repeated_same_forbidden:
+                    hard_reset = self._forbidden_hard_reset_text()
+                if repeated_same_forbidden:
+                    hard_reset += (
+                        "\nREPEATED FORBIDDEN TYPE DETECTED:\n"
+                        f"- repeated_signature: {signature}\n"
+                        "- You MUST replace only lines causing this signature before any other edits.\n"
+                    )
+
+                logger.warning(f"Forbidden pattern in code (hard-block): {forbidden_err}")
+                self._log_to_file(
+                    f"\n**Forbidden (Turn {turn + 1}):**\n{forbidden_err}\n"
+                )
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": (
+                        f"FORBIDDEN: {forbidden_err}\n"
+                        "MINIMAL PATCH REQUIRED: modify only forbidden lines.\n"
+                        "Allowed I/O helpers only: list_all_workbooks(), get_workbook(), inspector_multi(), "
+                        "create_output_sheet(), write_dataframe_to_sheet(), save_workbook_to(output_path).\n"
+                        f"{repair_hint}"
+                        f"{hard_reset}"
+                        f"{forbidden_memory}"
+                        "Output a single ```python ... ``` block with the corrected full code."
+                    )
+                })
+                self._last_error_signature = None
+                self._same_error_streak = 0
+                return True, ""
+
+            logger.warning(f"Forbidden pattern in code (soft-warning): {forbidden_err}")
+            self._log_to_file(
+                f"\n**Soft Forbidden Warning (Turn {turn + 1}):**\n{forbidden_err}\n"
+            )
+            soft_warning = (
+                "SOFT_FORBIDDEN_WARNING: forbidden pattern detected but execution is allowed for now.\n"
+                f"- {forbidden_err}\n"
+                f"- forbidden_signature: {signature}\n"
+                "- If runtime still fails, patch forbidden lines next turn.\n"
+                f"{forbidden_memory}".rstrip()
+            )
+        else:
+            soft_warning = ""
+            self._consecutive_forbidden = 0
+            self._same_forbidden_streak = 0
+            self._last_forbidden_signature = None
+
+        unknown_file_ref_err = self._detect_unknown_filename_lookup(code_action)
+        if unknown_file_ref_err is not None:
+            logger.warning(f"Unknown input filename reference (strict): {unknown_file_ref_err}")
+            self._log_to_file(
+                f"\n**Grounding violation (Turn {turn + 1}):**\n{unknown_file_ref_err}\n"
+            )
+            self.conversation_history.append({
+                "role": "user",
+                "content": (
+                    f"{unknown_file_ref_err}\n"
+                    "MINIMAL PATCH REQUIRED: replace only unknown input filenames with names from available list.\n"
+                    "Output a single ```python ... ``` block with corrected full code."
+                )
+            })
+            return True, ""
+
+        return False, soft_warning
+
+    @staticmethod
+    def _has_summary_write_signal_from_code(code_action: str) -> bool:
+        return OutputContractChecker._has_summary_write_signal_from_code(code_action)
 
     def _build_output_intent_feedback(self, execution_result: str,
-                                      output_contract: Dict[str, Optional[bool]]) -> Optional[str]:
-        """
-        Validate that saved output matches question intent.
-        Prevents premature success when model writes wrong output shape.
-        """
-        need_detail = output_contract.get("requires_detailed_table") is True
-        need_highlight = output_contract.get("requires_highlight") is True
-        need_summary = output_contract.get("requires_summary_metrics") is True
-
-        rows = self._extract_rows_written(execution_result)
-        max_rows = max(rows) if rows else 0
-        highlight_rows = self._extract_highlight_rows(execution_result)
-        lower_result = (execution_result or "").lower()
-
-        if need_detail and max_rows < 6:
-            return (
-                "OUTPUT_INTENT_MISMATCH_OFFLINE: question requires detailed table output, "
-                "but current saved output is too small (likely metric-only).\n"
-                "- Rebuild output as: detailed merged table first, then summary metrics.\n"
-                "- Do not output only `Metric|Value` for merge/combine table tasks."
-            )
-
-        if need_highlight and "highlighted row(s)" not in lower_result:
-            return (
-                "OUTPUT_INTENT_MISMATCH_OFFLINE: question requires highlighting (for example max day in red), "
-                "but no highlight evidence found.\n"
-                "- After writing detailed table, call:\n"
-                "  highlight_rows(\"Output\", row_numbers, {\"fill_color\": \"red\"})\n"
-                "- Do not use HTML tags for highlighting."
-            )
-
-        if need_highlight and highlight_rows and max_rows > 0:
-            invalid_rows = [r for r in highlight_rows if r < 2 or r > max_rows + 2]
-            if invalid_rows:
-                invalid_str = ", ".join(str(v) for v in invalid_rows[:5])
-                return (
-                    "OUTPUT_INTENT_MISMATCH_OFFLINE: highlighted row numbers are out of expected table range.\n"
-                    f"- Invalid highlighted rows: {invalid_str}\n"
-                    f"- Output table rows appear to be around 1..{max_rows}\n"
-                    "- Convert DataFrame indices to Output row numbers with header offset:\n"
-                    "  row_numbers = [i + 2 for i in idx_list]\n"
-                    "- Pass a flat list of ints to highlight_rows(...)."
-                )
-
-        if need_summary:
-            has_summary_signal = (
-                "added summary row" in lower_result or
-                len(rows) >= 2
-            )
-            if not has_summary_signal:
-                return (
-                    "OUTPUT_INTENT_MISMATCH_OFFLINE: summary metrics are required but no summary write evidence found.\n"
-                    "- Add a summary block (Total / Average etc.) after detailed table.\n"
-                    "- Use write_dataframe_to_sheet(summary_data, \"Output\", start_cell) or add_summary_row(...)."
-                )
-
-        return None
+                                      output_contract: Dict[str, Optional[bool]],
+                                      code_action: str = "") -> Optional[str]:
+        return self.output_contract_checker.build_output_intent_feedback(
+            execution_result,
+            output_contract,
+            code_action,
+        )
 
     def _create_initial_user_prompt(self, understanding_output: str,
                                     user_question: str) -> dict:
-        _ = understanding_output  # bounded mode always treats understanding as low-confidence hint
-        bounded_understanding = (
-            "Offline bounded mode: treat this section as low-confidence hint only. "
-            "If it conflicts with Sheet Content or runtime errors, ignore it."
-        )
+        if self._is_offline_strict:
+            bounded_understanding = (
+                "Offline bounded mode: treat this section as low-confidence hint only. "
+                "If it conflicts with Sheet Content or runtime errors, ignore it."
+            )
+        else:
+            bounded_understanding = understanding_output
         user_content = self.prompt_builder.build_execution_user_prompt(
             self.excel_context_execution,
             bounded_understanding,
             user_question,
         )
-        basenames = self._available_workbook_basenames()
-        if basenames:
-            file_lines = "\n".join(f"- `{name}`" for name in basenames)
-            user_content += (
-                "\n\n**AVAILABLE INPUT FILES (STRICT):**\n"
-                f"{file_lines}\n"
-                "Use ONLY these names for input lookups."
-            )
-        schema_snapshot = self._build_schema_snapshot()
-        if schema_snapshot:
-            user_content += (
-                "\n\n**SCHEMA SNAPSHOT (RUNTIME, TRUST THIS):**\n"
-                f"{schema_snapshot}\n"
-                "Use these real headers for all select/merge operations. Do not invent columns."
-            )
+        if self._is_offline_strict:
+            basenames = self._available_workbook_basenames()
+            if basenames:
+                file_lines = "\n".join(f"- `{name}`" for name in basenames)
+                user_content += (
+                    "\n\n**AVAILABLE INPUT FILES (STRICT):**\n"
+                    f"{file_lines}\n"
+                    "Use ONLY these names for input lookups."
+                )
+            schema_snapshot = self._build_schema_snapshot()
+            if schema_snapshot:
+                user_content += (
+                    "\n\n**SCHEMA SNAPSHOT (RUNTIME, TRUST THIS):**\n"
+                    f"{schema_snapshot}\n"
+                    "Use these real headers for all select/merge operations. Do not invent columns."
+                )
         return {"role": "user", "content": user_content}
 
     def _available_workbook_basenames(self) -> list[str]:
-        """Return loaded workbook base names for repair hints."""
-        try:
-            workbooks = self.sandbox.workbooks or {}
-            return [os.path.basename(str(path)) for path in workbooks.keys()]
-        except Exception:
-            return []
+        return self.grounding.available_workbook_basenames()
 
     def _build_schema_snapshot(self) -> str:
-        """Build a compact schema snapshot (sheet + header row) from loaded workbooks."""
-        try:
-            workbooks = self.sandbox.workbooks or {}
-            lines: list[str] = []
-            for path, wb in workbooks.items():
-                base = os.path.basename(str(path))
-                sheet_name = wb.sheetnames[0] if getattr(wb, "sheetnames", None) else "(no_sheet)"
-                headers: list[str] = []
-                if getattr(wb, "sheetnames", None):
-                    ws = wb[sheet_name]
-                    # Use first non-empty row within first 5 rows as header candidate.
-                    for row_idx in range(1, 6):
-                        row_values = []
-                        for c in range(1, 61):
-                            value = ws.cell(row=row_idx, column=c).value
-                            text = str(value).strip() if value is not None else ""
-                            row_values.append(text)
-                        candidate = [v for v in row_values if v != ""]
-                        if candidate:
-                            headers = candidate[:20]
-                            break
-                header_text = ", ".join(headers) if headers else "(no_detected_header)"
-                lines.append(f"- `{base}` | sheet=`{sheet_name}` | columns={header_text}")
-            return "\n".join(lines)
-        except Exception:
-            return ""
+        return self.grounding.build_schema_snapshot()
+
+    def _observed_header_set(self) -> set[str]:
+        return self.grounding.observed_header_set()
 
     def _detect_unknown_filename_lookup(self, code_action: str) -> Optional[str]:
-        """Detect literal input filename lookups that are not in loaded workbook names."""
-        if not code_action or not code_action.strip():
-            return None
-
-        available = set(self._available_workbook_basenames())
-        if not available:
-            return None
-
-        patterns = [
-            r"file_by_name\[\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]\s*\]",
-            r"workbooks\[\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]\s*\]",
-            r"data_frames\[\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]\s*\]",
-            r"required_files\s*=\s*\[([^\]]+)\]",
-        ]
-
-        referenced: list[str] = []
-        for idx, pattern in enumerate(patterns):
-            matches = re.findall(pattern, code_action, flags=re.IGNORECASE)
-            if not matches:
-                continue
-            if idx == 3:
-                for raw_list in matches:
-                    referenced.extend(
-                        re.findall(r"['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]", raw_list, flags=re.IGNORECASE)
-                    )
-            else:
-                referenced.extend(matches)
-
-        unknown = sorted({
-            os.path.basename(name) for name in referenced
-            if os.path.basename(name) not in available
-        })
-        if not unknown:
-            return None
-
-        available_str = ", ".join(sorted(available))
-        unknown_str = ", ".join(unknown)
-        return (
-            "GROUNDING_VIOLATION_OFFLINE: code references input filename(s) not loaded in this task.\n"
-            f"- Unknown referenced names: {unknown_str}\n"
-            f"- Available input filenames: {available_str}\n"
-            "- Fix by using: all_files = list_all_workbooks(); "
-            "file_by_name = {p.split('/')[-1]: p for p in all_files}"
-        )
+        return self.grounding.detect_unknown_filename_lookup(code_action)
 
     @staticmethod
     def _error_signature(execution_result: str) -> str:
-        """Build a compact error signature for repeated-error loop detection."""
-        if not execution_result:
-            return "unknown"
-
-        if "None of [Index(" in execution_result and "are in the [columns]" in execution_result:
-            return "missing_required_columns"
-
-        if "Reindexing only valid with uniquely valued Index objects" in execution_result:
-            return "concat_non_unique_columns"
-
-        if "SyntaxError:" in execution_result:
-            if re.search(r"\n\s*[A-Za-z_]\w*\s*=\s*\n\s*\^", execution_result):
-                return "syntax_truncated_assignment"
-            return "syntax_error"
-
-        name_error = re.search(r"NameError:\s*name '([^']+)' is not defined", execution_result)
-        if name_error:
-            return f"name_error:{name_error.group(1)}"
-
-        key_error = re.search(r"KeyError:\s*'([^']+)'", execution_result)
-        if key_error:
-            return f"key_error:{key_error.group(1)}"
-
-        first_line = re.search(r"Execution error:\s*(.+?)(?:\n|$)", execution_result)
-        if first_line:
-            return first_line.group(1).strip().lower()
-
-        return "unknown"
+        return ExecutionErrorFeedbackBuilder.error_signature(execution_result)
 
     def _update_error_streak(self, execution_result: str) -> str:
         """Update repeated error streak state and return current signature."""
@@ -363,478 +301,19 @@ class ExecutionRuntime(StageRuntime):
 
     @staticmethod
     def _build_loop_breaker_feedback(error_signature: str) -> str:
-        """Provide stronger generic guidance when the same error repeats."""
-        if error_signature == "missing_required_columns":
-            return (
-                "LOOP_BREAKER_OFFLINE: repeated missing-column failure.\n"
-                "- Rebuild with schema discovery BEFORE merge/select:\n"
-                "  all_files = list_all_workbooks()\n"
-                "  for file_path in all_files:\n"
-                "      wb = get_workbook(file_path)\n"
-                "      sheet_name = wb.sheetnames[0]\n"
-                "      raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "      df = pd.DataFrame(raw[1:], columns=raw[0]) if raw and len(raw) > 1 else pd.DataFrame()\n"
-                "      print(file_path.split('/')[-1], 'columns:', df.columns.tolist())\n"
-                "- Only select/merge on columns that are confirmed present in printed columns.\n"
-                "- Do not invent semantic column names; map from actual headers."
-            )
-
-        if error_signature == "concat_non_unique_columns":
-            return (
-                "LOOP_BREAKER_OFFLINE: same concat error repeated.\n"
-                "- Replace your DataFrame loading block with this safe pattern (task-agnostic):\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  header = [str(h).strip() if h is not None else \"\" for h in raw[0]]\n"
-                "  keep = [i for i,h in enumerate(header) if h != \"\"]\n"
-                "  header = [header[i] for i in keep]\n"
-                "  rows = [[r[i] if i < len(r) else None for i in keep] for r in raw[1:]]\n"
-                "  seen = {}; uniq = []\n"
-                "  for h in header:\n"
-                "      n = seen.get(h, 0); seen[h] = n + 1\n"
-                "      uniq.append(h if n == 0 else f\"{h}_{n+1}\")\n"
-                "  df = pd.DataFrame(rows, columns=uniq)\n"
-                "- Use A1-based ranges for all files unless you manually set headers.\n"
-                "- After loading, print columns once and continue task-specific computation."
-            )
-
-        if error_signature == "syntax_truncated_assignment":
-            return (
-                "LOOP_BREAKER_OFFLINE: repeated truncated code.\n"
-                "- Send a fresh full code block from scratch (prefer <90 lines).\n"
-                "- Do NOT leave partial assignment lines like `raw2 =`.\n"
-                "- Keep only essential pipeline: load -> compute -> write Output -> save_workbook_to(output_path)."
-            )
-
-        return (
-            "LOOP_BREAKER_OFFLINE: same runtime error repeated.\n"
-            "- Rewrite only the failing block from scratch, keep the rest minimal.\n"
-            "- Use runtime helpers only and keep one complete executable code block."
-        )
+        return ExecutionErrorFeedbackBuilder.build_loop_breaker_feedback(error_signature)
 
     def _build_bounded_error_feedback(self, execution_result: str) -> Optional[str]:
-        """Build targeted bounded-mode repair feedback from common execution errors."""
-        if not execution_result:
-            return None
-
-        sheet_missing = re.search(
-            r"Sheet '([^']+)' not found in ([^.\n]+)\. Available sheets: (\[[^\]]*\])",
-            execution_result
-        )
-        if sheet_missing:
-            missing_sheet = sheet_missing.group(1)
-            workbook_name = sheet_missing.group(2)
-            available_sheets = sheet_missing.group(3)
-            return (
-                "MINIMAL FIX REQUIRED: do not invent sheet names.\n"
-                f"- Invalid sheet: '{missing_sheet}' in {workbook_name}\n"
-                f"- Use one of available sheets only: {available_sheets}\n"
-                "- Keep the same overall code shape; only replace the wrong sheet_name string."
-            )
-
-        column_missing = re.search(r"KeyError:\s*'([^']+)'", execution_result)
-        if column_missing:
-            missing_col = column_missing.group(1)
-            if missing_col.endswith(".xlsx") or "/" in missing_col:
-                basenames = self._available_workbook_basenames()
-                available_str = ", ".join(basenames) if basenames else "(unknown)"
-                return (
-                    "MINIMAL FIX REQUIRED: workbook key mismatch (basename vs full path).\n"
-                    f"- Missing dict key: '{missing_col}'\n"
-                    f"- Available workbook basenames now: {available_str}\n"
-                    "- Build mapping and read by full path:\n"
-                    "  all_files = list_all_workbooks()\n"
-                    "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                    "  file_path = file_by_name['target.xlsx']\n"
-                    "  wb = get_workbook(file_path)\n"
-                    "  sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                    "- Do not cache DataFrames in a dict with mixed key formats."
-                )
-            return (
-                "MINIMAL FIX REQUIRED: do not invent column names.\n"
-                f"- Missing column: '{missing_col}'\n"
-                "- Print actual columns first with: print('Columns:', df.columns.tolist())\n"
-                "- Replace only the wrong column reference with one that exists in printed columns."
-            )
-
-        name_error = re.search(r"NameError:\s*name '([^']+)' is not defined", execution_result)
-        if name_error:
-            missing_name = name_error.group(1)
-            if missing_name == "saved_file":
-                return (
-                    "MINIMAL FIX REQUIRED: final variable `saved_file` is missing.\n"
-                    "- End with:\n"
-                    "  saved_file = save_workbook_to(output_path)\n"
-                    "  print(\"SAVED_FILE:\", saved_file)\n"
-                    "  saved_file\n"
-                    "- Do not assign to output_path; keep output_path as runtime input variable."
-                )
-            if missing_name in {"wb", "file_path"}:
-                return (
-                    "MINIMAL FIX REQUIRED: undefined helper variable in workbook read path.\n"
-                    f"- Undefined name: '{missing_name}'\n"
-                    "- Define variables in-order for each file:\n"
-                    "  wb = get_workbook(file_path)\n"
-                    "  sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                    "- Do not use variables before assignment."
-                )
-            if missing_name == "sheet":
-                return (
-                    "MINIMAL FIX REQUIRED: do not use raw worksheet object `sheet` for manual cell writes.\n"
-                    "- Replace sheet.cell loops with helper flow only:\n"
-                    "  create_output_sheet(\"Output\")\n"
-                    "  data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                    "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")"
-                )
-            return (
-                "MINIMAL FIX REQUIRED: undefined variable/function.\n"
-                f"- Undefined name: '{missing_name}'\n"
-                "- Define all variables in this turn before use.\n"
-                "- If named files are needed, use mapping:\n"
-                "  all_files = list_all_workbooks()\n"
-                "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                "- Do not reference helper variables before assignment."
-            )
-
-        if "No module named 'common_functions'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: remove external helper imports.\n"
-                "- Do NOT import common_functions.\n"
-                "- Use runtime-injected helpers directly: list_all_workbooks, inspector_multi, create_output_sheet, write_dataframe_to_sheet, save_workbook_to."
-            )
-
-        if "create_output_workbook" in execution_result and "is not defined" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: create_output_workbook() is not available in this runtime.\n"
-                "- Use existing helpers only:\n"
-                "  create_output_sheet(\"Output\")\n"
-                "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
-                "  saved_file = save_workbook_to(output_path)"
-            )
-
-        if "write_dataframe_to_sheet() got an unexpected keyword argument" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: wrong write_dataframe_to_sheet signature.\n"
-                "- Correct call: write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
-                "- Do not use pandas-style kwargs like startrow/startcol."
-            )
-
-        if "unexpected keyword argument 'wb'" in execution_result and "inspector_multi" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: inspector_multi does not accept keyword `wb`.\n"
-                "- Correct signature: inspector_multi(file_path, range_ref, sheet_name)\n"
-                "- Example:\n"
-                "  wb = get_workbook(file_path)\n"
-                "  sheet_name = wb.sheetnames[0]\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)"
-            )
-
-        if "Sheet 'Output' not found in output workbook" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: Output sheet missing before write/add_summary_row.\n"
-                "- Add this before any write/add_summary_row call:\n"
-                "  create_output_sheet(\"Output\")\n"
-                "- Then write table with:\n"
-                "  data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")"
-            )
-
-        if "Cannot convert" in execution_result and "to Excel" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: write_dataframe_to_sheet got nested row structure.\n"
-                "- Do NOT wrap data_2d with an extra list.\n"
-                "- Wrong: data_2d = [[df.columns.tolist()] + df.values.tolist()]\n"
-                "- Correct: data_2d = [df.columns.tolist()] + df.values.tolist()"
-            )
-
-        if "expected string or bytes-like object, got 'list'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: wrong parameter type passed to helper.\n"
-                "- write_dataframe_to_sheet expects: (data_2d, sheet_name, start_cell)\n"
-                "- Ensure sheet_name is a string like \"Output\", not worksheet/list object."
-            )
-
-        if "expected str, bytes or os.PathLike object, not NoneType" in execution_result and "get_workbook" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: get_workbook(None) is invalid.\n"
-                "- Pass a real file path from list_all_workbooks().\n"
-                "- Correct pattern:\n"
-                "  all_files = list_all_workbooks()\n"
-                "  file_path = all_files[0]\n"
-                "  wb = get_workbook(file_path)"
-            )
-
-        if "expected str, bytes or os.PathLike object, not Workbook" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: inspector_multi first argument must be FILE PATH STRING, not Workbook object.\n"
-                "- Correct signature: inspector_multi(file_path, range_ref, sheet_name)\n"
-                "- Example: data = inspector_multi(all_files[0], \"A1:D30\", \"Sheet1\")"
-            )
-
-        if "'generator' object has no attribute 'tolist'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: you are treating worksheet/generator as DataFrame.\n"
-                "- First get tabular values via inspector_multi(...)\n"
-                "- Then build DataFrame with header row:\n"
-                "  data = inspector_multi(all_files[0], \"A1:D30\", \"Sheet1\")\n"
-                "  df = pd.DataFrame(data[1:], columns=data[0])"
-            )
-
-        if "'list' object has no attribute 'columns'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: inspector_multi returns list-of-lists, not DataFrame.\n"
-                "- Do NOT do: pd.DataFrame(inspector_multi(...))\n"
-                "- Correct pattern:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  df = pd.DataFrame(raw[1:], columns=raw[0])\n"
-                "- Then use df.columns and merge/groupby operations."
-            )
-
-        if "cannot concatenate object of type '<class 'list'>'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: you are concatenating lists instead of DataFrames.\n"
-                "- For each file:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  df = pd.DataFrame(raw[1:], columns=raw[0])\n"
-                "- Append DataFrames to a list and then pd.concat(df_list, ignore_index=True)."
-            )
-
-        missing_index_cols = re.search(
-            r"None of \[Index\(\[(.+?)\], dtype='[^']+'\)\] are in the \[columns\]",
-            execution_result,
-            flags=re.DOTALL,
-        )
-        if missing_index_cols:
-            raw_cols = missing_index_cols.group(1)
-            requested_cols = re.findall(r"'([^']+)'", raw_cols)
-            requested_display = ", ".join(requested_cols) if requested_cols else raw_cols
-            return (
-                "MINIMAL FIX REQUIRED: requested columns are not present in DataFrame.\n"
-                f"- Missing requested columns: {requested_display}\n"
-                "- Before any df[[...]] or merge(..., on=...), print each DataFrame columns:\n"
-                "  print('df_a columns:', df_a.columns.tolist())\n"
-                "  print('df_b columns:', df_b.columns.tolist())\n"
-                "- Build `needed` and `missing` checks:\n"
-                "  needed = ['col1','col2']\n"
-                "  missing = [c for c in needed if c not in df.columns]\n"
-                "  print('missing:', missing)\n"
-                "- Replace invented column names with actual headers from printed columns only."
-            )
-
-        if "columns passed, passed data had 0 columns" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: header/row index mapping is wrong.\n"
-                "- Keep non-empty header indices from ORIGINAL raw[0] positions.\n"
-                "- Use this exact shape-safe extraction:\n"
-                "  header_raw = [str(h).strip() if h is not None else \"\" for h in raw[0]]\n"
-                "  keep = [i for i,h in enumerate(header_raw) if h != \"\"]\n"
-                "  header = [header_raw[i] for i in keep]\n"
-                "  rows = [[r[i] if i < len(r) else None for i in keep] for r in raw[1:]]\n"
-                "  rows = [row for row in rows if any(v not in (None, \"\") for v in row)]\n"
-                "  df = pd.DataFrame(rows, columns=header)\n"
-                "- Do not use columns_to_delete for row extraction."
-            )
-
-        if "Reindexing only valid with uniquely valued Index objects" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: concat failed because columns are non-unique (often from wrong header row/range).\n"
-                "- Read with header row included: use range starting at A1 (not A2) unless you set headers manually.\n"
-                "- Build DataFrame with cleaned unique headers:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  header = [str(h).strip() if h is not None else \"\" for h in raw[0]]\n"
-                "  keep = [i for i,h in enumerate(header) if h != \"\"]\n"
-                "  header = [header[i] for i in keep]\n"
-                "  rows = [[r[i] for i in keep] for r in raw[1:]]\n"
-                "  seen = {}; uniq = []\n"
-                "  for h in header: n = seen.get(h, 0); seen[h] = n + 1; uniq.append(h if n == 0 else f\"{h}_{n+1}\")\n"
-                "  df = pd.DataFrame(rows, columns=uniq)\n"
-                "- Then concat with ignore_index=True."
-            )
-
-        if "unexpected keyword argument 'range_ref'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: inspector_multi does not accept keyword range_ref.\n"
-                "- Use positional args only.\n"
-                "- Correct: inspector_multi(file_path, \"A1:D30\", \"Sheet1\")"
-            )
-
-        if "missing 1 required positional argument: 'rr'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: inspector_multi missing range argument.\n"
-                "- Pass range_ref as second positional arg.\n"
-                "- Correct: inspector_multi(file_path, \"A1:D30\", \"Sheet1\")"
-            )
-
-        if "Sheet 'Sheet1' not found" in execution_result and "Available sheets:" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: wrong sheet name assumption.\n"
-                "- For CSV-backed workbooks, sheet is often filename-based (not 'Sheet1').\n"
-                "- Use dynamic sheet name:\n"
-                "  wb = get_workbook(file_path)\n"
-                "  sheet_name = wb.sheetnames[0]\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)"
-            )
-
-        if ".xlsx.xlsx" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: file extension duplicated.\n"
-                "- Do not append '.xlsx' if file name already ends with '.xlsx'.\n"
-                "- Keep required names as full filename and resolve with file_by_name mapping."
-            )
-
-        if "One or more required workbooks are missing" in execution_result:
-            basenames = self._available_workbook_basenames()
-            available_str = ", ".join(basenames) if basenames else "(unknown)"
-            return (
-                "MINIMAL FIX REQUIRED: workbook existence check is wrong.\n"
-                f"- Available workbook basenames now: {available_str}\n"
-                "- Use this exact pattern:\n"
-                "  all_files = list_all_workbooks()\n"
-                "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                "  required = [\"name1.xlsx\", \"name2.xlsx\"]\n"
-                "  missing = [n for n in required if n not in file_by_name]\n"
-                "- If missing is empty, read via file_by_name[name] and continue."
-            )
-
-        workbook_list_miss = re.search(
-            r"File\s+([^.\n]+?\.(?:csv|xlsx|xls))\s+not found(?: in workbook list)?\.?\s*Available files:\s*(\[[^\]]*\])?",
-            execution_result,
-            flags=re.IGNORECASE,
-        )
-        if workbook_list_miss:
-            missing_name = workbook_list_miss.group(1)
-            available_list = workbook_list_miss.group(2) or "[]"
-            return (
-                "MINIMAL FIX REQUIRED: referenced input file is not loaded in this task.\n"
-                f"- Missing filename: {missing_name}\n"
-                f"- Runtime available filenames: {available_list}\n"
-                "- Use only runtime-provided filenames via file_by_name mapping."
-            )
-
-        file_not_found = re.search(
-            r"FileNotFoundError:\s*\[Errno\s*2\]\s*No such file or directory:\s*'([^']+)'",
-            execution_result
-        )
-        if file_not_found:
-            missing_path = file_not_found.group(1)
-            missing_base = os.path.basename(missing_path)
-            available = self._available_workbook_basenames()
-            available_str = ", ".join(available) if available else "[]"
-            exists_by_name = missing_base in set(available)
-            if exists_by_name:
-                return (
-                    "MINIMAL FIX REQUIRED: wrong input path construction.\n"
-                    f"- Missing path: {missing_path}\n"
-                    f"- Filename exists in loaded inputs: {missing_base}\n"
-                    f"- Available input filenames: {available_str}\n"
-                    "- Do NOT use pd.read_csv/pd.read_excel or hard-coded paths.\n"
-                    "- Use:\n"
-                    "  all_files = list_all_workbooks()\n"
-                    "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                    "  file_path = file_by_name['" + missing_base + "']\n"
-                    "  wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                    "  df = pd.DataFrame(raw[1:], columns=raw[0])"
-                )
-            return (
-                "MINIMAL FIX REQUIRED: referenced input file/path is not part of loaded task inputs.\n"
-                f"- Missing path: {missing_path}\n"
-                f"- Available input filenames: {available_str}\n"
-                "- Replace with a filename from available list via file_by_name mapping."
-            )
-
-        if "attempt to get argmax of an empty sequence" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: idxmax/argmax called on empty filtered data.\n"
-                "- Before idxmax(), add guard:\n"
-                "  if filtered_df.empty:\n"
-                "      row_numbers = []\n"
-                "  else:\n"
-                "      max_idx = filtered_df['value_col'].idxmax()\n"
-                "- Continue writing detailed table and summary even when highlight set is empty."
-            )
-
-        if "Can only use .str accessor with string values" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: `.str` used on non-string date column.\n"
-                "- Prefer datetime logic:\n"
-                "  df['Date'] = pd.to_datetime(df['Date'], errors='coerce')\n"
-                "  filtered = df[df['Date'].dt.month == 11]\n"
-                "- Do not mix `.dt` and `.str` on the same typed column."
-            )
-
-        if "'float' object has no attribute 'isnull'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: scalar float does not have `.isnull()`.\n"
-                "- Replace `x.isnull()` with `pd.isna(x)`.\n"
-                "- Keep the rest unchanged."
-            )
-
-        if "'RangeIndex' object is not callable" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: `.index` is a property, not a function.\n"
-                "- Wrong: df.index(...)\n"
-                "- Correct: df[condition].index.tolist()\n"
-                "- For highlight rows, convert to Output row numbers with header offset:\n"
-                "  row_numbers = [i + 2 for i in idx_list]"
-            )
-
-        if "'RangeIndex' object cannot be interpreted as an integer" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: `range(df.index)` is invalid because index is not an int.\n"
-                "- Use concrete list of indices:\n"
-                "  idx_list = df[condition].index.tolist()\n"
-                "  row_numbers = [i + 2 for i in idx_list]\n"
-                "- Pass row_numbers directly to highlight_rows(...)."
-            )
-
-        if "Error highlighting rows" in execution_result and "'<' not supported between instances of 'list' and 'int'" in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: highlight_rows received nested list instead of flat int list.\n"
-                "- Wrong: highlight_rows(\"Output\", [[...]], {...})\n"
-                "- Correct: highlight_rows(\"Output\", [2, 8, 15], {...})\n"
-                "- Ensure each row number is an integer."
-            )
-
-        syntax_err = re.search(r"SyntaxError:\s*(.+)", execution_result)
-        if syntax_err:
-            syntax_detail = syntax_err.group(1)
-            lower_detail = syntax_detail.lower()
-            if re.search(r"\n\s*//", execution_result):
-                return (
-                    "MINIMAL FIX REQUIRED: invalid Python comment style.\n"
-                    "- Replace every `// ...` with `# ...` (or remove comments).\n"
-                    "- Keep one complete Python code block only."
-                )
-            if "unexpected eof" in lower_detail or "unterminated" in lower_detail or "eol while scanning string literal" in lower_detail:
-                return (
-                    "MINIMAL FIX REQUIRED: response was likely truncated or has unclosed literal.\n"
-                    "- Re-send a complete, shorter code block (<120 lines) with valid closing backticks.\n"
-                    "- Avoid partial variable names/strings and ensure all brackets/quotes are closed.\n"
-                    "- Keep only essential steps: load -> merge -> write Output -> save_workbook_to(output_path)."
-                )
-            if "invalid syntax" in lower_detail and re.search(r"\n\s*[A-Za-z_]\w*\s*=\s*\n\s*\^", execution_result):
-                return (
-                    "MINIMAL FIX REQUIRED: code is truncated mid-assignment (for example `raw2 =`).\n"
-                    "- Re-send one complete code block; do not leave any partial line.\n"
-                    "- Keep code shorter (<120 lines) and fully closed with ```.\n"
-                    "- Keep only essential steps: load -> compute -> write Output -> save_workbook_to(output_path)."
-                )
-            return (
-                "MINIMAL FIX REQUIRED: syntax error.\n"
-                "- Keep code minimal and valid Python; avoid renaming variables mid-line.\n"
-                "- Ensure all identifiers use underscores only and are defined before use.\n"
-                "- Re-emit one complete executable code block."
-            )
-
-        return None
+        return self.error_feedback.build_bounded_error_feedback(execution_result)
 
     def run(self, understanding_output: str, user_question: str,
             max_turns: int = 20) -> Dict[str, Any]:
         logger.info(f"Starting multi-turn analysis for: '{user_question}'")
         self._consecutive_forbidden = 0
         self._consecutive_format_errors = 0
+        self._forbidden_signature_counts = {}
+        self._last_forbidden_signature = None
+        self._same_forbidden_streak = 0
         self._last_error_signature = None
         self._same_error_streak = 0
         output_contract = self._extract_output_contract(understanding_output)
@@ -871,113 +350,47 @@ class ExecutionRuntime(StageRuntime):
                     self._consecutive_format_errors += 1
                     strict_repair = ""
                     if self._consecutive_format_errors >= self._max_format_errors:
-                        strict_repair = (
-                            "\nTRUNCATION/FORMAT RECOVERY (MANDATORY):\n"
-                            "- Return ONLY one complete code block.\n"
-                            "- Keep code under 120 lines and avoid long comments.\n"
-                            "- Ensure closing triple backticks are present.\n"
-                            "- Use list_all_workbooks()+inspector_multi(); do not use pandas file readers.\n"
+                        if self._is_offline_strict:
+                            strict_repair = (
+                                "\nTRUNCATION/FORMAT RECOVERY (MANDATORY):\n"
+                                "- Return ONLY one complete code block.\n"
+                                "- Keep code under 120 lines and avoid long comments.\n"
+                                "- Ensure closing triple backticks are present.\n"
+                                "- Use list_all_workbooks()+inspector_multi(); do not use pandas file readers.\n"
+                            )
+                        else:
+                            strict_repair = (
+                                "\nTRUNCATION/FORMAT RECOVERY (MANDATORY):\n"
+                                "- Return ONLY one complete code block.\n"
+                                "- Keep code under 120 lines and avoid long comments.\n"
+                                "- Ensure closing triple backticks are present.\n"
+                            )
+                    if self._is_offline_strict:
+                        format_msg = (
+                            "FORMAT_ERROR_OFFLINE: executable code is required.\n"
+                            "Reply with exactly one ```python ... ``` block.\n"
+                            "Include complete task logic: read -> compute -> write Output -> save_workbook_to(output_path)."
+                            f"{strict_repair}"
                         )
-                    format_msg = (
-                        "FORMAT_ERROR_OFFLINE: executable code is required.\n"
-                        "Reply with exactly one ```python ... ``` block.\n"
-                        "Include complete task logic: read -> compute -> write Output -> save_workbook_to(output_path)."
-                        f"{strict_repair}"
-                    )
-                    logger.warning("Strict mode: no code block, executable code required")
+                    else:
+                        format_msg = (
+                            "FORMAT_ERROR: executable code is required.\n"
+                            "Reply with exactly one ```python ... ``` block.\n"
+                            "Include complete task logic for this question and provide a final saved output file."
+                            f"{strict_repair}"
+                        )
+                    logger.warning("No code block returned; executable code required")
                     self._log_to_file(f"\n**Format error (Turn {turn + 1}):** no code block.\n")
                     self.conversation_history.append({"role": "user", "content": format_msg})
                     continue
                 self._consecutive_format_errors = 0
 
-                forbidden_err = self.executor.check_forbidden_bounded(code_action)
-                if forbidden_err is not None:
-                    self._consecutive_forbidden += 1
-                    repair_hint = ""
-                    if "to_excel" in forbidden_err or "DataFrame.to_excel" in forbidden_err:
-                        repair_hint = (
-                            "Replacement pattern:\n"
-                            "create_output_sheet(\"Output\")\n"
-                            "data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                            "write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
-                            "saved_file = save_workbook_to(output_path)\n"
-                            "print(\"SAVED_FILE:\", saved_file)\n"
-                        )
-                    elif "read_csv" in forbidden_err or "read_table" in forbidden_err or "read_excel" in forbidden_err:
-                        repair_hint = (
-                            "Do not load files via pandas readers.\n"
-                            "Use preloaded workbooks instead:\n"
-                            "all_files = list_all_workbooks()\n"
-                            "file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-                            "file_path = file_by_name['target.csv']\n"
-                            "wb = get_workbook(file_path)\n"
-                            "sheet_name = wb.sheetnames[0]\n"
-                            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                            "df = pd.DataFrame(raw[1:], columns=raw[0])\n"
-                        )
-                    elif "open()" in forbidden_err or "File I/O" in forbidden_err:
-                        repair_hint = (
-                            "Do not write files with open(). Use write_dataframe_to_sheet(...)\n"
-                            "and save_workbook_to(output_path) instead.\n"
-                        )
-                    if "openpyxl" in forbidden_err:
-                        repair_hint = (
-                            "Do not import openpyxl or pandas Excel readers/writers.\n"
-                            "Only allowed import is: import pandas as pd\n"
-                        )
-                    if "/Users/" in forbidden_err:
-                        repair_hint = (
-                            "Do not hard-code input paths.\n"
-                            "Always use: all_files = list_all_workbooks(); file_path = all_files[i]\n"
-                        )
-                    hard_reset = ""
-                    if self._consecutive_forbidden >= self._max_forbidden_before_hard_reset:
-                        hard_reset = (
-                            "\nHARD RESET (GENERIC, NOT TASK-SPECIFIC):\n"
-                            "- Rebuild from scratch using only allowed helpers.\n"
-                            "- Load files from runtime only: all_files = list_all_workbooks().\n"
-                            "- For each file: wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]; "
-                            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name).\n"
-                            "- Build DataFrame with explicit header handling: pd.DataFrame(raw[1:], columns=raw[0]).\n"
-                            "- Then run task-specific computation, write Output via write_dataframe_to_sheet, and save with save_workbook_to(output_path).\n"
-                            "- Do not use placeholder outputs; write real result rows."
-                        )
-                    logger.warning(f"Forbidden pattern in code (strict): {forbidden_err}")
-                    self._log_to_file(
-                        f"\n**Forbidden (Turn {turn + 1}):**\n{forbidden_err}\n"
-                    )
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": (
-                            f"FORBIDDEN: {forbidden_err}\n"
-                            "MINIMAL PATCH REQUIRED: modify only forbidden lines.\n"
-                            "Allowed I/O helpers only: list_all_workbooks(), get_workbook(), inspector_multi(), "
-                            "create_output_sheet(), write_dataframe_to_sheet(), save_workbook_to(output_path).\n"
-                            f"{repair_hint}"
-                            f"{hard_reset}"
-                            "Output a single ```python ... ``` block with the corrected full code."
-                        )
-                    })
-                    self._last_error_signature = None
-                    self._same_error_streak = 0
+                should_continue, soft_forbidden_warning = self._handle_offline_forbidden(
+                    code_action,
+                    turn,
+                )
+                if should_continue:
                     continue
-
-                unknown_file_ref_err = self._detect_unknown_filename_lookup(code_action)
-                if unknown_file_ref_err is not None:
-                    logger.warning(f"Unknown input filename reference (strict): {unknown_file_ref_err}")
-                    self._log_to_file(
-                        f"\n**Grounding violation (Turn {turn + 1}):**\n{unknown_file_ref_err}\n"
-                    )
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": (
-                            f"{unknown_file_ref_err}\n"
-                            "MINIMAL PATCH REQUIRED: replace only unknown input filenames with names from available list.\n"
-                            "Output a single ```python ... ``` block with corrected full code."
-                        )
-                    })
-                    continue
-                self._consecutive_forbidden = 0
 
                 logger.info(f"Executing Python code:\n{code_action}")
                 self._log_to_file(
@@ -1023,6 +436,8 @@ class ExecutionRuntime(StageRuntime):
                                 + "\n\n"
                                 + execution_result
                             )
+                        if soft_forbidden_warning:
+                            feedback_to_model = soft_forbidden_warning + "\n\n" + feedback_to_model
                         self.conversation_history.append({"role": "user", "content": feedback_to_model})
                         continue
 
@@ -1044,12 +459,21 @@ class ExecutionRuntime(StageRuntime):
                             })
                             continue
                         output_intent_feedback = self._build_output_intent_feedback(
-                            execution_result, output_contract
+                            execution_result, output_contract, code_action
                         )
                         if output_intent_feedback is not None:
                             self.conversation_history.append({
                                 "role": "user",
                                 "content": output_intent_feedback
+                            })
+                            continue
+                        quality_risk_feedback = self.output_contract_checker.detect_quality_risk(
+                            execution_result
+                        )
+                        if quality_risk_feedback is not None:
+                            self.conversation_history.append({
+                                "role": "user",
+                                "content": quality_risk_feedback
                             })
                             continue
                         logger.info(f"Final answer (from execution output): {saved_path}")
@@ -1069,6 +493,8 @@ class ExecutionRuntime(StageRuntime):
                             )
                         }
 
+                    if soft_forbidden_warning:
+                        observation = observation + "\n\n" + soft_forbidden_warning
                     self.conversation_history.append({"role": "user", "content": observation})
 
                 except Exception as e:
@@ -1092,6 +518,8 @@ class ExecutionRuntime(StageRuntime):
                     if self._same_error_streak >= self._max_same_error_streak:
                         loop_breaker = self._build_loop_breaker_feedback(error_signature)
                         feedback_to_model = feedback_to_model + "\n\n" + loop_breaker
+                    if soft_forbidden_warning:
+                        feedback_to_model = soft_forbidden_warning + "\n\n" + feedback_to_model
 
                     execution_steps.append({
                         "turn": turn + 1,

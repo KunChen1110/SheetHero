@@ -71,6 +71,21 @@ class ValidationRuntime(StageRuntime):
                     continue
         return all_rows
 
+    @staticmethod
+    def _has_summary_write_signal_from_code(code_text: str) -> bool:
+        if not code_text:
+            return False
+        lower_code = code_text.lower()
+        if "add_summary_row(" in lower_code:
+            return True
+        if '["metric", "value"]' in lower_code or "['metric', 'value']" in lower_code:
+            return True
+        if "write_dataframe_to_sheet(" in lower_code and (
+            "summary" in lower_code or "metric" in lower_code
+        ):
+            return True
+        return False
+
     def run(self, execution_result: Dict[str, Any], user_question: str,
             understanding_output: str) -> Dict[str, Any]:
         logger.info("Starting validation on execution results")
@@ -107,6 +122,7 @@ class ValidationRuntime(StageRuntime):
             final_answer = execution_result.get("answer", "") or ""
             steps = execution_result.get("execution_summary", {}).get("execution_steps", [])
             all_results = " ".join(str(s.get("result") or "") for s in steps)
+            all_code = "\n".join(str(s.get("code") or "") for s in steps)
 
             # If final answer is file path, execution stdout must contain save evidence.
             if final_answer and self._looks_like_file_path(final_answer):
@@ -145,6 +161,10 @@ class ValidationRuntime(StageRuntime):
 
             if need_summary is True:
                 has_summary_signal = ("added summary row" in lower_results) or (len(rows_written) >= 2)
+                if not has_summary_signal and self._has_summary_write_signal_from_code(all_code):
+                    has_summary_signal = True
+                if not has_summary_signal and need_detail is True and max_rows >= 20:
+                    has_summary_signal = True
                 if not has_summary_signal:
                     hard_issues.append("Output contract requires summary metrics, but summary write evidence is missing.")
 

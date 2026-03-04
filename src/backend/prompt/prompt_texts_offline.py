@@ -116,8 +116,11 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
     - `df = pd.DataFrame(rows, columns=header)`
 - Before selecting/merging columns, print observed schema:
   - `print(file_path.split('/')[-1], df.columns.tolist())`
-- For multi-file questions, read EACH file and combine with `pd.concat(..., ignore_index=True)`.
+- For multi-file questions, first decide schema relation:
+  - same headers across files -> `pd.concat(..., ignore_index=True)` is allowed.
+  - different headers/files with different roles -> keep separate DataFrames and merge on verified keys only.
 - Always verify required columns exist before use.
+- Never assume synthetic metadata columns (e.g., `File`, `source_file`) unless you explicitly created them.
 - For date filtering:
   - Parse date column with `pd.to_datetime(..., errors="coerce")`.
   - Do NOT hard-code year unless user explicitly specifies a year.
@@ -168,7 +171,13 @@ for file_path in all_files:
         print(file_path.split('/')[-1], df.columns.tolist(), len(df))
         dfs.append(df)
 
-combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else (dfs[0] if dfs else pd.DataFrame())
+same_schema = len({tuple(df.columns.tolist()) for df in dfs}) <= 1 if dfs else True
+if same_schema:
+    combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else (dfs[0] if dfs else pd.DataFrame())
+else:
+    # Heterogeneous schema: keep per-file DataFrames, then merge using verified keys.
+    # data_by_file = {basename: df}
+    combined = pd.DataFrame()
 
 # task-specific compute here, using only confirmed columns
 
@@ -205,6 +214,8 @@ _OFFLINE_OUTPUT_WORKFLOW = textwrap.dedent("""\
    - Build `row_numbers` as flat list of 1-based ints only.
    - Example: `row_numbers = [i + 2 for i in max_idx_list]`
 6. `saved_file = save_workbook_to(output_path)`
+   - Never pass a string literal path to `save_workbook_to(...)`.
+   - `output_path` is provided by runtime; use it directly.
 7. `print("SAVED_FILE:", saved_file)`
 8. Last expression must be `saved_file`
 """)
