@@ -87,6 +87,7 @@ class WorkbookGrounding:
             r"workbooks\[\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]\s*\]",
             r"data_frames\[\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]\s*\]",
             r"required_files\s*=\s*\[([^\]]+)\]",
+            r"(?:read_csv|read_excel|read_table)\s*\(\s*['\"]([^'\"]+\.(?:csv|xlsx|xls))['\"]",
         ]
 
         referenced: list[str] = []

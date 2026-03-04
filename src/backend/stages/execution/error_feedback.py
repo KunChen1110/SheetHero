@@ -354,6 +354,22 @@ class ExecutionErrorFeedbackBuilder:
                 "- Replace invented column names with actual headers from printed columns only."
             )
 
+        not_in_index = re.search(r"Execution error:\s*\"?\[([^\]]+)\]\s+not in index\"?", execution_result)
+        if not_in_index:
+            requested_cols = [c.strip().strip("'").strip('"') for c in not_in_index.group(1).split(",")]
+            requested_display = ", ".join([c for c in requested_cols if c])
+            return (
+                "MINIMAL FIX REQUIRED: selected columns are missing in current DataFrame.\n"
+                f"- Missing selection: {requested_display}\n"
+                "- Print columns and select by intersection only:\n"
+                "  want = ['col1','col2']\n"
+                "  present = [c for c in want if c in df.columns]\n"
+                "  missing = [c for c in want if c not in df.columns]\n"
+                "  print('missing columns:', missing)\n"
+                "  df_selected = df[present].copy()\n"
+                "- Do not assume columns exist without checking."
+            )
+
         if "columns passed, passed data had 0 columns" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: header/row index mapping is wrong.\n"
@@ -444,6 +460,24 @@ class ExecutionErrorFeedbackBuilder:
                 "- Use only runtime-provided filenames via file_by_name mapping."
             )
 
+        simple_runtime_file_missing = re.search(
+            r"Execution error:\s*File '([^']+\.(?:csv|xlsx|xls))' not found\.",
+            execution_result,
+            flags=re.IGNORECASE,
+        )
+        if simple_runtime_file_missing:
+            missing_name = simple_runtime_file_missing.group(1)
+            return (
+                "MINIMAL FIX REQUIRED: membership check used basename against full path list.\n"
+                f"- Missing filename: {missing_name}\n"
+                "- Do not use: `if file_name not in all_files`.\n"
+                "- Use exact mapping:\n"
+                "  all_files = list_all_workbooks()\n"
+                "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
+                "  file_path = file_by_name['" + missing_name + "']\n"
+                "- Then read via `get_workbook(file_path)` + `inspector_multi(...)`."
+            )
+
         file_not_found = re.search(
             r"FileNotFoundError:\s*\[Errno\s*2\]\s*No such file or directory:\s*'([^']+)'",
             execution_result
@@ -512,11 +546,71 @@ class ExecutionErrorFeedbackBuilder:
                 "- Avoid positional indexing like row[3]/row[4]; use explicit column names."
             )
 
+        if "could not convert string to float: 'male'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: categorical text is entering numeric correlation input.\n"
+                "- Encode categorical columns before correlation:\n"
+                "  df['Sex_num'] = df['Sex'].map({'male': 0, 'female': 1})\n"
+                "- Or compute correlation on numeric-only frame:\n"
+                "  num_df = df.select_dtypes(include=['number']).copy()\n"
+                "- Do not include raw text columns in `corr()` input."
+            )
+
+        if "could not convert string to float: ''" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: empty strings are being cast to float.\n"
+                "- Before numeric conversion, normalize blanks:\n"
+                "  s = series.replace('', None)\n"
+                "  s = pd.to_numeric(s, errors='coerce')\n"
+                "- Run correlation/aggregation on rows where required numeric columns are non-null."
+            )
+
+        if "float() argument must be a string or a real number, not 'NAType'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: pandas NA values are passed into float().\n"
+                "- Replace direct float(...) casts with:\n"
+                "  num = pd.to_numeric(series, errors='coerce')\n"
+                "- Drop or fill NaN before downstream numeric operations."
+            )
+
+        if "Expected value of kwarg 'errors' to be one of ['raise', 'ignore']. Supplied value is 'coerce'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `astype(..., errors='coerce')` is invalid.\n"
+                "- Use `pd.to_numeric(series, errors='coerce')` for coercion.\n"
+                "- Keep `astype(float)` only when data is already clean."
+            )
+
+        if "All arrays must be of the same length" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: output DataFrame/dict columns have different lengths.\n"
+                "- Build output from one aligned DataFrame slice, not separate independent arrays.\n"
+                "- Example:\n"
+                "  cols = ['A','B','C']\n"
+                "  present = [c for c in cols if c in df.columns]\n"
+                "  out_df = df[present].copy()\n"
+                "- Then write `out_df` directly."
+            )
+
         if "No module named 'networkx'" in execution_result or "name 'nx' is not defined" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: external graph library is unavailable in runtime.\n"
                 "- Remove networkx usage.\n"
                 "- Implement DAG ordering with plain-Python Kahn algorithm (dict + in_degree + queue)."
+            )
+
+        if "No module named 'sklearn'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: sklearn is unavailable in runtime.\n"
+                "- Do not import sklearn.\n"
+                "- For linear regression, use numpy least squares instead:\n"
+                "  import numpy as np\n"
+                "  X = df[feature_cols].apply(pd.to_numeric, errors='coerce')\n"
+                "  y = pd.to_numeric(df[target_col], errors='coerce')\n"
+                "  tmp = pd.concat([X, y], axis=1).dropna()\n"
+                "  A = np.c_[np.ones(len(tmp)), tmp[feature_cols].to_numpy(float)]\n"
+                "  b = tmp[target_col].to_numpy(float)\n"
+                "  beta = np.linalg.lstsq(A, b, rcond=None)[0]\n"
+                "- Then write coefficients table to Output and save."
             )
 
         if "Can only use .str accessor with string values" in execution_result:
@@ -567,6 +661,12 @@ class ExecutionErrorFeedbackBuilder:
         if syntax_err:
             syntax_detail = syntax_err.group(1)
             lower_detail = syntax_detail.lower()
+            if "return outside function" in lower_detail:
+                return (
+                    "MINIMAL FIX REQUIRED: `return` used at top level.\n"
+                    "- Remove top-level `return` statements.\n"
+                    "- End script with final expression `saved_file` instead."
+                )
             if re.search(r"\n\s*//", execution_result):
                 return (
                     "MINIMAL FIX REQUIRED: invalid Python comment style.\n"
