@@ -107,17 +107,25 @@ class UnderstandingStage(Stage):
     @staticmethod
     def _infer_contract_from_question(user_question: str) -> dict:
         q = (user_question or "").lower()
+
+        def has_term(term: str) -> bool:
+            escaped = re.escape(term.lower()).replace(r"\ ", r"\s+")
+            pattern = rf"(?<!\w){escaped}(?!\w)"
+            return re.search(pattern, q, flags=re.IGNORECASE) is not None
+
         detail_terms = (
-            "merge", "combine", "join", "table", "rows", "list", "new spreadsheet",
-            "output", "export"
+            "merge", "combine", "join", "concatenate",
+            "detailed table", "full table", "all rows", "list all",
+            "row by row", "each row"
         )
         highlight_terms = ("highlight", "red", "color", "most", "maximum", "max")
         summary_terms = (
-            "average", "avg", "total", "sum", "count", "minimum", "maximum", "metric"
+            "average", "avg", "total", "sum", "count", "minimum", "maximum",
+            "metric", "coefficient", "correlation", "regression", "weight", "weights"
         )
-        need_detail = any(t in q for t in detail_terms)
-        need_highlight = any(t in q for t in highlight_terms)
-        need_summary = any(t in q for t in summary_terms)
+        need_detail = any(has_term(t) for t in detail_terms)
+        need_highlight = any(has_term(t) for t in highlight_terms)
+        need_summary = any(has_term(t) for t in summary_terms)
         return {
             "requires_detailed_table": need_detail,
             "requires_highlight": need_highlight,
@@ -131,11 +139,6 @@ class UnderstandingStage(Stage):
         question over LLM-written flags, because weak models often output
         contradictory contracts (e.g. scalar question but requires_highlight=YES).
         """
-        current = {
-            "requires_detailed_table": self._parse_contract_flag(text, "requires_detailed_table"),
-            "requires_highlight": self._parse_contract_flag(text, "requires_highlight"),
-            "requires_summary_metrics": self._parse_contract_flag(text, "requires_summary_metrics"),
-        }
         inferred = self._infer_contract_from_question(user_question)
         # Offline-strict: inferred intent is authoritative to prevent noisy flags.
         final_flags = dict(inferred)
@@ -159,14 +162,15 @@ class UnderstandingStage(Stage):
         )
         # Remove any existing contract block emitted by LLM to avoid duplicates/conflicts.
         cleaned = re.sub(
-            r"\n*###\s*3\.\s*Output Contract\s*\(MANDATORY,\s*machine-readable\)\s*[\s\S]*$",
+            r"\n*###\s*3\.\s*Output Contract[\s\S]*$",
             "",
             text.rstrip(),
             flags=re.IGNORECASE,
         ).rstrip()
         return (cleaned + contract_block).strip()
 
-    def enhance(self, understanding_output: str, last_validation: dict) -> str:
+    def enhance(self, understanding_output: str, last_validation: dict,
+                user_question: str = "") -> str:
         """Refine understanding output based on validation feedback."""
         if not last_validation:
             return understanding_output
@@ -180,7 +184,8 @@ class UnderstandingStage(Stage):
             last_validation
         )
         messages = [{"role": "user", "content": prompt_text}]
-        return self._get_llm_response(messages)
+        enhanced = self._get_llm_response(messages)
+        return self._sanitize_understanding_output(enhanced, user_question)
 
     def _create_multimodal_prompt(self, user_question: str,
                                   excel_context_understanding: str,
