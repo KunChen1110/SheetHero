@@ -98,6 +98,10 @@ Format limits:
 
 _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
 **OFFLINE EXECUTION RULES (MANDATORY):**
+- Start with a preflight block:
+  - `all_files = list_all_workbooks()`
+  - `print("AVAILABLE_FILES:", [p.split("/")[-1] for p in all_files])`
+  - For each input file, print sheet name + columns + row count after DataFrame build.
 - Read inputs only from runtime:
   - `all_files = list_all_workbooks()`
   - `file_by_name = {p.split('/')[-1]: p for p in all_files}`
@@ -116,8 +120,17 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
     - `df = pd.DataFrame(rows, columns=header)`
 - Before selecting/merging columns, print observed schema:
   - `print(file_path.split('/')[-1], df.columns.tolist())`
-- For multi-file questions, read EACH file and combine with `pd.concat(..., ignore_index=True)`.
+- For multi-file questions, first decide schema relation:
+  - same headers across files -> `pd.concat(..., ignore_index=True)` is allowed.
+  - different headers/files with different roles -> keep separate DataFrames and merge on verified keys only.
 - Always verify required columns exist before use.
+- Never guess paths, filenames, sheet names, or columns.
+- If a requested column is missing, use safe fallback:
+  - compute with present columns only and print missing list, OR
+  - write explicit diagnostic summary to Output instead of crashing.
+- Never assume synthetic metadata columns (e.g., `File`, `source_file`) unless you explicitly created them.
+- Prefer built-in pandas/numpy computation over optional ML libraries.
+  - If linear regression is needed, use `numpy.linalg.lstsq` instead of sklearn.
 - For date filtering:
   - Parse date column with `pd.to_datetime(..., errors="coerce")`.
   - Do NOT hard-code year unless user explicitly specifies a year.
@@ -140,11 +153,16 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
 - `pd.read_excel`, `pd.ExcelFile`, `pd.read_csv`, `pd.read_table`
 - `DataFrame.to_excel`, `DataFrame.to_csv`
 - `openpyxl` direct operations like `sheet.cell(...)`, `wb.save(...)`
+- relying on optional third-party ML libraries (`sklearn`, `statsmodels`) that may be unavailable in runtime
 - `get_workbook(None)`
 - hard-coded absolute paths
 - invalid helper signatures (for example `inspector_multi(..., wb=...)`, `range_ref=` keyword)
 
 If runtime reports forbidden/error, apply minimal patch only. Do not refactor unrelated parts.
+
+**FAST EXIT RULE:**
+- As soon as final Output is written and `saved_file = save_workbook_to(output_path)` succeeds,
+  return `saved_file` immediately. Do not run extra exploratory code after save.
 """)
 
 _OFFLINE_PIPELINE_TEMPLATE = textwrap.dedent("""\
@@ -168,7 +186,13 @@ for file_path in all_files:
         print(file_path.split('/')[-1], df.columns.tolist(), len(df))
         dfs.append(df)
 
-combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else (dfs[0] if dfs else pd.DataFrame())
+same_schema = len({tuple(df.columns.tolist()) for df in dfs}) <= 1 if dfs else True
+if same_schema:
+    combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else (dfs[0] if dfs else pd.DataFrame())
+else:
+    # Heterogeneous schema: keep per-file DataFrames, then merge using verified keys.
+    # data_by_file = {basename: df}
+    combined = pd.DataFrame()
 
 # task-specific compute here, using only confirmed columns
 
@@ -205,6 +229,8 @@ _OFFLINE_OUTPUT_WORKFLOW = textwrap.dedent("""\
    - Build `row_numbers` as flat list of 1-based ints only.
    - Example: `row_numbers = [i + 2 for i in max_idx_list]`
 6. `saved_file = save_workbook_to(output_path)`
+   - Never pass a string literal path to `save_workbook_to(...)`.
+   - `output_path` is provided by runtime; use it directly.
 7. `print("SAVED_FILE:", saved_file)`
 8. Last expression must be `saved_file`
 """)

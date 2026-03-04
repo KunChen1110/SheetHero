@@ -213,3 +213,12 @@
 ## 23/2/2026
 ### --- Changeed --- 
 - Refactored the execution prompt, execution module in `src/backend/prompt` and `src/backend/stages/execution`.
+
+## 4/3/2026
+### ---Changed---
+- Refactored execution runtime into modular components for maintainability and clearer control flow.
+- Added dedicated forbidden policy module with signature-based memory to reduce repeated violations.
+- Added error feedback module for repeated-failure loop breaking and targeted minimal-fix guidance.
+- Added workbook grounding module to enforce runtime-visible files/schemas and reduce hallucinated references.
+- Added output contract checker to validate task-intent completion and block false-success saves.
+- Kept offline bounded behavior while reducing runtime complexity and improving debuggability.
