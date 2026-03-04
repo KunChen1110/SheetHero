@@ -16,6 +16,13 @@ def is_immediate_hard_forbidden(forbidden_err: str) -> bool:
         "file i/o with open()",
         "file i/o open()",
         "with open()",
+        "pd.read_excel",
+        "pd.read_csv",
+        "pd.read_table",
+        "pd.excelfile",
+        "placeholder input paths like /path/to/",
+        "hard-coded absolute paths",
+        "do not override all_files with literal list",
     )
     return any(marker in lower_msg for marker in high_risk_markers)
 
