@@ -153,6 +153,26 @@ class SheetHero:
         if any(marker in base_url for marker in ("localhost", "127.0.0.1", "11434", "ollama")):
             return "offline_strict"
         return "online_rich"
+
+    def _resolve_max_cycles(self) -> int:
+        """Max execute-validate cycles per request/session."""
+        raw = (os.getenv("SHEETHERO_MAX_EXEC_VALIDATE_CYCLES") or "").strip()
+        if raw:
+            try:
+                return max(1, int(raw))
+            except ValueError:
+                pass
+        return max(1, min(int(self.config.max_turns), 4))
+
+    def _resolve_execution_turn_budget(self) -> int:
+        """Max execution turns per iteration."""
+        raw = (os.getenv("SHEETHERO_EXECUTION_TURN_BUDGET") or "").strip()
+        if raw:
+            try:
+                return max(1, int(raw))
+            except ValueError:
+                pass
+        return max(1, min(int(self.config.max_turns), 5))
     
     # Run the agent
     def run(self, user_question: str) -> Dict[str, Any]:
@@ -165,6 +185,8 @@ class SheetHero:
             }
         runner = AgentRunner(
             max_turns=self.config.max_turns,
+            max_iterations=self._resolve_max_cycles(),
+            execution_turn_budget=self._resolve_execution_turn_budget(),
             progress_logger=self.progress_logger,
             token_budget=self.config.total_token_budget
         )
@@ -404,12 +426,16 @@ class SheetHero:
         self.execution_module.runner.excel_context_execution = execution_context
         append_ui_thought(session, "executing", "running", "Generating and running execution code")
         session.execution_validation_cycles += 1
-        
-        self._log(f"The max turn is {self.config.max_turns}", True)
+        execution_turn_budget = self._resolve_execution_turn_budget()
+        max_cycles = self._resolve_max_cycles()
+        self._log(
+            f"Execution budgets: turns_per_iteration={execution_turn_budget}, max_cycles={max_cycles}",
+            True
+        )
         execution_result = self.execution_module.run(
             understanding_output=understanding_output,
             user_question=user_query,
-            max_turns=self.config.max_turns
+            max_turns=execution_turn_budget
         )
         append_ui_thought(
             session,
@@ -441,7 +467,7 @@ class SheetHero:
             user_question=user_query,
             understanding_output=understanding_output
         )
-        max_cycles = max(1, int(self.config.max_turns))
+        max_cycles = self._resolve_max_cycles()
         if (
             not validation_result.get("validation_passed")
             and validation_result.get("requires_reexecution", True)
@@ -495,7 +521,8 @@ class SheetHero:
             else:
                 session.understanding = self.understanding_module.enhance(
                     session.understanding,
-                    validation_result
+                    validation_result,
+                    user_question=current_request,
                 )
                 session.state = "executing"
                 return {"type": "progress", "stage": "executing"}
