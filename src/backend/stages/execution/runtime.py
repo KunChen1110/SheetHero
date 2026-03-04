@@ -1,6 +1,7 @@
 """Execution runtime loop for multi-turn analysis."""
 
 import os
+import re
 from typing import Dict, Any, Optional
 
 from ...log.logger_registry import LoggerRegistry
@@ -69,6 +70,9 @@ class ExecutionRuntime(StageRuntime):
         )
         self._max_same_error_streak = int(
             os.getenv("SHEETHERO_MAX_SAME_ERROR_STREAK", "2")
+        )
+        self._max_same_error_before_abort = int(
+            os.getenv("SHEETHERO_MAX_SAME_ERROR_BEFORE_ABORT", "4")
         )
         self._last_error_signature: Optional[str] = None
         self._same_error_streak = 0
@@ -227,6 +231,35 @@ class ExecutionRuntime(StageRuntime):
             return True, ""
 
         return False, soft_warning
+
+    def _offline_preflight_check(self, code_action: str) -> Optional[str]:
+        """Reject obviously drifting offline code before sandbox execution."""
+        if not self._is_offline_strict:
+            return None
+        code = (code_action or "").strip()
+        if not code:
+            return "PREFLIGHT_OFFLINE: empty code block."
+        lower = code.lower()
+        if "list_all_workbooks(" not in lower:
+            return (
+                "PREFLIGHT_OFFLINE: code must read runtime inputs via list_all_workbooks().\n"
+                "- Add: all_files = list_all_workbooks()\n"
+                "- Resolve file_path from all_files or file_by_name mapping."
+            )
+        if not re.search(r"save_workbook_to\s*\(\s*output_path\s*\)", code, flags=re.IGNORECASE):
+            return (
+                "PREFLIGHT_OFFLINE: code must save with save_workbook_to(output_path).\n"
+                "- End with:\n"
+                "  saved_file = save_workbook_to(output_path)\n"
+                "  print(\"SAVED_FILE:\", saved_file)\n"
+                "  saved_file"
+            )
+        if "inspector_multi(" not in lower:
+            return (
+                "PREFLIGHT_OFFLINE: code must read sheet content via inspector_multi(...).\n"
+                "- Use: raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)"
+            )
+        return None
 
     @staticmethod
     def _has_summary_write_signal_from_code(code_action: str) -> bool:
@@ -391,6 +424,20 @@ class ExecutionRuntime(StageRuntime):
                 )
                 if should_continue:
                     continue
+                preflight_issue = self._offline_preflight_check(code_action)
+                if preflight_issue is not None:
+                    self._log_to_file(
+                        f"\n**Preflight blocked (Turn {turn + 1}):**\n{preflight_issue}\n"
+                    )
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": (
+                            preflight_issue
+                            + "\nReturn one full corrected ```python ... ``` block. "
+                            "Keep minimal edits and preserve task logic."
+                        )
+                    })
+                    continue
 
                 logger.info(f"Executing Python code:\n{code_action}")
                 self._log_to_file(
@@ -439,6 +486,29 @@ class ExecutionRuntime(StageRuntime):
                         if soft_forbidden_warning:
                             feedback_to_model = soft_forbidden_warning + "\n\n" + feedback_to_model
                         self.conversation_history.append({"role": "user", "content": feedback_to_model})
+                        if (
+                            self._is_offline_strict
+                            and self._same_error_streak >= self._max_same_error_before_abort
+                        ):
+                            logger.warning(
+                                "Early abort: same execution error repeated %s times.",
+                                self._same_error_streak,
+                            )
+                            return {
+                                "success": False,
+                                "answer": (
+                                    "Early abort: repeated identical execution error. "
+                                    "Proceed to validation-enhanced next iteration."
+                                ),
+                                "total_turns": turn + 1,
+                                "conversation_history": self.history_formatter.format_history(
+                                    self.conversation_history
+                                ),
+                                "execution_summary": self.summary_builder.build(
+                                    execution_steps,
+                                    None
+                                )
+                            }
                         continue
 
                     self._last_error_signature = None
@@ -529,6 +599,29 @@ class ExecutionRuntime(StageRuntime):
                     })
 
                     self.conversation_history.append({"role": "user", "content": feedback_to_model})
+                    if (
+                        self._is_offline_strict
+                        and self._same_error_streak >= self._max_same_error_before_abort
+                    ):
+                        logger.warning(
+                            "Early abort: same execution error repeated %s times.",
+                            self._same_error_streak,
+                        )
+                        return {
+                            "success": False,
+                            "answer": (
+                                "Early abort: repeated identical execution error. "
+                                "Proceed to validation-enhanced next iteration."
+                            ),
+                            "total_turns": turn + 1,
+                            "conversation_history": self.history_formatter.format_history(
+                                self.conversation_history
+                            ),
+                            "execution_summary": self.summary_builder.build(
+                                execution_steps,
+                                None
+                            )
+                        }
 
             except Exception as e:
                 logger.error(f"LLM Error: {str(e)}")
