@@ -14,21 +14,21 @@ export function SidebarFileDisplay({
   onRemoveFile,
 }: SidebarFileDisplayProperties) {
   // Handles when a file was dropped in to the drag and drop container
-  function handleDrop(event: React.DragEvent): void {
-    event.preventDefault();
-    const droppedFiles = Array.from(event.dataTransfer.files); // TODO: THIS IS CURRENTLY BROKEN AND DOES NOT WORK! <--- pls fix
-    onAddFiles(droppedFiles);
-  }
+  // function handleDrop(event: React.DragEvent): void {
+  //   event.preventDefault();
+  //   const droppedFiles = Array.from(event.dataTransfer.files); // TODO: THIS IS CURRENTLY BROKEN AND DOES NOT WORK! <--- pls fix
+  //   onAddFiles(droppedFiles);
+  // }
 
-  // Makes the drag & drop functionality work properly
-  function handleDragOver(event: React.DragEvent): void {
-    event.preventDefault();
-  }
+  // // Makes the drag & drop functionality work properly
+  // function handleDragOver(event: React.DragEvent): void {
+  //   event.preventDefault();
+  // }
 
-  // Makes the drag & drop functionality work properly
-  function handleDragLeave(event: React.DragEvent): void {
-    event.preventDefault();
-  }
+  // // Makes the drag & drop functionality work properly
+  // function handleDragLeave(event: React.DragEvent): void {
+  //   event.preventDefault();
+  // }
 
   // Renders an empty state with drag & drop instructions
   function renderEmptyState() {
@@ -39,7 +39,7 @@ export function SidebarFileDisplay({
         </div>
         {/* Display drag & drop instructions */}
         <p className="text-xs text-(--sh-medium-grey)">No files uploaded</p>
-        <p className="text-xs text-(--sh-medium-grey)">Drag & drop here</p>
+        <p className="text-xs text-(--sh-medium-grey)">Upload files to query</p>
       </div>
     );
   }
@@ -81,9 +81,9 @@ export function SidebarFileDisplay({
   return (
     <div
       className="p-3 border-b border-(--sh-border-grey)"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
+      // onDrop={handleDrop}
+      // onDragOver={handleDragOver}
+      // onDragLeave={handleDragLeave}
     >
       {/* If there are no files, render the empty state */}
       {/* Otherwise, render the file list */}
