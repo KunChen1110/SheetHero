@@ -62,8 +62,8 @@ class ExecutionErrorFeedbackBuilder:
                 "  for file_path in all_files:\n"
                 "      wb = get_workbook(file_path)\n"
                 "      sheet_name = wb.sheetnames[0]\n"
-                "      raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "      df = pd.DataFrame(raw[1:], columns=raw[0]) if raw and len(raw) > 1 else pd.DataFrame()\n"
+                "      table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                "      df = pd.DataFrame(table[\"rows\"], columns=table[\"header\"]) if table[\"header\"] else pd.DataFrame()\n"
                 "      print(file_path.split('/')[-1], 'columns:', df.columns.tolist())\n"
                 "- Only select/merge on columns that are confirmed present in printed columns.\n"
                 "- Do not invent semantic column names; map from actual headers."
@@ -73,11 +73,9 @@ class ExecutionErrorFeedbackBuilder:
             return (
                 "LOOP_BREAKER_OFFLINE: same concat error repeated.\n"
                 "- Replace your DataFrame loading block with this safe pattern (task-agnostic):\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  header = [str(h).strip() if h is not None else \"\" for h in raw[0]]\n"
-                "  keep = [i for i,h in enumerate(header) if h != \"\"]\n"
-                "  header = [header[i] for i in keep]\n"
-                "  rows = [[r[i] if i < len(r) else None for i in keep] for r in raw[1:]]\n"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                "  header = table[\"header\"]\n"
+                "  rows = table[\"rows\"]\n"
                 "  seen = {}; uniq = []\n"
                 "  for h in header:\n"
                 "      n = seen.get(h, 0); seen[h] = n + 1\n"
@@ -122,6 +120,15 @@ class ExecutionErrorFeedbackBuilder:
                 "- Use explicit column-name access for all numeric conversions."
             )
 
+        if "schema mismatch between files" in error_signature:
+            return (
+                "LOOP_BREAKER_OFFLINE: repeated same-schema assumption on multi-file task.\n"
+                "- Stop comparing all file headers for equality.\n"
+                "- Load each workbook separately, print columns, and assign table roles from verified headers.\n"
+                "- Keep complementary tables separate (for example task table vs dependency table).\n"
+                "- Only concat tables that truly share the same role and same headers."
+            )
+
         return (
             "LOOP_BREAKER_OFFLINE: same runtime error repeated.\n"
             "- Rewrite only the failing block from scratch, keep the rest minimal.\n"
@@ -148,9 +155,143 @@ class ExecutionErrorFeedbackBuilder:
                 "- Keep the same overall code shape; only replace the wrong sheet_name string."
             )
 
+        if "Schema mismatch between files." in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: different file roles do not need matching schemas.\n"
+                "- Do NOT assert same schema across all input files.\n"
+                "- Keep each workbook as its own DataFrame and identify role by verified headers.\n"
+                "- Task table: `Task ID` + duration/name/priority-like columns.\n"
+                "- Dependency table: `Task ID` + `Depends on`.\n"
+                "- Only concat tables that truly have the same role and same headers."
+            )
+
+        if (
+            "Could not identify the P&L, sales/marketing, and KPI target tables." in execution_result
+            or "No structured table matched headers" in execution_result
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: this dashboard task should use the single runtime helper path.\n"
+                "- Use exactly:\n"
+                "  `dashboard_result = build_financial_dashboard_report()`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')`\n"
+                "  `saved_file = save_workbook_to(output_path)`\n"
+                "- Do not manually parse header rows or rebuild the dashboard in code."
+            )
+
+        if "No candidate tables were loaded." in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: this screening task should use the single runtime helper path.\n"
+                "- Use exactly:\n"
+                "  `screening_result = build_candidate_screening_report()`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(screening_result['detail_data'], 'Output', 'A1')`\n"
+                "  `saved_file = save_workbook_to(output_path)`\n"
+                "- Do not manually load or concatenate candidate files in code."
+            )
+
+        if "No inventory parameter table was loaded." in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: this EOQ task should use the single runtime helper path.\n"
+                "- Use exactly:\n"
+                "  `inventory_result = build_inventory_eoq_report()`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(inventory_result['detail_data'], 'Output', 'A1')`\n"
+                "  `saved_file = save_workbook_to(output_path)`\n"
+                "- Do not manually parse parameters or build EOQ tables in code."
+            )
+
+        if "Hospital utilisation workflow expects patient, service, and staff tables." in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: this hospital task should use the single runtime helper path.\n"
+                "- Use exactly:\n"
+                "  `report = build_hospital_utilisation_report()`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+                "  `if report['highlight_rows']:` then highlight them; otherwise print `NO_HIGHLIGHT_ROWS:`.\n"
+                "- Do not manually merge the patient/service/staff tables in code."
+            )
+
+        if "No module named 'plotnine'" in execution_result or "No module named 'seaborn'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: do not import extra plotting libraries in this task.\n"
+                "- `plt` is already available in the sandbox.\n"
+                "- Keep the helper path:\n"
+                "  `analysis = build_region_growth_analysis(all_files[0], sheet_name='Data', start_year=2020, end_year=2024)`\n"
+                "  `chart_df = analysis['chart_df']`\n"
+                "  `for region in analysis['region_columns']: plt.plot(chart_df['Year'], chart_df[region], label=region)`\n"
+                "  `plt.xlabel('Year')`; `plt.ylabel('Penetration Rate')`; `plt.legend()`\n"
+                "  `save_plot_to_excel('Output', 'F2')`\n"
+                "- Remove `plotnine`, `seaborn`, and other external plot imports."
+            )
+
+        if (
+            "No module named 'runtime_path'" in execution_result
+            or "No module named 'runtime'" in execution_result
+            or "No module named 'graph_helper'" in execution_result
+            or "No module named 'excel_output'" in execution_result
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: do not import runtime helper modules.\n"
+                "- Helper functions are already injected into the sandbox globals.\n"
+                "- Remove imports like `from runtime import ...`, `from runtime_path import ...`, "
+                "`from graph_helper import ...`, and `from excel_output import ...`.\n"
+                "- Call the helpers directly."
+            )
+
+        if "'list' object has no attribute 'columns'" in execution_result or "'list' object has no attribute 'values'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: helper `detail_data` output was treated like a DataFrame.\n"
+                "- `...['detail_data']` is already a ready-to-write 2D table payload.\n"
+                "- Write it directly:\n"
+                "  `write_dataframe_to_sheet(result['detail_data'], 'Output', 'A1')`\n"
+                "- Or use the DataFrame alias instead:\n"
+                "  `write_dataframe_to_sheet(result['output_df'], 'Output', 'A1')`"
+            )
+
+        if "KeyError: 'coef'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: the regression helper does not return a `coef` key.\n"
+                "- Use the provided outputs instead:\n"
+                "  `regression_result['output_df']`\n"
+                "  `regression_result['detail_data']`\n"
+                "  `regression_result['coefficients_df']`\n"
+                "- Write `regression_result['output_df']` directly to Output."
+            )
+
+        if (
+            "Column 'Task Name' not found in" in execution_result
+            or "Column 'Priority' not found in" in execution_result
+            or "Column 'Duration (hours)' not found in" in execution_result
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: `build_dependency_schedule(...)` was given the wrong task table shape.\n"
+                "- Do NOT construct a simplified `pd.DataFrame({...})` before calling the helper.\n"
+                "- Select tables with `find_table_by_headers(...)` and pass the original DataFrames directly:\n"
+                "  `schedule_result = build_dependency_schedule(task_table['df'], dependency_table['df'], start_time='08:00')`\n"
+                "- The helper requires real task metadata columns like `Task Name`, `Duration (hours)`, and `Priority`."
+            )
+
         column_missing = re.search(r"KeyError:\s*'([^']+)'", execution_result)
         if column_missing:
             missing_col = column_missing.group(1)
+            if re.fullmatch(r"[A-Za-z]+\d+", missing_col):
+                return (
+                    "MINIMAL FIX REQUIRED: graph/task lookup failed on a task ID, not on a column name.\n"
+                    f"- Missing task ID during scheduling: '{missing_col}'\n"
+                    "- Rebuild task and dependency tables from `table['rows']` + `table['header']` without dropping the first data row.\n"
+                    "- Keep blank/NaN `Depends on` as ROOT (no incoming edge).\n"
+                    "- Build adjacency/in_degree only from task IDs that exist in the task table."
+                )
+            if missing_col.strip().lower() == "depends on":
+                return (
+                    "MINIMAL FIX REQUIRED: dependency column missing, likely wrong file/sheet loaded.\n"
+                    "- Expected dependency schema: ['Task ID', 'Depends on'].\n"
+                    "- In multi-file tasks, read each workbook via read_table_multi(file_path, sheet_name, range_ref).\n"
+                    "- Normalize headers before checks:\n"
+                    "  df.columns = [str(c).replace('_x000D_', '').replace('_x000d_', '').strip() for c in df.columns]\n"
+                    "- Assert required columns before DAG construction."
+                )
             if missing_col.endswith(".xlsx") or "/" in missing_col:
                 basenames = self._available_workbook_basenames()
                 available_str = ", ".join(basenames) if basenames else "(unknown)"
@@ -165,7 +306,7 @@ class ExecutionErrorFeedbackBuilder:
                     "  file_path = file_by_name[input_name]\n"
                     "  wb = get_workbook(file_path)\n"
                     "  sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
+                    "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
                     "- Do not cache DataFrames in a dict with mixed key formats."
                 )
             observed_headers = self._observed_header_set()
@@ -188,6 +329,52 @@ class ExecutionErrorFeedbackBuilder:
                 "- Replace only the wrong column reference with one that exists in printed columns."
             )
 
+        if "KeyError: nan" in execution_result or re.search(r"Execution error:\s*nan(?:\n|$)", execution_result):
+            return (
+                "MINIMAL FIX REQUIRED: blank/NaN dependency was used as a graph key.\n"
+                "- Treat blank or NaN `Depends on` as ROOT and skip edge creation.\n"
+                "- Use exactly:\n"
+                "  if pd.isna(dep) or str(dep).strip() == '':\n"
+                "      continue\n"
+                "  adjacency[dep].append(task_id)\n"
+                "  in_degree[task_id] += 1"
+            )
+
+        if "float() argument must be a string or a real number, not 'Series'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `float(...)` was called on a filtered pandas Series.\n"
+                "- Select one task row first, then read scalar fields from that row.\n"
+                "- Use exactly:\n"
+                "  task_row = task_df.loc[task_df['Task ID'] == task_id].iloc[0]\n"
+                "  duration_minutes = int(round(float(task_row['Duration (hours)']) * 60))\n"
+                "  task_name = task_row['Task Name']\n"
+                "  priority = task_row['Priority']\n"
+                "- Do not wrap `task_df[task_df['Task ID'] == task_id]['Duration (hours)']` directly with `float(...)`."
+            )
+
+        if "tuple indices must be integers or slices, not str" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: a `(index, row)` tuple from `iterrows()` was treated like a row object.\n"
+                "- Replace `for row in df.iterrows():` with `for _, row in df.iterrows():` before any `row['col']` access.\n"
+                "- For total duration, prefer the column directly:\n"
+                "  total_duration_hours = pd.to_numeric(task_df['Duration (hours)'], errors='coerce').sum()\n"
+                "  total_duration_minutes = int(round(total_duration_hours * 60))\n"
+                "- Do not access `row['Duration (hours)']` if `row` came from plain `iterrows()` without unpacking."
+            )
+
+        if "The truth value of a DataFrame is ambiguous" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: a pandas DataFrame was used directly in an `if` condition.\n"
+                "- Use `is None` to check whether the task/dependency DataFrame was found.\n"
+                "- Correct shape:\n"
+                "  task_df = None\n"
+                "  dependency_df = None\n"
+                "  ...\n"
+                "  if task_df is None or dependency_df is None:\n"
+                "      raise ValueError('Missing either task table or dependency table')\n"
+                "- Do not write `if not task_df` or `if task_df:`."
+            )
+
         name_error = re.search(r"NameError:\s*name '([^']+)' is not defined", execution_result)
         if name_error:
             missing_name = name_error.group(1)
@@ -207,7 +394,7 @@ class ExecutionErrorFeedbackBuilder:
                     "- Define variables in-order for each file:\n"
                     "  wb = get_workbook(file_path)\n"
                     "  sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
+                    "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
                     "- Do not use variables before assignment."
                 )
             if missing_name == "sheet":
@@ -232,7 +419,7 @@ class ExecutionErrorFeedbackBuilder:
             return (
                 "MINIMAL FIX REQUIRED: remove external helper imports.\n"
                 "- Do NOT import common_functions.\n"
-                "- Use runtime-injected helpers directly: list_all_workbooks, inspector_multi, "
+                "- Use runtime-injected helpers directly: list_all_workbooks, read_table_multi, "
                 "create_output_sheet, write_dataframe_to_sheet, save_workbook_to."
             )
 
@@ -252,14 +439,14 @@ class ExecutionErrorFeedbackBuilder:
                 "- Do not use pandas-style kwargs like startrow/startcol."
             )
 
-        if "unexpected keyword argument 'wb'" in execution_result and "inspector_multi" in execution_result:
+        if "unexpected keyword argument 'wb'" in execution_result and "read_table_multi" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: inspector_multi does not accept keyword `wb`.\n"
-                "- Correct signature: inspector_multi(file_path, range_ref, sheet_name)\n"
+                "MINIMAL FIX REQUIRED: read_table_multi does not accept keyword `wb`.\n"
+                "- Correct signature: read_table_multi(file_path, sheet_name, range_ref)\n"
                 "- Example:\n"
                 "  wb = get_workbook(file_path)\n"
                 "  sheet_name = wb.sheetnames[0]\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")"
             )
 
         if "Sheet 'Output' not found in output workbook" in execution_result:
@@ -299,27 +486,27 @@ class ExecutionErrorFeedbackBuilder:
 
         if "expected str, bytes or os.PathLike object, not Workbook" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: inspector_multi first argument must be FILE PATH STRING, not Workbook object.\n"
-                "- Correct signature: inspector_multi(file_path, range_ref, sheet_name)\n"
-                "- Example: data = inspector_multi(all_files[0], \"A1:D30\", \"Sheet1\")"
+                "MINIMAL FIX REQUIRED: read_table_multi first argument must be FILE PATH STRING, not Workbook object.\n"
+                "- Correct signature: read_table_multi(file_path, sheet_name, range_ref)\n"
+                "- Example: table = read_table_multi(all_files[0], \"Sheet1\", \"A1:D30\")"
             )
 
         if "'generator' object has no attribute 'tolist'" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: you are treating worksheet/generator as DataFrame.\n"
-                "- First get tabular values via inspector_multi(...)\n"
+                "- First get cleaned tabular values via read_table_multi(...)\n"
                 "- Then build DataFrame with header row:\n"
-                "  data = inspector_multi(all_files[0], \"A1:D30\", \"Sheet1\")\n"
-                "  df = pd.DataFrame(data[1:], columns=data[0])"
+                "  table = read_table_multi(all_files[0], \"Sheet1\", \"A1:D30\")\n"
+                "  df = pd.DataFrame(table[\"rows\"], columns=table[\"header\"])"
             )
 
         if "'list' object has no attribute 'columns'" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: inspector_multi returns list-of-lists, not DataFrame.\n"
-                "- Do NOT do: pd.DataFrame(inspector_multi(...))\n"
+                "MINIMAL FIX REQUIRED: read_table_multi returns a table dict, not a DataFrame.\n"
+                "- Do NOT do: pd.DataFrame(read_table_multi(...))\n"
                 "- Correct pattern:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  df = pd.DataFrame(raw[1:], columns=raw[0])\n"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                "  df = pd.DataFrame(table[\"rows\"], columns=table[\"header\"])\n"
                 "- Then use df.columns and merge/groupby operations."
             )
 
@@ -327,8 +514,8 @@ class ExecutionErrorFeedbackBuilder:
             return (
                 "MINIMAL FIX REQUIRED: you are concatenating lists instead of DataFrames.\n"
                 "- For each file:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  df = pd.DataFrame(raw[1:], columns=raw[0])\n"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                "  df = pd.DataFrame(table[\"rows\"], columns=table[\"header\"])\n"
                 "- Append DataFrames to a list and then pd.concat(df_list, ignore_index=True)."
             )
 
@@ -389,11 +576,9 @@ class ExecutionErrorFeedbackBuilder:
                 "MINIMAL FIX REQUIRED: concat failed because columns are non-unique (often from wrong header row/range).\n"
                 "- Read with header row included: use range starting at A1 (not A2) unless you set headers manually.\n"
                 "- Build DataFrame with cleaned unique headers:\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                "  header = [str(h).strip() if h is not None else \"\" for h in raw[0]]\n"
-                "  keep = [i for i,h in enumerate(header) if h != \"\"]\n"
-                "  header = [header[i] for i in keep]\n"
-                "  rows = [[r[i] for i in keep] for r in raw[1:]]\n"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                "  header = table[\"header\"]\n"
+                "  rows = table[\"rows\"]\n"
                 "  seen = {}; uniq = []\n"
                 "  for h in header: n = seen.get(h, 0); seen[h] = n + 1; uniq.append(h if n == 0 else f\"{h}_{n+1}\")\n"
                 "  df = pd.DataFrame(rows, columns=uniq)\n"
@@ -402,26 +587,27 @@ class ExecutionErrorFeedbackBuilder:
 
         if "unexpected keyword argument 'range_ref'" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: inspector_multi does not accept keyword range_ref.\n"
+                "MINIMAL FIX REQUIRED: read_table_multi does not accept keyword range_ref.\n"
                 "- Use positional args only.\n"
-                "- Correct: inspector_multi(file_path, \"A1:D30\", \"Sheet1\")"
+                "- Correct: read_table_multi(file_path, \"Sheet1\", \"A1:D30\")"
             )
 
         if "missing 1 required positional argument: 'rr'" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: inspector_multi missing range argument.\n"
-                "- Pass range_ref as second positional arg.\n"
-                "- Correct: inspector_multi(file_path, \"A1:D30\", \"Sheet1\")"
+                "MINIMAL FIX REQUIRED: read_table_multi missing range argument.\n"
+                "- Pass range_ref as third positional arg.\n"
+                "- Correct: read_table_multi(file_path, \"Sheet1\", \"A1:D30\")"
             )
 
-        if "Sheet 'Sheet1' not found" in execution_result and "Available sheets:" in execution_result:
+        if "Sheet '" in execution_result and "not found" in execution_result and "Available sheets:" in execution_result:
             return (
-                "MINIMAL FIX REQUIRED: wrong sheet name assumption.\n"
-                "- For CSV-backed workbooks, sheet is often filename-based (not 'Sheet1').\n"
-                "- Use dynamic sheet name:\n"
+                "MINIMAL FIX REQUIRED: wrong sheet/workbook selection.\n"
+                "- Do not hard-code sheet names like 'Sheet1'.\n"
+                "- In multi-file tasks, read per file with read_table_multi(...).\n"
+                "- Use dynamic sheet name per file:\n"
                 "  wb = get_workbook(file_path)\n"
                 "  sheet_name = wb.sheetnames[0]\n"
-                "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)"
+                "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")"
             )
 
         if ".xlsx.xlsx" in execution_result:
@@ -475,7 +661,7 @@ class ExecutionErrorFeedbackBuilder:
                 "  all_files = list_all_workbooks()\n"
                 "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
                 "  file_path = file_by_name['" + missing_name + "']\n"
-                "- Then read via `get_workbook(file_path)` + `inspector_multi(...)`."
+                "- Then read via `get_workbook(file_path)` + `read_table_multi(...)`."
             )
 
         file_not_found = re.search(
@@ -500,8 +686,8 @@ class ExecutionErrorFeedbackBuilder:
                     "  file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
                     "  file_path = file_by_name['" + missing_base + "']\n"
                     "  wb = get_workbook(file_path); sheet_name = wb.sheetnames[0]\n"
-                    "  raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-                    "  df = pd.DataFrame(raw[1:], columns=raw[0])"
+                    "  table = read_table_multi(file_path, sheet_name, \"A1:Z200\")\n"
+                    "  df = pd.DataFrame(table[\"rows\"], columns=table[\"header\"])"
                 )
             return (
                 "MINIMAL FIX REQUIRED: referenced input file/path is not part of loaded task inputs.\n"
@@ -536,6 +722,63 @@ class ExecutionErrorFeedbackBuilder:
                 "MINIMAL FIX REQUIRED: NaN dependency should be treated as root task.\n"
                 "- Use: if pd.isna(dep) or str(dep).strip() == '': continue\n"
                 "- Do NOT create graph edges from NaN/blank dependencies."
+            )
+
+        if "unsupported operand type(s) for +: 'int' and 'str'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: time arithmetic is mixing integers and strings.\n"
+                "- Keep scheduling time as integer minutes only:\n"
+                "  current_minutes = 8 * 60\n"
+                "  end_minutes = current_minutes + int(round(duration * 60))\n"
+                "- Format only when writing output:\n"
+                "  start_str = f\"{current_minutes // 60:02d}:{current_minutes % 60:02d}\"\n"
+                "  end_str = f\"{end_minutes // 60:02d}:{end_minutes % 60:02d}\""
+            )
+
+        if re.search(r"invalid literal for int\(\) with base 10:\s*'t\d+'", execution_result, flags=re.IGNORECASE):
+            return (
+                "MINIMAL FIX REQUIRED: task IDs like `T1` are string labels, not integers.\n"
+                "- Do NOT cast `Task ID` or `Depends on` to `int`.\n"
+                "- Keep graph nodes as the exact string IDs from the sheets.\n"
+                "- Use:\n"
+                "  task_id_set = set(task_df['Task ID'])\n"
+                "  adjacency = {task_id: [] for task_id in task_id_set}\n"
+                "  in_degree = {task_id: 0 for task_id in task_id_set}\n"
+                "- Build edges with `adjacency[depends_on].append(task_id)` and `in_degree[task_id] += 1`."
+            )
+
+        if "invalid literal for int() with base 10:" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: a string value was multiplied before numeric conversion.\n"
+                "- Convert duration/text values to float before `* 60`.\n"
+                "- Correct pattern:\n"
+                "  df_tasks['Duration (hours)'] = pd.to_numeric(df_tasks['Duration (hours)'], errors='raise').astype(float)\n"
+                "  duration_minutes = int(round(float(duration_value) * 60))\n"
+                "- Do not do `int(string_value * 60)`."
+            )
+
+        if "unsupported operand type(s) for -: 'list' and 'set'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: task coverage comparison is mixing list and set types.\n"
+                "- Build `task_id_set` as a real set:\n"
+                "  task_id_set = set(task_df['Task ID'])\n"
+                "- Build `scheduled_task_ids` as a set before comparison.\n"
+                "- Do not use `.tolist()` for the task-id coverage assertion."
+            )
+
+        if "type str doesn't define __round__ method" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: duration is still a string.\n"
+                "- Convert duration column once before scheduling:\n"
+                "  df_tasks['Duration (hours)'] = pd.to_numeric(df_tasks['Duration (hours)'], errors='raise').astype(float)\n"
+                "- Do not call round() on raw string values."
+            )
+
+        if "name 'completion_times' is not defined" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: completion_times must be initialized before the scheduling loop.\n"
+                "- Add before loop: `completion_times = {}`\n"
+                "- Keep all completion values in integer minutes, not strings."
             )
 
         if "could not convert string to float" in execution_result and "09:30" in execution_result:
@@ -589,6 +832,14 @@ class ExecutionErrorFeedbackBuilder:
                 "  present = [c for c in cols if c in df.columns]\n"
                 "  out_df = df[present].copy()\n"
                 "- Then write `out_df` directly."
+            )
+
+        if "Invalid type <class 'str'>. Must be int or float." in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: time arithmetic received string duration values.\n"
+                "- Convert duration to float before scheduling:\n"
+                "  tasks['Duration (hours)'] = pd.to_numeric(tasks['Duration (hours)'], errors='raise').astype(float)\n"
+                "- Use numeric duration only in timedelta calculations."
             )
 
         if "No module named 'networkx'" in execution_result or "name 'nx' is not defined" in execution_result:

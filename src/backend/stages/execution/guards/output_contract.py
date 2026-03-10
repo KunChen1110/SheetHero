@@ -42,6 +42,95 @@ class OutputContractChecker:
         return rows
 
     @staticmethod
+    def _column_letters_to_index(col: str) -> int:
+        total = 0
+        for ch in (col or "").upper():
+            if "A" <= ch <= "Z":
+                total = total * 26 + (ord(ch) - ord("A") + 1)
+        return total
+
+    @staticmethod
+    def _index_to_column_letters(index: int) -> str:
+        letters = []
+        value = index
+        while value > 0:
+            value, remainder = divmod(value - 1, 26)
+            letters.append(chr(ord("A") + remainder))
+        return "".join(reversed(letters)) or "A"
+
+    @classmethod
+    def _extract_write_ranges(cls, execution_result: str) -> list[tuple[str, int, int, int, int]]:
+        """Parse helper write rectangles like 'Wrote 7 rows to Output!A1:E7'."""
+        if not execution_result:
+            return []
+        ranges: list[tuple[str, int, int, int, int]] = []
+        pattern = r"Wrote\s+\d+\s+rows\s+to\s+([^!\n]+)!([A-Z]+)(\d+):([A-Z]+)(\d+)"
+        for sheet_name, start_col, start_row, end_col, end_row in re.findall(
+            pattern,
+            execution_result,
+            flags=re.IGNORECASE,
+        ):
+            start_idx = cls._column_letters_to_index(start_col)
+            end_idx = cls._column_letters_to_index(end_col)
+            try:
+                start_row_int = int(start_row)
+                end_row_int = int(end_row)
+            except Exception:
+                continue
+            if not start_idx or not end_idx:
+                continue
+            ranges.append((sheet_name.strip(), start_row_int, start_idx, end_row_int, end_idx))
+        return ranges
+
+    @staticmethod
+    def _ranges_overlap(
+        start_row: int,
+        start_col: int,
+        end_row: int,
+        end_col: int,
+        other_start_row: int,
+        other_start_col: int,
+        other_end_row: int,
+        other_end_col: int,
+    ) -> bool:
+        rows_overlap = not (end_row < other_start_row or other_end_row < start_row)
+        cols_overlap = not (end_col < other_start_col or other_end_col < start_col)
+        return rows_overlap and cols_overlap
+
+    @classmethod
+    def _find_overlapping_write_ranges(
+        cls,
+        execution_result: str,
+    ) -> list[tuple[tuple[str, int, int, int, int], tuple[str, int, int, int, int]]]:
+        ranges = cls._extract_write_ranges(execution_result)
+        overlaps: list[tuple[tuple[str, int, int, int, int], tuple[str, int, int, int, int]]] = []
+        for idx, current in enumerate(ranges):
+            current_sheet, current_start_row, current_start_col, current_end_row, current_end_col = current
+            for previous in ranges[:idx]:
+                prev_sheet, prev_start_row, prev_start_col, prev_end_row, prev_end_col = previous
+                if current_sheet != prev_sheet:
+                    continue
+                if cls._ranges_overlap(
+                    current_start_row,
+                    current_start_col,
+                    current_end_row,
+                    current_end_col,
+                    prev_start_row,
+                    prev_start_col,
+                    prev_end_row,
+                    prev_end_col,
+                ):
+                    overlaps.append((previous, current))
+        return overlaps
+
+    @classmethod
+    def _format_write_range(cls, write_range: tuple[str, int, int, int, int]) -> str:
+        sheet_name, start_row, start_col, end_row, end_col = write_range
+        start_cell = f"{cls._index_to_column_letters(start_col)}{start_row}"
+        end_cell = f"{cls._index_to_column_letters(end_col)}{end_row}"
+        return f"{sheet_name}!{start_cell}:{end_cell}"
+
+    @staticmethod
     def _extract_highlight_rows(execution_result: str) -> list[int]:
         """Parse highlighted row numbers from helper logs."""
         if not execution_result:
@@ -59,6 +148,19 @@ class OutputContractChecker:
                 except Exception:
                     continue
         return parsed
+
+    @staticmethod
+    def _extract_summary_rows(execution_result: str) -> list[int]:
+        """Parse summary row positions from helper logs."""
+        if not execution_result:
+            return []
+        rows: list[int] = []
+        for raw in re.findall(r"Added summary row at row\s+(\d+)", execution_result, flags=re.IGNORECASE):
+            try:
+                rows.append(int(raw))
+            except Exception:
+                continue
+        return rows
 
     @classmethod
     def has_meaningful_output_rows(cls, execution_result: str) -> bool:
@@ -118,17 +220,29 @@ class OutputContractChecker:
         rows = cls._extract_rows_written(execution_result)
         max_rows = max(rows) if rows else 0
         highlight_rows = cls._extract_highlight_rows(execution_result)
+        summary_rows = cls._extract_summary_rows(execution_result)
+        overlapping_ranges = cls._find_overlapping_write_ranges(execution_result)
         lower_result = (execution_result or "").lower()
 
-        if need_detail and max_rows < 6:
+        if overlapping_ranges:
+            previous, current = overlapping_ranges[0]
             return (
-                "OUTPUT_INTENT_MISMATCH_OFFLINE: question requires detailed table output, "
-                "but current saved output is too small (likely metric-only).\n"
-                "- Rebuild output as: detailed merged table first, then summary metrics.\n"
-                "- Do not output only `Metric|Value` for merge/combine table tasks."
+                "OUTPUT_INTENT_MISMATCH_OFFLINE: output writes overlap in the same sheet.\n"
+                f"- Existing range: {cls._format_write_range(previous)}\n"
+                f"- Overlapping later range: {cls._format_write_range(current)}\n"
+                "- Do not write summary or secondary blocks inside an existing detailed-table range.\n"
+                "- Place later blocks strictly below or to the right of earlier output."
             )
 
-        if need_highlight and "highlighted row(s)" not in lower_result:
+        if need_detail and max_rows < 2:
+            return (
+                "OUTPUT_INTENT_MISMATCH_OFFLINE: question requires detailed table output, "
+                "but current saved output does not show a header plus at least one data row.\n"
+                "- Rebuild output as: detailed table first, then summary metrics if needed.\n"
+                "- Do not output only a metric block without real table rows."
+            )
+
+        if need_highlight and "highlighted row(s)" not in lower_result and "no_highlight_rows:" not in lower_result:
             return (
                 "OUTPUT_INTENT_MISMATCH_OFFLINE: question requires highlighting (for example max day in red), "
                 "but no highlight evidence found.\n"
@@ -163,6 +277,16 @@ class OutputContractChecker:
                     "- Add a summary block (Total / Average etc.) after detailed table.\n"
                     "- Use write_dataframe_to_sheet(summary_data, \"Output\", start_cell) or add_summary_row(...)."
                 )
+            if need_detail and summary_rows and max_rows > 0:
+                overlapping = [r for r in summary_rows if r <= max_rows]
+                if overlapping:
+                    bad = ", ".join(str(v) for v in overlapping[:5])
+                    return (
+                        "OUTPUT_INTENT_MISMATCH_OFFLINE: summary row overlaps the detailed table.\n"
+                        f"- Overlapping summary row(s): {bad}\n"
+                        f"- Detailed table currently appears to end around row {max_rows}.\n"
+                        "- Write summary strictly below the detailed table, for example at `len(detail_data) + 2`."
+                    )
 
         return None
 

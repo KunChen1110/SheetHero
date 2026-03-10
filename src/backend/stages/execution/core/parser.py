@@ -3,7 +3,7 @@
 import re
 from typing import Optional, Tuple
 
-from ..base.response_parser import BaseResponseParser
+from ...base.response_parser import BaseResponseParser
 
 
 class ExecutionResponseParser(BaseResponseParser):
@@ -13,6 +13,16 @@ class ExecutionResponseParser(BaseResponseParser):
         """Extract thought and code from LLM response."""
         if not content:
             return None, None
+
+        begin_solution_match = re.search(
+            r"BEGIN SOLUTION\s*(.*?)\s*END SOLUTION",
+            content,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if begin_solution_match:
+            code = begin_solution_match.group(1).strip()
+            if code:
+                return None, code
 
         # Preferred: closed fenced code block (python/py/unspecified), case-insensitive.
         code_match = re.search(r"```(?:python|py)?\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
@@ -29,7 +39,10 @@ class ExecutionResponseParser(BaseResponseParser):
                 return None, code
 
         # Last resort for bounded mode style outputs: content may be plain code without fences.
-        if re.search(r"^\s*(import\s+\w+|from\s+\w+\s+import|all_files\s*=|create_output_sheet\s*\()", content):
+        if re.search(
+            r"(^|\n)\s*(import\s+\w+|from\s+\w+\s+import|tables\s*=|all_files\s*=|create_output_sheet\s*\(|write_dataframe_to_sheet\s*\()",
+            content,
+        ):
             return None, content.strip()
 
         if "Final Answer:" in content:
