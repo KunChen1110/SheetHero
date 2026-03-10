@@ -1,26 +1,16 @@
-from tkinter import messagebox
 from typing import List
 
 import customtkinter as ctk
 
-from backend import Config
+from backend import Config, ConfigFactory
 from frontend.components.colors import *
 from frontend.components.footer_frame import FooterFrame
 
-MIN_TURNS: int = 1
-MAX_TURNS: int = 10
+FRONTEND_SCHEMA = ConfigFactory.get_frontend_schema()
+MIN_TURNS: int = int(FRONTEND_SCHEMA["max_turns"]["minimum"])
+MAX_TURNS: int = int(FRONTEND_SCHEMA["max_turns"]["maximum"])
 
-options: List[str] = [
-    "gpt-4o-mini",
-    "gpt-4-32k",
-    "gpt-4",
-    "gpt-4o",
-    "qwen2.5:7b-instruct",  # Ollama / local Qwen2.5 7B
-    "qwen2.5-coder:7b-instruct",
-    "qwen2.5-coder:14b-instruct",
-]
-
-from frontend.components.colors import GREEN
+options: List[str] = list(FRONTEND_SCHEMA["deployment"]["choices"])
 
 
 # Page for setting up the configuration files for the model

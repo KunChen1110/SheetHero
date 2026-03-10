@@ -2,6 +2,7 @@
 
 import csv
 import os
+import re
 from typing import Optional
 
 from openpyxl import Workbook, load_workbook
@@ -33,6 +34,8 @@ def load_world(paths: list[str], output_path: str, progress_logger=None) -> Spre
 class ExcelLoader:
     """Loads Excel and CSV files into openpyxl workbooks."""
 
+    _XML_ESCAPE_RE = re.compile(r"_x[0-9A-Fa-f]{4}_")
+
     @staticmethod
     def load_workbook_from_path(excel_path: str):
         _, ext = os.path.splitext(excel_path)
@@ -40,10 +43,14 @@ class ExcelLoader:
         excel_extensions = {".xlsx", ".xlsm", ".xltx", ".xltm"}
 
         if ext in excel_extensions:
-            return load_workbook(excel_path, data_only=True)
+            workbook = load_workbook(excel_path, data_only=True)
+            ExcelLoader.normalize_workbook_strings(workbook)
+            return workbook
 
         if ext == ".csv":
-            return ExcelLoader.create_workbook_from_csv(excel_path)
+            workbook = ExcelLoader.create_workbook_from_csv(excel_path)
+            ExcelLoader.normalize_workbook_strings(workbook)
+            return workbook
 
         raise ValueError(
             f"Unsupported file extension '{ext}' for {excel_path}. "
@@ -71,7 +78,8 @@ class ExcelLoader:
         if value is None:
             return value
 
-        stripped = value.strip()
+        normalized = ExcelLoader.normalize_text_value(value)
+        stripped = normalized.strip()
         if stripped == "":
             return ""
 
@@ -80,4 +88,25 @@ class ExcelLoader:
                 return int(stripped)
             return float(stripped)
         except ValueError:
-            return value
+            return stripped
+
+    @staticmethod
+    def normalize_text_value(value: str) -> str:
+        """Normalize Excel text artifacts before downstream stages."""
+        text = str(value)
+        # Remove XML-escaped control sequences like `_x000D_`, then trim CR/LF artifacts.
+        text = ExcelLoader._XML_ESCAPE_RE.sub("", text)
+        text = text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+        return text.strip()
+
+    @staticmethod
+    def normalize_workbook_strings(workbook: Workbook) -> None:
+        """Apply text normalization to all string cells in loaded workbook."""
+        for sheet_name in workbook.sheetnames:
+            ws = workbook[sheet_name]
+            for row in ws.iter_rows():
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        normalized = ExcelLoader.normalize_text_value(cell.value)
+                        if normalized != cell.value:
+                            cell.value = normalized
