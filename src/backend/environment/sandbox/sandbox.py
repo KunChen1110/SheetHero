@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-import os
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import openpyxl
 import pandas as pd
@@ -40,6 +40,7 @@ class Sandbox:
             "excel_paths": self.excel_paths,
             "output_preferences": self.output_preferences,
             "output_path": self.output_path,
+            "output_file_path": self.output_path,
             "namespaces": SimpleNamespace(),
         }
         # Use a shared scope so top-level variables remain visible inside
@@ -68,6 +69,7 @@ class Sandbox:
             "pd": pd,
             "numpy": np,
             "np": np,
+            "plt": plt,
         })
 
         for namespace in self.enabled_namespaces:
@@ -89,36 +91,6 @@ class Sandbox:
     def get_workbook_view(self):
         """Return a read-only view of loaded workbooks."""
         return self.workbooks
-
-    def _build_workbook_view(self):
-        """Build a read-only view as a dict of pandas DataFrames keyed by file/sheet."""
-        view = {}
-        for path, workbook in self.workbooks.items():
-            file_key = os.path.basename(path)
-            for sheet in workbook.worksheets:
-                rows = list(sheet.values)
-                if not rows:
-                    df = pd.DataFrame()
-                else:
-                    header = list(rows[0])
-                    if not any(h is not None and str(h).strip() != "" for h in header):
-                        header = [f"col_{i + 1}" for i in range(len(header))]
-                    else:
-                        header = [
-                            (str(h).strip() if h is not None and str(h).strip() != "" else f"col_{i + 1}")
-                            for i, h in enumerate(header)
-                        ]
-                    data = rows[1:]
-                    df = pd.DataFrame(data, columns=header)
-
-                base_key = f"{file_key}::{sheet.title}"
-                key = base_key
-                suffix = 2
-                while key in view:
-                    key = f"{base_key}#{suffix}"
-                    suffix += 1
-                view[key] = df
-        return view
 
     def run(self, code: str, extra_globals: Optional[dict] = None) -> dict:
         """Execute code in the sandbox and return the runner result."""

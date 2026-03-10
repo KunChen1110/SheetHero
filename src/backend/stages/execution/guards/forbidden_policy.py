@@ -42,10 +42,10 @@ def forbidden_signature(forbidden_err: str) -> str:
         return "openpyxl_usage"
     if "open()" in lower or "file i/o" in lower:
         return "file_io_open"
-    if "inspector_multi() requires at least 2 positional args" in lower:
-        return "inspector_multi_missing_args"
-    if "inspector_multi() does not accept keyword" in lower:
-        return "inspector_multi_bad_kwargs"
+    if "read_table_multi() requires at least 1 positional args" in lower:
+        return "read_table_multi_missing_args"
+    if "read_table_multi() does not accept keyword" in lower:
+        return "read_table_multi_bad_kwargs"
     if "all_files = [" in lower:
         return "override_all_files"
     return "other"
@@ -58,23 +58,18 @@ def build_forbidden_repair_hint(forbidden_err: str) -> str:
         return (
             "Replacement pattern:\n"
             "create_output_sheet(\"Output\")\n"
-            "data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-            "write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
+            "write_dataframe_to_sheet(df, \"Output\", \"A1\")\n"
             "saved_file = save_workbook_to(output_path)\n"
             "print(\"SAVED_FILE:\", saved_file)\n"
         )
     if "read_csv" in lower or "read_table" in lower or "read_excel" in lower or "excelfile" in lower:
         return (
             "Do not load files via pandas readers.\n"
-            "Use preloaded workbooks instead:\n"
-            "all_files = list_all_workbooks()\n"
-            "file_by_name = {p.split('/')[-1]: p for p in all_files}\n"
-            "input_name = sorted(file_by_name.keys())[0]\n"
-            "file_path = file_by_name[input_name]\n"
-            "wb = get_workbook(file_path)\n"
-            "sheet_name = wb.sheetnames[0]\n"
-            "raw = inspector_multi(file_path, \"A1:Z200\", sheet_name)\n"
-            "df = pd.DataFrame(raw[1:], columns=raw[0])\n"
+            "Use the runtime helper path instead:\n"
+            "tables = load_all_tables()\n"
+            "df = tables[0]['df']\n"
+            "Then call the task-appropriate helper on `df` or on selected tables.\n"
+            "Write the helper output to `Output` and save with `save_workbook_to(output_path)`.\n"
         )
     if "open()" in lower or "file i/o" in lower:
         return (
@@ -88,12 +83,16 @@ def build_forbidden_repair_hint(forbidden_err: str) -> str:
         )
     if "/users/" in lower or "hard-coded absolute paths" in lower:
         return (
-            "Do not hard-code input paths.\n"
-            "Use all_files = list_all_workbooks(); file_path = all_files[i].\n"
+            "Do not hard-code input paths or literal input filenames.\n"
+            "Use runtime helpers instead:\n"
+            "tables = load_all_tables()\n"
+            "Select the needed DataFrame(s) from `tables` or via `find_table_by_headers(...)`.\n"
+            "Never write '/Users/...', 'tc04_input01.xlsx', or any other literal input path/name in code.\n"
         )
     return (
         "Fix only the forbidden lines.\n"
-        "Use allowed helpers: list_all_workbooks(), get_workbook(), inspector_multi(), "
+        "Use allowed helpers: list_all_workbooks(), get_workbook(), read_table_multi(), "
+        "load_all_tables(), find_table_by_headers(), build_dependency_schedule(), "
         "create_output_sheet(), write_dataframe_to_sheet(), save_workbook_to(output_path).\n"
     )
 
@@ -107,8 +106,8 @@ def forbidden_signature_lesson(signature: str) -> str:
         "pandas_file_writer": "Never use pandas writers; output must use write_dataframe_to_sheet + save_workbook_to(output_path).",
         "openpyxl_usage": "Never use openpyxl/load_workbook directly in bounded mode.",
         "file_io_open": "Never use open(); output must be written via helper functions.",
-        "inspector_multi_missing_args": "inspector_multi needs at least (file_path, range_ref) positional args.",
-        "inspector_multi_bad_kwargs": "inspector_multi does not accept wb=/range_ref= kwargs.",
+        "read_table_multi_missing_args": "read_table_multi needs a file_path and optional sheet/range args.",
+        "read_table_multi_bad_kwargs": "read_table_multi kwargs are invalid; use positional args.",
         "override_all_files": "Do not override all_files with literals; always use list_all_workbooks().",
         "other": "Patch forbidden lines minimally and keep helper-based pipeline.",
     }

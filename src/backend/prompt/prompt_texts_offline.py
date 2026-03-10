@@ -24,7 +24,7 @@ Use this exact structure:
 - Data quality notes: missing values, duplicate headers, inconsistent schema.
 
 ### 2. Execution Plan (Offline Strict)
-- Data reading plan: how to read each file via `list_all_workbooks()` + `inspector_multi(...)`.
+- Data reading plan: how to read each file via `list_all_workbooks()` + `read_table_multi(...)`.
 - Schema grounding plan: how to print and verify real column names before select/merge.
 - Computation plan: metric/date column handling and aggregation strategy.
 - Output plan: exact helper pipeline to write Output and save.
@@ -40,7 +40,11 @@ Rules:
 - Treat workbook content as source of truth.
 - Do not infer unseen columns, file names, or sheet names.
 - Prefer robust generic steps over task-specific assumptions.
+- For multi-file tasks with complementary roles (for example task table + dependency table), different headers are expected and are NOT a schema inconsistency by themselves.
 - Output Contract must be consistent with user question intent.
+- If user asks to create a schedule/table/new spreadsheet with explicit output columns, `requires_detailed_table` must be YES.
+- If user asks for both a schedule/table and a total/summary metric, `requires_summary_metrics` must be YES.
+- For dependency scheduling tasks with explicit output columns plus total duration, `requires_detailed_table` and `requires_summary_metrics` must both be YES.
 - Output plain text only. Do not include code fences, pseudo-code, imports, or executable snippets.
 - Never mention forbidden API names (`pd.read_excel`, `pd.ExcelFile`, `pd.read_csv`, `pd.read_table`, `to_excel`, `openpyxl`).
 - Keep response compact (target <=45 lines).
@@ -104,25 +108,77 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
   - For each input file, print sheet name + columns + row count after DataFrame build.
 - Read inputs only from runtime:
   - `all_files = list_all_workbooks()`
-  - `file_by_name = {p.split('/')[-1]: p for p in all_files}`
+  - `file_by_name` is already provided by runtime (`basename -> full path`)
+  - if you rebuild it manually, it must be `file_by_name = {p.split('/')[-1]: p for p in all_files}`
 - Use exact helper signatures:
   - `wb = get_workbook(file_path)`
   - `sheet_name = wb.sheetnames[0]`
-  - `raw = inspector_multi(file_path, "A1:Z200", sheet_name)`
-- Build DataFrames from raw table safely:
-  - Do NOT use `pd.DataFrame(raw[1:], columns=raw[0])` directly for `A1:Z200` reads.
-  - Use shape-safe extraction to remove empty headers/rows:
-    - `header_raw = [str(h).strip() if h is not None else "" for h in raw[0]]`
-    - `keep = [i for i, h in enumerate(header_raw) if h != ""]`
-    - `header = [header_raw[i] for i in keep]`
-    - `rows = [[r[i] if i < len(r) else None for i in keep] for r in raw[1:]]`
-    - `rows = [row for row in rows if any(v not in (None, "") for v in row)]`
-    - `df = pd.DataFrame(rows, columns=header)`
+  - `table = read_table_multi(file_path, sheet_name, "A1:Z200")`
+  - `tables = load_all_tables()`
+  - `table_info = find_table_by_headers(tables, required_headers=[...], preferred_headers=[...], forbidden_headers=[...])`
+  - `schedule_result = build_dependency_schedule(task_df, dependency_df, start_time="08:00")`
+- Deterministic read rule:
+  - DO NOT use `inspector(range_ref, sheet_name)` in execution.
+  - Always use `read_table_multi(file_path, sheet_name, range_ref)` for every file.
+- Build DataFrames from cleaned table only:
+  - `df = pd.DataFrame(table["rows"], columns=table["header"])`
+  - `read_table_multi(...)` does NOT return a `df` key.
+  - `table["header"]` is the header row and `table["rows"]` already contains data rows only.
+  - Never do `table["rows"][1:]`; that drops the first real data row.
 - Before selecting/merging columns, print observed schema:
   - `print(file_path.split('/')[-1], df.columns.tolist())`
-- For multi-file questions, first decide schema relation:
-  - same headers across files -> `pd.concat(..., ignore_index=True)` is allowed.
-  - different headers/files with different roles -> keep separate DataFrames and merge on verified keys only.
+- For multi-file questions, classify each table by verified headers before combining:
+  - same headers + same role -> `pd.concat(..., ignore_index=True)` is allowed.
+  - different headers or different roles -> keep separate DataFrames; do NOT raise schema mismatch just because headers differ.
+  - choose task/dependency/lookup roles from observed columns, not from assumed order alone.
+- For same-schema vertical merge tasks, prefer helper path:
+  - `tables = load_all_tables()`
+  - `concat_result = concat_tables_with_same_headers(tables)`
+  - use `concat_result["output_df"]` or `concat_result["detail_data"]`
+- For simple horizontal merge tasks:
+  - Prefer helper path:
+    - `tables = load_all_tables()`
+    - `key_header = infer_common_key(tables)`
+    - `merge_result = merge_tables_on_key(tables, key_header=key_header, how="inner")`
+  - Or pass a verified explicit key if the question specifies one.
+  - Use the helper output directly:
+    - `merge_result["output_df"]`
+    - or `merge_result["detail_data"]`
+- For fill-missing-from-reference tasks, prefer helper path:
+    - `tables = load_all_tables(require_primary_key=False)`
+    - `key_header = infer_common_key(tables)`
+    - `fill_result = fill_missing_from_reference(tables[0]["df"], tables[1]["df"], key_header=key_header, prefer_primary=True)`
+  - Keep rows even when the key column is blank in the primary file; the helper can recover the missing key from shared columns.
+  - Write `fill_result["output_df"]` or `fill_result["detail_data"]`
+- For messy multi-row-header region/year chart tasks, prefer helper path:
+  - `all_files = list_all_workbooks()`
+  - `analysis = build_region_growth_analysis(all_files[0], sheet_name="Data", start_year=2020, end_year=2024)`
+  - write `analysis["output_df"]`
+  - highlight `analysis["fastest_growth_rows"]`
+  - add `analysis["summary"]`
+  - plot from `analysis["chart_df"]` and call `save_plot_to_excel("Output", "F2")`
+- For quarter KPI dashboard tasks with metrics like Gross Profit / Net Profit / CAC / Marketing Efficiency Ratio:
+  - Prefer helper path:
+    - `dashboard_result = build_financial_dashboard_report()`
+    - write `dashboard_result["detail_data"]` directly
+  - Do not hand-build month joins, target parsing, or dashboard rows in code.
+- For candidate screening / ranking tasks across many same-schema files:
+  - Prefer helper path:
+    - `screening_result = build_candidate_screening_report()`
+    - write `screening_result["detail_data"]` directly
+  - The helper already excludes blank names and treats missing numeric inputs as 0.
+  - Do not hand-build file loops, score formulas, filtering, or ranking rows.
+- For inventory EOQ / reorder-point / sensitivity-analysis tasks:
+  - Prefer helper path:
+    - `inventory_result = build_inventory_eoq_report()`
+    - write `inventory_result["detail_data"]` directly
+  - Do not hand-build EOQ formulas, parameter parsing, or multi-table layout.
+- For hospital utilisation tasks with patient/staff/service tables:
+  - Prefer helper path:
+    - `report = build_hospital_utilisation_report()`
+    - write `report["detail_data"]` directly
+    - highlight only `report["highlight_rows"]`; if empty, print `NO_HIGHLIGHT_ROWS:`
+  - Do not hand-build grouped merges or utilisation formulas.
 - Always verify required columns exist before use.
 - Never guess paths, filenames, sheet names, or columns.
 - If a requested column is missing, use safe fallback:
@@ -130,10 +186,42 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
   - write explicit diagnostic summary to Output instead of crashing.
 - Never assume synthetic metadata columns (e.g., `File`, `source_file`) unless you explicitly created them.
 - Prefer built-in pandas/numpy computation over optional ML libraries.
-  - If linear regression is needed, use `numpy.linalg.lstsq` instead of sklearn.
+  - For linear regression, prefer helper path:
+    - `regression_result = fit_linear_regression_weights(df, target_col="...", feature_cols=[...])`
+    - `print("USED_FEATURES:", regression_result["used_features"])`
+    - write `regression_result["output_df"]` directly, or `regression_result["detail_data"]` directly.
+  - If target-vs-feature correlations are requested, prefer:
+    - `corr_result = compute_feature_correlations(df, target_col="...", feature_cols=[...])`
+    - write `corr_result["output_df"]` or `corr_result["detail_data"]`.
+  - If a correlation matrix is requested, prefer:
+    - `matrix_result = build_correlation_matrix_table(df, numeric_columns=[...], filter_column="...", filter_value="...")`
+    - write `matrix_result["output_df"]` or `matrix_result["detail_data"]`.
+- If grouped summary metrics are requested, prefer:
+  - `summary_result = build_group_summary(df, group_cols=[...], aggregations={...})`
+  - write `summary_result["output_df"]` or `summary_result["detail_data"]`.
+- For numeric total/average/max summary tasks on one merged table, prefer:
+  - `summary_result = summarize_numeric_column(df, value_col="...", summary_labels={...})`
+  - use `summary_result["summary"]` for `add_summary_row(...)`
+  - use `summary_result["output_row_numbers"]` for `highlight_rows(...)`
+  - Feature coverage rule for regression: include all available predictors (exclude target/ID/date-like columns).
 - For date filtering:
   - Parse date column with `pd.to_datetime(..., errors="coerce")`.
   - Do NOT hard-code year unless user explicitly specifies a year.
+- For time strings:
+  - If you compute minutes/hours, cast to int before formatting.
+  - Example: `m = int(round(total_minutes))`; `f"{m // 60:02d}:{m % 60:02d}"`.
+  - For dependency scheduling tasks:
+    - Use the runtime helper pipeline, not a hand-written DAG:
+    - `tables = load_all_tables()`
+    - `task_table = find_table_by_headers(tables, required_headers=["Task ID"], preferred_headers=["Task Name", "Duration (hours)", "Priority"], forbidden_headers=["Depends on"])`
+    - `dependency_table = find_table_by_headers(tables, required_headers=["Task ID", "Depends on"])`
+    - `schedule_result = build_dependency_schedule(task_table["df"], dependency_table["df"], start_time="08:00")`
+    - Do NOT rebuild helper inputs with `pd.DataFrame({...})`, partial column subsets, or row lists before this call.
+  - Never identify roles from filenames, literal input basenames, file order, or `tables[0]`/`tables[1]`.
+  - Different schemas between task and dependency tables are expected; never assert same schema across them.
+  - Write `schedule_result["detail_data"]` directly to Output.
+  - Write summary from `schedule_result["summary"]`.
+  - Print `TASK_ID_SET` and `SCHEDULED_TASK_IDS` from the helper result before save.
 - For highlight row numbers:
   - `highlight_rows()` expects 1-based integer row numbers in Output sheet.
   - Convert DataFrame indices to row numbers with header offset (example: `row_numbers = [i + 2 for i in idx_list]`).
@@ -156,7 +244,8 @@ _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
 - relying on optional third-party ML libraries (`sklearn`, `statsmodels`) that may be unavailable in runtime
 - `get_workbook(None)`
 - hard-coded absolute paths
-- invalid helper signatures (for example `inspector_multi(..., wb=...)`, `range_ref=` keyword)
+- literal input filenames or basename matching logic such as `\"tc04_input01.xlsx\"`, `\"Tasks\" in file_name`, or `tables[0] = task table`
+- invalid helper signatures (for example `read_table_multi(..., wb=...)`)
 
 If runtime reports forbidden/error, apply minimal patch only. Do not refactor unrelated parts.
 
@@ -171,30 +260,42 @@ _OFFLINE_PIPELINE_TEMPLATE = textwrap.dedent("""\
 import pandas as pd
 
 all_files = list_all_workbooks()
-dfs = []
+tables = []
 for file_path in all_files:
     wb = get_workbook(file_path)
     sheet_name = wb.sheetnames[0]
-    raw = inspector_multi(file_path, "A1:Z200", sheet_name)
-    if raw and len(raw) > 1:
-        header_raw = [str(h).strip() if h is not None else "" for h in raw[0]]
-        keep = [i for i, h in enumerate(header_raw) if h != ""]
-        header = [header_raw[i] for i in keep]
-        rows = [[r[i] if i < len(r) else None for i in keep] for r in raw[1:]]
-        rows = [row for row in rows if any(v not in (None, "") for v in row)]
-        df = pd.DataFrame(rows, columns=header)
-        print(file_path.split('/')[-1], df.columns.tolist(), len(df))
-        dfs.append(df)
+    table = read_table_multi(file_path, sheet_name, "A1:Z200")
+    if table["header"]:
+        df = pd.DataFrame(table["rows"], columns=table["header"])
+        basename = file_path.split('/')[-1]
+        print(basename, df.columns.tolist(), len(df))
+        tables.append({"file": basename, "sheet": sheet_name, "df": df})
 
-same_schema = len({tuple(df.columns.tolist()) for df in dfs}) <= 1 if dfs else True
-if same_schema:
-    combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else (dfs[0] if dfs else pd.DataFrame())
-else:
-    # Heterogeneous schema: keep per-file DataFrames, then merge using verified keys.
-    # data_by_file = {basename: df}
-    combined = pd.DataFrame()
+# Never write literal input paths or literal input filenames in code.
+# Role identification must come from verified headers, not from path strings.
 
 # task-specific compute here, using only confirmed columns
+# Same-role tables with identical headers may be concatenated.
+# Different-role tables (for example tasks vs dependencies) should stay separate.
+# For dependency scheduling tasks, do NOT hand-write DAG logic:
+# task_table = find_table_by_headers(
+#     tables,
+#     required_headers=["Task ID"],
+#     preferred_headers=["Task Name", "Duration (hours)", "Priority"],
+#     forbidden_headers=["Depends on"],
+# )
+# dependency_table = find_table_by_headers(
+#     tables,
+#     required_headers=["Task ID", "Depends on"],
+# )
+# schedule_result = build_dependency_schedule(
+#     task_table["df"],
+#     dependency_table["df"],
+#     start_time="08:00",
+# )
+# detail_data = schedule_result["detail_data"]
+# summary_dict = schedule_result["summary"]
+combined = tables[0]["df"] if tables else pd.DataFrame()
 
 create_output_sheet("Output")
 # If task requires merge/highlight/output table:
@@ -224,7 +325,8 @@ _OFFLINE_OUTPUT_WORKFLOW = textwrap.dedent("""\
    - merge/combine/join/highlight/new spreadsheet table => detailed table + highlight + summary
    - scalar-only metric => concise metric table
 3. Write with `write_dataframe_to_sheet(...)` according to the inferred intent.
-4. Do not mix dict rows into table rows; all writes must be proper 2D list rows.
+4. `write_dataframe_to_sheet(...)` accepts either a pandas DataFrame or a proper 2D row list.
+   Do not mix dict rows into table rows.
 5. Use `highlight_rows(...)` for red highlighting requests (do not use HTML tags).
    - Build `row_numbers` as flat list of 1-based ints only.
    - Example: `row_numbers = [i + 2 for i in max_idx_list]`

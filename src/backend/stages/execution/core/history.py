@@ -1,6 +1,6 @@
 """Conversation history formatting for execution results."""
 
-from ..base.history_formatter import BaseHistoryFormatter
+from ...base.history_formatter import BaseHistoryFormatter
 
 
 class ExecutionHistory(BaseHistoryFormatter):
