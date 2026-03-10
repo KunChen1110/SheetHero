@@ -160,6 +160,9 @@ class SheetHeroService:
     def _extract_message(response: Dict[str, object]) -> str:
         result = response.get("result")
         if isinstance(result, dict):
+            short_answer = result.get("short_answer")
+            if short_answer is not None:
+                return str(short_answer)
             final_answer = result.get("final_answer")
             if final_answer is not None:
                 return str(final_answer)

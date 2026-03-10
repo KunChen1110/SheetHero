@@ -6,6 +6,18 @@ from ..base.history_formatter import BaseHistoryFormatter
 class ValidationHistory(BaseHistoryFormatter):
     """Format execution conversation history for validation."""
 
+    @staticmethod
+    def _message_role(msg) -> str:
+        if isinstance(msg, dict):
+            return msg.get("role", "unknown")
+        return getattr(msg, "role", "unknown")
+
+    @staticmethod
+    def _message_content(msg) -> str:
+        if isinstance(msg, dict):
+            return msg.get("content", "")
+        return getattr(msg, "content", "")
+
     def format(self, conversation_history: list) -> str:
         if not conversation_history:
             return "No conversation history available."
@@ -14,8 +26,8 @@ class ValidationHistory(BaseHistoryFormatter):
         turn_count = 0
 
         for i, msg in enumerate(conversation_history):
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
+            role = self._message_role(msg)
+            content = self._message_content(msg)
 
             if i == 0 and role == "system":
                 continue

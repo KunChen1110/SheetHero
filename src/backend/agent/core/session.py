@@ -31,3 +31,4 @@ class SheetHeroSession:
     pending_execution_result: Optional[Dict[str, Any]] = None
     pending_execution_context: Optional[str] = None
     execution_validation_cycles: int = 0
+    consecutive_no_success_execution_cycles: int = 0
