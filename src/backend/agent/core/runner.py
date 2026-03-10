@@ -46,7 +46,8 @@ class AgentRunner:
         self.max_iterations = max(1, int(max_iterations))
         self.execution_turn_budget = max(1, int(execution_turn_budget))
 
-    def run(self, user_question: str, understanding_module, execution_module, validation_module) -> Dict[str, Any]:
+    def run(self, user_question: str, understanding_module, execution_module, validation_module,
+            final_response_module=None) -> Dict[str, Any]:
         logger.info("Starting iterative three-stage analysis")
         if self.progress_logger:
             self.progress_logger.log(
@@ -89,6 +90,7 @@ class AgentRunner:
 
             overall_success = False
             final_answer = ""
+            short_answer = ""
             confidence_score = 0.0
             validation_passed = False
 
@@ -190,6 +192,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = validation_result.get('verified_answer', execution_result['answer'])
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = True
                     confidence_score = validation_result['confidence_score']
                     validation_passed = True
@@ -203,6 +211,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = execution_result['answer']
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = False
                     confidence_score = validation_result['confidence_score']
                     validation_passed = False
@@ -232,6 +246,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = execution_result['answer']
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = False
                     confidence_score = validation_result['confidence_score']
                     validation_passed = False
@@ -241,6 +261,7 @@ class AgentRunner:
                 all_validation_results=all_validation_results,
                 overall_start_time=overall_start_time,
                 final_answer=final_answer,
+                short_answer=short_answer,
                 overall_success=overall_success,
                 confidence_score=confidence_score,
                 validation_passed=validation_passed,
