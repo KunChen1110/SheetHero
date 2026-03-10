@@ -1,6 +1,8 @@
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
+from .frontend_schema import build_frontend_defaults, build_frontend_schema
+
 
 @dataclass
 class Config:
@@ -64,3 +66,28 @@ class ConfigFactory:
     @staticmethod
     def get_default_settings_dict() -> Dict[str, Any]:
         return Config().to_dict()
+
+    @staticmethod
+    def get_frontend_defaults() -> Dict[str, Any]:
+        config = Config()
+        return build_frontend_defaults(
+            deployment=config.deployment,
+            max_turns=config.max_turns,
+        )
+
+    @staticmethod
+    def get_frontend_schema() -> Dict[str, Dict[str, Any]]:
+        defaults = ConfigFactory.get_frontend_defaults()
+        config = Config()
+        return build_frontend_schema(
+            defaults,
+            timeout=config.timeout,
+            max_qa_rounds=config.max_qa_rounds,
+            total_token_budget=config.total_token_budget,
+            max_retries=config.max_retries,
+        )
+
+    @staticmethod
+    def get_frontend_editable_keys() -> list[str]:
+        schema = ConfigFactory.get_frontend_schema()
+        return [key for key, meta in schema.items() if meta.get("frontend_editable")]

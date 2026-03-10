@@ -222,3 +222,37 @@
 - Added workbook grounding module to enforce runtime-visible files/schemas and reduce hallucinated references.
 - Added output contract checker to validate task-intent completion and block false-success saves.
 - Kept offline bounded behavior while reducing runtime complexity and improving debuggability.
+
+
+## 10/3/2026
+### --- Added ---
+- Added deterministic final response stage in `src/backend/stages/final_response/stage.py`
+  - System now returns a short user-facing answer in addition to the original final result.
+  - Scalar tasks can now answer directly with the computed value.
+  - Spreadsheet-generation tasks now return a short content-aware summary instead of only a saved file path.
+- Added frontend-facing config schema helpers in `src/backend/config`
+  - Centralized editable UI fields, defaults, and deployment choices in `ConfigFactory`.
+  - Reduced duplicated frontend hardcoded configuration values.
+- Added clearer package exports and package-level documentation
+  - Expanded `__init__.py` files across backend packages to clarify stable entrypoints vs internal implementation files.
+
+### --- Changed ---
+- Major execution-stage refactor in `src/backend/stages/execution`
+  - Reorganized execution internals into subpackages:
+    - `core/` for executor, parser, LLM client, history, and summary
+    - `analysis/` for task-intent detection, workbook grounding, and helper-source analysis
+    - `guards/` for forbidden policy, repair feedback, loop breakers, and output-contract checks
+  - Kept `runtime.py` and `stage.py` as the stable outer execution entrypoints.
+  - Reduced `runtime.py` size by moving large pure-function sections into dedicated files.
+- Updated frontend/backend integration path
+  - Frontend now uses `SheetHeroService` as the stable backend entrypoint instead of bypassing the full backend pipeline.
+  - Frontend config pages now read defaults and editable fields from backend config schema.
+- Reworked final output behavior for both online and offline modes
+  - Final short answers now prefer deterministic generation instead of always making one more LLM call.
+  - Reduced end-of-run delay after successful execution and validation.
+
+### --- Removed ---
+- Removed unused legacy output formatting code
+  - Deleted deprecated `OutputFormatter` in `src/backend/agent/io/formatter.py`.
+- Removed stale execution helper definitions from the main execution runtime after modular extraction
+  - Old intent-detector and loop-breaker blocks are no longer kept inline in `runtime.py`.

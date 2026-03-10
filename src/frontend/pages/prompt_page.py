@@ -11,7 +11,7 @@ import customtkinter as ctk
 import os
 
 from backend import Config
-from backend import SheetHero
+from backend import SheetHeroService
 
 from frontend.components.colors import *
 from frontend.components.file_display import FileDisplay
@@ -87,6 +87,8 @@ class PromptPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        self._service: Optional[SheetHeroService] = None
+        self._awaiting_clarification = False
 
         # Finish Button
         self.footer = None
@@ -235,6 +237,8 @@ class PromptPage(ctk.CTkFrame):
 
     # Triggered when the back button is pressed
     def on_back_pressed(self):
+        self._service = None
+        self._awaiting_clarification = False
         self.controller.show_page("ConfigPage")
 
 
@@ -328,6 +332,7 @@ class PromptPage(ctk.CTkFrame):
         self.add_chat_bubble(f"Thinking...",False)
         self.prompt_entry.delete("1.0", "end")
         self.finish_button.configure(state="disabled")
+        is_clarification_reply = self._awaiting_clarification and self._service is not None
 
         # Starts a threaded worker to allow the UI to be used during the agent running
         def worker():
@@ -348,58 +353,69 @@ class PromptPage(ctk.CTkFrame):
                 config.output_mode = "file"
                 config.output_file = export_path
 
-                # Create and run the agent
-                agent = SheetHero(
-                    excel_paths=selected_files,
-                    config=config
-                )
-                result = agent.run(
-                    user_question=prompt
-                )
-
-                # Get the result from the agent
-                result_text = textwrap.dedent(
-                f"""
-                Success:{'✅' if result['success'] else '❌'}
-                Confidence: {result['confidence_score']:.2f}/1.0
-                Iterations: {result['total_iterations']}
-                Duration: {result['total_duration']:.2f}s
-                """)
-
-                # Send if there are issues
-                if result['issues_found']:
-                    result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
-
-                # Send if there is feedback
-                if result.get('improvement_feedback'):
-                    result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
-
-                # If it succeeds, create buttons to link the markdown and excel
-                if result['success']:
-                    buttons = []
-
-                    if result.get("verbose_log_path"):
-                        buttons.append((
-                            "Open Markdown Log",
-                            lambda path=result["verbose_log_path"]: open_file(path)
-                        ))
-
-                    output_file_path = _resolve_output_file_path(result, config.output_file)
-                    if output_file_path and os.path.exists(output_file_path):
-                        buttons.append((
-                            "Open Excel Output",
-                            lambda path=output_file_path: open_file(path)
-                        ))
-
-                    # Send the result, with the buttons if there are any.
-                    self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
+                if not is_clarification_reply or self._service is None:
+                    self._service = SheetHeroService(config=config)
+                    response = self._service.submit_turn(prompt, selected_files)
                 else:
+                    response = self._service.submit_clarification(prompt)
 
-                    # Send the error
-                    self.add_chat_bubble(f"{result_text}", False)
+                response_type = str(response.get("type") or "")
+                if response_type == "clarification":
+                    self._awaiting_clarification = True
+                    self.add_chat_bubble(str(response.get("message") or "Please clarify your answer."), False)
+                elif response_type == "final":
+                    self._awaiting_clarification = False
+                    result = response.get("result") if isinstance(response.get("result"), dict) else {}
+                    if not isinstance(result, dict):
+                        result = {}
+
+                    if {"success", "confidence_score", "total_iterations", "total_duration"} <= set(result.keys()):
+                        result_text = textwrap.dedent(
+                        f"""
+                        Success:{'✅' if result['success'] else '❌'}
+                        Confidence: {result['confidence_score']:.2f}/1.0
+                        Iterations: {result['total_iterations']}
+                        Duration: {result['total_duration']:.2f}s
+                        """)
+
+                        if result.get('issues_found'):
+                            result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
+
+                        if result.get('improvement_feedback'):
+                            result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+
+                        short_answer = str(result.get("short_answer") or response.get("message") or "").strip()
+                        if short_answer:
+                            result_text += f"\n\nSummary:\n{short_answer}"
+
+                        buttons = []
+                        if result.get("verbose_log_path"):
+                            buttons.append((
+                                "Open Markdown Log",
+                                lambda path=result["verbose_log_path"]: open_file(path)
+                            ))
+
+                        output_file_path = _resolve_output_file_path(result, config.output_file)
+                        if output_file_path and os.path.exists(output_file_path):
+                            buttons.append((
+                                "Open Excel Output",
+                                lambda path=output_file_path: open_file(path)
+                            ))
+
+                        self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
+                    else:
+                        message = str(response.get("message") or result.get("final_answer") or "Completed.")
+                        self.add_chat_bubble(message, False)
+                    self._service = None
+                else:
+                    self._awaiting_clarification = False
+                    self._service = None
+                    self.add_chat_bubble(str(response.get("message") or "Unknown error."), False)
 
             # Send error if fails
             except Exception as error:
+                self._awaiting_clarification = False
+                self._service = None
                 self.add_chat_bubble(f"Error: {error}",False)
 
             self.finish_button.configure(state="enabled")
