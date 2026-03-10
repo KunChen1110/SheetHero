@@ -92,6 +92,8 @@ def _sample_rows_geometric(workbook_view: Dict[str, pd.DataFrame],
             values = [_cell_to_text(value) for value in row]
             if _is_empty_row(values):
                 continue
+            if _is_annotation_row(values):
+                continue
             rows.append(values)
         output[sheet_key] = (columns, rows)
     return output
@@ -224,6 +226,27 @@ def _is_empty_row(values: List[str]) -> bool:
     if not values:
         return True
     return all(value == "| |" for value in values)
+
+
+def _is_annotation_row(values: List[str]) -> bool:
+    """Heuristic: ignore note/comment rows that should not be treated as table data."""
+    if not values:
+        return False
+    cleaned = [("" if v == "| |" else str(v).strip()) for v in values]
+    first = cleaned[0].lower() if cleaned else ""
+    rest_non_empty = [v for v in cleaned[1:] if v]
+    if not first:
+        return False
+
+    if first in {"note", "notes"} and not rest_non_empty:
+        return True
+    if first.startswith("note:") and not rest_non_empty:
+        return True
+    if " depends on " in first and not rest_non_empty:
+        return True
+    if first.startswith("tx depends on") and not rest_non_empty:
+        return True
+    return False
 
 
 def _estimate_cell_budget(token_budget: int, tokens_per_cell: float) -> int:

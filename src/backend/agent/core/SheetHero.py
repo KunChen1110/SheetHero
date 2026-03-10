@@ -15,6 +15,7 @@ from ...environment import Sandbox
 from ...environment.spreadsheet.world import SpreadsheetWorld
 from ...log.progress_logger import ProgressLogger
 from ...stages.execution.stage import ExecutionStage
+from ...stages.final_response.stage import FinalResponseStage
 from ...stages.qa.stage import QualityAssuranceStage
 from ...stages.cleaning.stage import DataCleaningStage
 from ...stages.diagnose.stage import DiagnoseStage
@@ -127,6 +128,11 @@ class SheetHero:
             progress_log_file=self.progress_logger.file,
             prompt_profile=self.prompt_profile,
         )
+        self.final_response_module = FinalResponseStage(
+            self.client,
+            self.config.deployment,
+            progress_logger=self.progress_logger,
+        )
         self.qa_stage = QualityAssuranceStage(
             self.client,
             self.config.deployment,
@@ -194,7 +200,8 @@ class SheetHero:
             user_question,
             self.understanding_module,
             self.execution_module,
-            self.validation_module
+            self.validation_module,
+            self.final_response_module,
         )
 
     def start_session(self, user_question: str) -> SheetHeroSession:
@@ -340,10 +347,13 @@ class SheetHero:
 
         if decision.should_diagnose:
             append_ui_thought(session, "diagnosing", "running", "Diagnosing data quality risks")
-            question_list = self.diagnose_module.run_readonly(
-                workbooks=wb_view,
-                user_task=current_request
-            )
+            if decision.issues:
+                question_list = [{"description": issue} for issue in decision.issues]
+            else:
+                question_list = self.diagnose_module.run_readonly(
+                    workbooks=wb_view,
+                    user_task=current_request
+                )
             append_ui_thought(session, "diagnosing", "done", question_list)
 
             self.qa_stage.reset()
@@ -467,6 +477,13 @@ class SheetHero:
             user_question=user_query,
             understanding_output=understanding_output
         )
+        successful_execs = int(
+            execution_result.get("execution_summary", {}).get("successful_executions", 0) or 0
+        )
+        if successful_execs <= 0:
+            session.consecutive_no_success_execution_cycles += 1
+        else:
+            session.consecutive_no_success_execution_cycles = 0
         max_cycles = self._resolve_max_cycles()
         if (
             not validation_result.get("validation_passed")
@@ -485,6 +502,25 @@ class SheetHero:
                     "Stopped after max execute-validate cycles. "
                     "Please inspect the latest output/log and refine prompt or data."
                 )
+        if (
+            not validation_result.get("validation_passed")
+            and validation_result.get("requires_reexecution", True)
+            and session.consecutive_no_success_execution_cycles >= 2
+        ):
+            issues = list(validation_result.get("issues_found") or [])
+            issues.append(
+                "Stopped after repeated execute-validate cycles with zero successful code executions."
+            )
+            validation_result["issues_found"] = issues
+            validation_result["requires_reexecution"] = False
+            feedback = (validation_result.get("improvement_feedback") or "").strip()
+            prefix = (
+                "Execution never reached a successful sandbox run in two consecutive cycles. "
+                "Refine execution prompt/guards instead of continuing validation loops."
+            )
+            validation_result["improvement_feedback"] = (
+                f"{prefix}\n{feedback}" if feedback else prefix
+            )
         append_ui_thought(
             session,
             "validation",
@@ -497,13 +533,22 @@ class SheetHero:
             },
         )
 
+        final_answer = validation_result.get(
+            "verified_answer",
+            execution_result.get("answer", "")
+        )
+        short_answer = self.final_response_module.run(
+            user_question=current_request,
+            final_answer=final_answer,
+            validation_result=validation_result,
+            execution_result=execution_result,
+        )
+
         session.result = {
             "execution_result": execution_result,
             "validation_result": validation_result,
-            "final_answer": validation_result.get(
-                "verified_answer",
-                execution_result.get("answer", "")
-            ),
+            "final_answer": final_answer,
+            "short_answer": short_answer,
             "edited_existing_file": self._output_existed_before,
         }
 

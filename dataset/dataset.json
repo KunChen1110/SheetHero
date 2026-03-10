@@ -470,7 +470,8 @@
             "Task15/tc15_input05.csv",
             "Task15/tc15_input06.csv",
             "Task15/tc15_input07.csv",
-            "Task15/tc15_input08.csv"
+            "Task15/tc15_input08.csv",
+            "Task15/tc15_input09.csv"
         ],
         "prompt": "Here are eight CSV files from the Brazilian e-commerce dataset. Please merge them into a single table and translate the product category names into English. You must output the merged result as a new Excel file, and in your final answer also report the size of the merged dataset (number of rows and columns).",
         "answer": "rows : 118310, columns : 44",
