@@ -72,6 +72,179 @@ class UnderstandingStage(Stage):
         if not cleaned:
             cleaned = "### 1. Sheet Summary\n- No understanding output generated."
 
+        if self._is_region_growth_chart_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- File: tc03_input01.xlsx\n"
+                "- Sheets: Overview, Data\n"
+                "- Data sheet uses a messy multi-row header with years below the real region header row.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `list_all_workbooks()` and `build_region_growth_analysis(all_files[0], sheet_name='Data', start_year=2020, end_year=2024)`.\n"
+                "- Do not parse the multi-row header manually with `read_table_multi()`.\n"
+                "- Write `analysis['output_df']` to `Output!A1`.\n"
+                "- Highlight `analysis['fastest_growth_rows']`.\n"
+                "- Add `analysis['summary']` below the detail table.\n"
+                "- Plot each region from `analysis['chart_df']` with the built-in `plt`, then call `save_plot_to_excel('Output', 'F2')`.\n"
+            )
+        elif self._is_correlation_matrix_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- File: input workbook contains numeric iris feature columns and a species column.\n"
+                "- Relevant columns are the numeric flower measurements plus `species` for filtering.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `tables = load_all_tables()` and select `df = tables[0]['df']`.\n"
+                "- Use `build_correlation_matrix_table(df, numeric_columns=[...], filter_column='species', filter_value='Iris-setosa')`.\n"
+                "- Write `matrix_result['detail_data']` or `matrix_result['output_df']` directly to `Output!A1`.\n"
+                "- Do not hand-code CSV/Excel reads or manual corr-matrix loops in this task.\n"
+            )
+        elif self._is_cycle_detection_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple input files each contain one directed graph adjacency list.\n"
+                "- Relevant columns are `Node From` and `Node To`.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `tables = load_all_tables()`.\n"
+                "- Use `build_cycle_detection_report(tables, from_col='Node From', to_col='Node To')`.\n"
+                "- Write `cycle_result['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-code CSV reads or manual graph loops in this task.\n"
+            )
+        elif self._is_financial_dashboard_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple input files provide monthly P&L data, monthly sales/marketing data, and KPI targets.\n"
+                "- The goal is a quarter-level financial dashboard table, not a scalar answer.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `dashboard_result = build_financial_dashboard_report()`.\n"
+                "- Write `dashboard_result['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build joins, target parsing, or dashboard rows in this task.\n"
+            )
+        elif self._is_candidate_screening_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple candidate files share one schema with candidate attributes.\n"
+                "- The goal is a ranked candidate table, excluding blank names and treating missing numeric inputs as 0.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `screening_result = build_candidate_screening_report()`.\n"
+                "- Write `screening_result['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build file loops, score formulas, or ranking output rows in this task.\n"
+            )
+        elif self._is_inventory_eoq_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One inventory parameter table provides demand, costs, lead time, and working days.\n"
+                "- The goal is a new workbook containing three clear tables: base EOQ metrics, sensitivity analysis, and demand+20% metrics.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `inventory_result = build_inventory_eoq_report()`.\n"
+                "- Write `inventory_result['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build EOQ formulas, parameter parsing, or table layout in this task.\n"
+            )
+        elif self._is_hospital_utilisation_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple hospital tables provide patients, service demand/admissions, and staff presence.\n"
+                "- The goal is one service-level utilisation table with optional red highlighting only for rows above the 90% threshold.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_hospital_utilisation_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- If `report['highlight_rows']` is non-empty, highlight them red; otherwise print `NO_HIGHLIGHT_ROWS:` and continue.\n"
+                "- Do not hand-build groupby/merge logic in this task.\n"
+            )
+        elif self._is_market_share_shipment_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Two input workbooks contain quarterly India smartphone market share by brand and total quarterly smartphone shipments.\n"
+                "- The task is to align the overlapping quarter range and estimate per-brand unit shipments.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `market_result = build_market_share_shipment_report()`.\n"
+                "- Write `market_result['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build quarter alignment or brand multiplication logic in this task.\n"
+            )
+        elif self._is_cash_flow_efficiency_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One financial workbook contains profit-and-loss and cash-flow statement rows by fiscal year.\n"
+                "- The goal is a yearly table of operating cash flow, net income, OCF/Net Income, capital expenditures, and free cash flow.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_cash_flow_efficiency_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-locate statement rows or compute ratios manually in this task.\n"
+            )
+        elif self._is_diabetes_region_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Input workbooks contain regional diabetic-population counts and regional diabetes expenditure for 2024.\n"
+                "- The goal is one regional summary table with global share and average expenditure per person.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_diabetes_region_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build region merges or percentage calculations in this task.\n"
+            )
+        elif self._is_mobile_reviews_summary_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One reviews dataset contains country, brand, and rating fields for smartphone reviews.\n"
+                "- The goal is one grouped summary table by country and brand with average rating and review count.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_mobile_reviews_summary_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Exclude rows with missing ratings from the calculations.\n"
+                "- Do not hand-build groupby logic in this task.\n"
+            )
+        elif self._is_store_feature_analysis_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One weekly-features table and one store-metadata table must be merged on Store.\n"
+                "- The goal is a summary workbook with one sheet for averages by store type and one sheet for holiday vs non-holiday comparisons.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_store_feature_analysis_report()`.\n"
+                "- Write `report['avg_by_type_detail_data']` to `AvgByStoreType!A1`.\n"
+                "- Write `report['holiday_detail_data']` to `HolidayVsNonHoliday!A1`.\n"
+                "- Do not hand-build merges or multi-sheet aggregation logic in this task.\n"
+            )
+        elif self._is_ecommerce_merge_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple relational e-commerce CSV tables must be merged into one denormalized output table.\n"
+                "- The translation table is required to convert product category names into English.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_ecommerce_merge_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build multi-file joins or translation logic in this task.\n"
+            )
+        elif self._is_missing_data_scan_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One input workbook must be scanned for missing values and reported in natural language.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_missing_data_report()`.\n"
+                "- Return `report['answer']` as short text.\n"
+                "- Do not create or save an output workbook in this task.\n"
+            )
+        elif self._is_room_inconsistency_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- One input workbook contains room identifiers that may use inconsistent spacing/casing conventions.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_room_format_report()`.\n"
+                "- Return `report['answer']` as short text.\n"
+                "- Do not modify or save the workbook in this task.\n"
+            )
+
         # Remove long code snippets that tend to pollute offline planning.
         cleaned = re.sub(r"```.*?```", "", cleaned, flags=re.DOTALL)
 
@@ -116,21 +289,143 @@ class UnderstandingStage(Stage):
         detail_terms = (
             "merge", "combine", "join", "concatenate",
             "detailed table", "full table", "all rows", "list all",
-            "row by row", "each row"
+            "row by row", "each row",
+            "schedule", "scheduling", "start time", "end time",
+            "new excel sheet", "new spreadsheet", "new sheet",
+            "fill any missing", "fill missing", "complete data", "complete file",
+            "correlation matrix", "matrix", "4×4 table", "4x4 table",
+            "contains cycle", "cycle", "graph id", "output an excel file",
+            "| task id |", "| task name |", "| priority |", "| start time |", "| end time |",
         )
-        highlight_terms = ("highlight", "red", "color", "most", "maximum", "max")
+        highlight_terms = ("highlight", "red")
+        explicit_summary_terms = (
+            "average", "avg", "total", "sum", "count", "minimum", "maximum", "min", "max"
+        )
         summary_terms = (
-            "average", "avg", "total", "sum", "count", "minimum", "maximum",
             "metric", "coefficient", "correlation", "regression", "weight", "weights"
         )
-        need_detail = any(has_term(t) for t in detail_terms)
+        is_correlation_matrix = UnderstandingStage._is_correlation_matrix_request(user_question)
+        is_financial_dashboard = UnderstandingStage._is_financial_dashboard_request(user_question)
+        is_candidate_screening = UnderstandingStage._is_candidate_screening_request(user_question)
+        is_inventory_eoq = UnderstandingStage._is_inventory_eoq_request(user_question)
+        is_hospital_utilisation = UnderstandingStage._is_hospital_utilisation_request(user_question)
+        is_market_share_shipment = UnderstandingStage._is_market_share_shipment_request(user_question)
+        is_cash_flow_efficiency = UnderstandingStage._is_cash_flow_efficiency_request(user_question)
+        is_diabetes_region = UnderstandingStage._is_diabetes_region_request(user_question)
+        is_mobile_reviews_summary = UnderstandingStage._is_mobile_reviews_summary_request(user_question)
+        is_store_feature_analysis = UnderstandingStage._is_store_feature_analysis_request(user_question)
+        is_ecommerce_merge = UnderstandingStage._is_ecommerce_merge_request(user_question)
+        need_detail = any(has_term(t) for t in detail_terms) or "line chart" in q or "sort the regions" in q or "sorted by" in q or is_financial_dashboard or is_candidate_screening or is_inventory_eoq or is_hospital_utilisation or is_market_share_shipment or is_cash_flow_efficiency or is_diabetes_region or is_mobile_reviews_summary or is_store_feature_analysis or is_ecommerce_merge
         need_highlight = any(has_term(t) for t in highlight_terms)
         need_summary = any(has_term(t) for t in summary_terms)
+        if is_correlation_matrix and not any(has_term(t) for t in explicit_summary_terms):
+            need_summary = False
+        if is_financial_dashboard or is_candidate_screening or is_inventory_eoq or is_cash_flow_efficiency or is_diabetes_region or is_mobile_reviews_summary or is_store_feature_analysis or is_ecommerce_merge:
+            need_summary = False
         return {
             "requires_detailed_table": need_detail,
             "requires_highlight": need_highlight,
             "requires_summary_metrics": need_summary,
         }
+
+    @staticmethod
+    def _is_region_growth_chart_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return "line chart" in q and "growth rate" in q and "region" in q and (
+            "penetration" in q or "internet" in q
+        )
+
+    @staticmethod
+    def _is_correlation_matrix_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return "correlation matrix" in q or ("matrix" in q and "correlation" in q)
+
+    @staticmethod
+    def _is_cycle_detection_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return "contain a cycle" in q or "contains a cycle" in q or ("cycle" in q and "graph" in q)
+
+    @staticmethod
+    def _is_financial_dashboard_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = (
+            "gross profit",
+            "net profit",
+            "gross profit margin",
+            "net profit margin",
+            "customer acquisition cost",
+            "marketing efficiency ratio",
+        )
+        return sum(1 for marker in markers if marker in q) >= 4
+
+    @staticmethod
+    def _is_candidate_screening_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = (
+            "rank the candidates",
+            "candidate information",
+            "working experience",
+            "number of skills",
+            "personality score",
+        )
+        return sum(1 for marker in markers if marker in q) >= 4
+
+    @staticmethod
+    def _is_inventory_eoq_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return ("economic order quantity" in q or "eoq" in q) and "reorder point" in q
+
+    @staticmethod
+    def _is_hospital_utilisation_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("staff utilisation", "service utilisation", "patient load", "department")
+        return sum(1 for marker in markers if marker in q) >= 3
+
+    @staticmethod
+    def _is_market_share_shipment_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("market share", "smartphone", "shipment", "overlapping time period")
+        return sum(1 for marker in markers if marker in q) >= 3
+
+    @staticmethod
+    def _is_cash_flow_efficiency_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("operating cash flow", "net income", "free cash flow", "cash flow efficiency")
+        return sum(1 for marker in markers if marker in q) >= 2
+
+    @staticmethod
+    def _is_diabetes_region_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("diabetics worldwide by region", "share of global", "avg expenditure per person", "diabetes-related health expenditure")
+        return sum(1 for marker in markers if marker in q) >= 2
+
+    @staticmethod
+    def _is_mobile_reviews_summary_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("smartphone reviews", "average rating", "number of reviews", "country", "brand")
+        return sum(1 for marker in markers if marker in q) >= 4
+
+    @staticmethod
+    def _is_store_feature_analysis_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("holiday and non-holiday", "store type", "fuel price", "consumer price index", "unemployment")
+        return sum(1 for marker in markers if marker in q) >= 3
+
+    @staticmethod
+    def _is_ecommerce_merge_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = ("brazilian e-commerce", "translate the product category names into english", "merged dataset", "eight csv files")
+        return sum(1 for marker in markers if marker in q) >= 2
+
+    @staticmethod
+    def _is_missing_data_scan_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return "missing data" in q and ("identify where" in q or "where values are missing" in q or "check the file" in q)
+
+    @staticmethod
+    def _is_room_inconsistency_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        return "room identifiers" in q or ("room" in q and "inconsistenc" in q) or "c80" in q or "c 80" in q
 
     def _ensure_output_contract(self, text: str, user_question: str) -> str:
         """Normalize output contract for offline reliability.

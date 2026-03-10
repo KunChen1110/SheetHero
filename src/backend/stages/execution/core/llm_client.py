@@ -8,8 +8,8 @@ from typing import Optional
 
 from openai import RateLimitError
 
-from ...log.logger_registry import LoggerRegistry
-from ..base.llm_client import BaseLLMClient
+from ....log.logger_registry import LoggerRegistry
+from ...base.llm_client import BaseLLMClient
 
 logger = LoggerRegistry.setup_logger(__name__)
 

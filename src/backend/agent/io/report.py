@@ -29,6 +29,7 @@ class RunReportBuilder:
         all_validation_results: List[Dict[str, Any]],
         overall_start_time: float,
         final_answer: str,
+        short_answer: str,
         overall_success: bool,
         confidence_score: float,
         validation_passed: bool,
@@ -64,6 +65,8 @@ class RunReportBuilder:
             )
             progress_logger.log(f"Total Iterations: {total_iterations}", to_terminal=False)
             progress_logger.log(f"Final Answer: {final_answer}", to_terminal=False)
+            if short_answer:
+                progress_logger.log(f"Short Answer: {short_answer}", to_terminal=False)
             progress_logger.log(
                 f"Confidence Score: {confidence_score:.2f}/1.0",
                 to_terminal=False
@@ -85,6 +88,7 @@ class RunReportBuilder:
         result = {
             "success": overall_success,
             "answer": final_answer,
+            "short_answer": short_answer,
             "confidence_score": confidence_score,
             "validation_passed": validation_passed,
             "total_iterations": total_iterations,
@@ -136,6 +140,7 @@ class RunReportBuilder:
         result = {
             "success": False,
             "answer": f"Analysis failed due to error: {str(error)}",
+            "short_answer": f"Analysis failed due to error: {str(error)}",
             "confidence_score": 0.0,
             "validation_passed": False,
             "total_iterations": len(all_execution_results),

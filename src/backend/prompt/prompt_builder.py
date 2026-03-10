@@ -246,7 +246,11 @@ class PromptBuilder:
         output_instruction: str,
     ) -> str:
         system_intro = self._execution.system_intro
-        helper_parts = [self._execution.helper_sections_part1]
+        helper_parts = [
+            self._execution.helper_sections_part1,
+            self._execution.helper_sections_part2,
+        ]
+        helper_parts = [p for p in helper_parts if (p or "").strip()]
 
         system_parts = [system_intro]
         if output_instruction:
