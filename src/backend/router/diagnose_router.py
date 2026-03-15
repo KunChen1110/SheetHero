@@ -5,12 +5,13 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
 from ..log.logger_registry import LoggerRegistry
 from ..prompt.prompt_builder import PromptBuilder
+from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -19,11 +20,28 @@ logger = LoggerRegistry.setup_logger(__name__)
 class DiagnoseDecision:
     should_diagnose: bool
     reasons: List[str] = field(default_factory=list)
-    issues: List[str] = field(default_factory=list)
+    issues: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class DiagnoseRouter:
     """Decide whether the diagnose stage should run."""
+
+    _QUESTION_STOPWORDS = {
+        "a", "an", "and", "are", "as", "at", "be", "by", "calculate",
+        "compute", "create", "do", "for", "from", "get", "how", "i",
+        "in", "into", "is", "it", "make", "me", "month", "new", "of",
+        "on", "or", "output", "please", "results", "sheet", "spreadsheet",
+        "table", "task", "that", "the", "this", "to", "use", "what",
+        "with", "you", "your",
+    }
+    _IDENTIFIER_HINTS = ("date", "id", "name", "task", "employee", "customer", "order", "room", "tutor")
+    _METRIC_HINTS = {
+        "average": ("average", "avg", "mean", "spending", "amount", "price", "cost", "value", "score", "rate"),
+        "total": ("total", "sum", "spending", "amount", "price", "cost", "value", "sales", "revenue"),
+        "count": ("count", "number", "total", "qty", "quantity", "students", "orders"),
+        "max": ("max", "maximum", "highest", "largest", "top", "best"),
+        "min": ("min", "minimum", "lowest", "smallest", "least"),
+    }
 
     def __init__(self, client, deployment: str, progress_logger=None,
                  prompt_profile: str = "online_rich"):
@@ -43,6 +61,7 @@ class DiagnoseRouter:
             should_diagnose = self._deterministic_fallback_decision(user_question)
             reasons = [f"deterministic:{'YES' if should_diagnose else 'NO'}"]
             issues = []
+
         use_llm_fallback = os.getenv("SHEETHERO_ROUTER_LLM_FALLBACK", "0").strip() == "1"
         if use_llm_fallback and not evidence_issues:
             prompt = self.prompt_builder.build_diagnose_router_prompt(
@@ -60,8 +79,9 @@ class DiagnoseRouter:
                 to_terminal=False
             )
             if should_diagnose and issues:
+                descriptions = [str(issue.get("description") or issue) for issue in issues]
                 self.progress_logger.log_raw(
-                    "\n".join(["### [ROUTER DATA EVIDENCE]"] + [f"- {issue}" for issue in issues])
+                    "\n".join(["### [ROUTER DATA EVIDENCE]"] + [f"- {issue}" for issue in descriptions])
                 )
 
         return DiagnoseDecision(
@@ -119,7 +139,7 @@ class DiagnoseRouter:
         return value.strip()
 
     @staticmethod
-    def _normalize_cell_text(text: str) -> str:
+    def _normalize_cell_text(text: Any) -> str:
         if text is None:
             return ""
         try:
@@ -158,24 +178,460 @@ class DiagnoseRouter:
                 continue
             file_key = os.path.basename(str(path))
             for sheet in workbook.worksheets:
-                rows = list(sheet.values)
-                if not rows:
+                extracted = extract_sheet_table(
+                    sheet,
+                    "A1:Z200",
+                    drop_blank_rows=False,
+                    drop_empty_primary_key=False,
+                    stop_at_note_row=True,
+                )
+                if not extracted.get("header"):
                     df = pd.DataFrame()
                 else:
-                    header = list(rows[0])
-                    if not any(h is not None and str(h).strip() != "" for h in header):
-                        header = [f"col_{i + 1}" for i in range(len(header))]
-                    else:
-                        header = [
-                            (str(h).strip() if h is not None and str(h).strip() != "" else f"col_{i + 1}")
-                            for i, h in enumerate(header)
-                        ]
-                    df = pd.DataFrame(rows[1:], columns=header)
+                    df = pd.DataFrame(extracted["rows"], columns=extracted["header"])
+                    df.attrs["excel_rows"] = list(extracted.get("excel_rows", []))
+                    df.attrs["header_excel_row"] = extracted.get("header_excel_row")
+                    df.attrs["overflow_excel_rows"] = list(extracted.get("overflow_excel_rows", []))
                 view[f"{file_key}::{sheet.title}"] = df
         return view
 
     @classmethod
-    def _detect_duplicate_header_issues(cls, sheet_key: str, df: pd.DataFrame) -> List[str]:
+    def _excel_row_number(cls, df: pd.DataFrame, row_index: int) -> int:
+        excel_rows = getattr(df, "attrs", {}).get("excel_rows")
+        if isinstance(excel_rows, list) and 0 <= row_index < len(excel_rows):
+            return int(excel_rows[row_index])
+        header_excel_row = getattr(df, "attrs", {}).get("header_excel_row")
+        if isinstance(header_excel_row, int):
+            return header_excel_row + row_index + 1
+        return row_index + 2
+
+    @classmethod
+    def _extract_sheet_parts(cls, sheet_key: str) -> tuple[str, str]:
+        if "::" not in sheet_key:
+            return sheet_key, "Sheet1"
+        file_name, sheet_name = sheet_key.split("::", 1)
+        return file_name, sheet_name
+
+    @classmethod
+    def _normalize_question_tokens(cls, user_question: str) -> List[str]:
+        raw_tokens = re.findall(r"[a-z0-9]+", (user_question or "").lower())
+        return [token for token in raw_tokens if token not in cls._QUESTION_STOPWORDS]
+
+    @classmethod
+    def _column_relevance_score(cls, column_name: str, user_question: str) -> int:
+        normalized = cls._normalize_header_name(column_name)
+        if not normalized:
+            return 0
+        question = (user_question or "").lower()
+        tokens = set(cls._normalize_question_tokens(user_question))
+        header_tokens = set(normalized.split())
+        score = 0
+
+        if normalized in question:
+            score += 5
+        score += 2 * len(tokens & header_tokens)
+
+        for trigger, hints in cls._METRIC_HINTS.items():
+            if trigger in question and any(hint in normalized for hint in hints):
+                score += 3
+
+        if any(hint in normalized for hint in ("date", "time", "day")) and any(word in question for word in ("date", "time", "day", "month")):
+            score += 2
+        if any(hint in normalized for hint in ("name", "id", "code")) and any(word in question for word in ("name", "id", "tutor", "student", "employee", "customer")):
+            score += 2
+        if any(hint in normalized for hint in ("depends", "dependency", "prerequisite", "predecessor")) and any(
+            word in question for word in ("depend", "dependency", "dependencies", "schedule", "prerequisite", "predecessor")
+        ):
+            score += 4
+
+        return score
+
+    @classmethod
+    def _relevant_columns(cls, df: pd.DataFrame, user_question: str) -> List[str]:
+        scored: List[tuple[int, str]] = []
+        for column_name in map(str, getattr(df, "columns", [])):
+            score = cls._column_relevance_score(column_name, user_question)
+            if score > 0:
+                scored.append((score, column_name))
+        scored.sort(key=lambda item: (-item[0], item[1].lower()))
+        return [column_name for _, column_name in scored[:4]]
+
+    @classmethod
+    def _is_missing_value(cls, value: Any) -> bool:
+        try:
+            if pd.isna(value):
+                return True
+        except Exception:
+            pass
+        if value is None:
+            return True
+        if isinstance(value, str) and value.strip() == "":
+            return True
+        return False
+
+    @classmethod
+    def _row_has_any_data(cls, row: pd.Series) -> bool:
+        for value in row.tolist():
+            if not cls._is_missing_value(value):
+                return True
+        return False
+
+    @classmethod
+    def _guess_identifier_column(cls, df: pd.DataFrame, problem_column: str) -> Optional[str]:
+        columns = [str(col) for col in getattr(df, "columns", []) if str(col) != str(problem_column)]
+        preferred = [
+            col for col in columns
+            if any(token in cls._normalize_header_name(col) for token in cls._IDENTIFIER_HINTS)
+        ]
+        for column_name in preferred + columns:
+            non_empty = df[column_name].map(cls._normalize_cell_text)
+            if (non_empty != "").any():
+                return column_name
+        return None
+
+    @classmethod
+    def _row_context_label(cls, df: pd.DataFrame, row_index: int, problem_column: str) -> str:
+        if row_index < 0 or row_index >= len(df):
+            return ""
+        identifier_column = cls._guess_identifier_column(df, problem_column)
+        if not identifier_column:
+            return ""
+        value = cls._normalize_cell_text(df.iloc[row_index][identifier_column])
+        if not value:
+            return ""
+        return f"{identifier_column} = {value}"
+
+    @classmethod
+    def _select_preview_columns(cls, df: pd.DataFrame, focus_columns: Optional[List[str]] = None) -> List[str]:
+        all_columns = [str(col) for col in getattr(df, "columns", [])]
+        if not all_columns:
+            return []
+        if len(all_columns) <= 8:
+            return all_columns
+
+        focus_columns = [str(col) for col in (focus_columns or []) if str(col) in all_columns]
+        if not focus_columns:
+            return all_columns[:8]
+
+        focus_indices = sorted(all_columns.index(column_name) for column_name in focus_columns)
+        start = max(0, focus_indices[0] - 2)
+        end = min(len(all_columns), start + 8)
+        start = max(0, end - 8)
+        return all_columns[start:end]
+
+    @classmethod
+    def _format_preview_value(cls, value: Any) -> str:
+        if cls._is_missing_value(value):
+            return ""
+        return cls._normalize_cell_text(value)
+
+    @classmethod
+    def _build_markdown_preview(cls, df: pd.DataFrame, row_indices: List[int], focus_columns: Optional[List[str]] = None) -> str:
+        if df is None or df.empty:
+            return ""
+
+        usable_indices = []
+        for row_index in row_indices:
+            if 0 <= row_index < len(df) and row_index not in usable_indices:
+                usable_indices.append(row_index)
+        if not usable_indices:
+            return ""
+
+        # Always include one comparison row when possible so the user can
+        # interpret the issue against nearby data, even if the issue is on the
+        # first visible row.
+        if len(usable_indices) == 1:
+            only_index = usable_indices[0]
+            if only_index + 1 < len(df):
+                usable_indices.append(only_index + 1)
+            elif only_index - 1 >= 0:
+                usable_indices.insert(0, only_index - 1)
+
+        selected_columns = cls._select_preview_columns(df, focus_columns)
+        if not selected_columns:
+            return ""
+
+        separator = ["---"] * len(selected_columns)
+        human_rows = [cls._excel_row_number(df, row_index) for row_index in usable_indices]
+        issue_row_index = None
+        if row_indices:
+            last_requested = row_indices[-1]
+            if 0 <= last_requested < len(df):
+                issue_row_index = last_requested
+        if len(human_rows) == 2:
+            if issue_row_index is not None and issue_row_index in usable_indices:
+                comparison_index = next(
+                    (idx for idx in usable_indices if idx != issue_row_index),
+                    issue_row_index,
+                )
+                row_context = (
+                    f"Rows shown: comparison row = Excel row {cls._excel_row_number(df, comparison_index)}, "
+                    f"issue row = Excel row {cls._excel_row_number(df, issue_row_index)}."
+                )
+            else:
+                row_context = (
+                    f"Rows shown: Excel row {human_rows[0]} and Excel row {human_rows[1]}."
+                )
+        elif len(human_rows) == 1:
+            row_context = f"Row shown: Excel row {human_rows[0]}."
+        else:
+            row_context = "Rows shown: " + ", ".join(f"Excel row {row_number}" for row_number in human_rows) + "."
+        lines = [
+            "Context preview:",
+            row_context,
+            "| " + " | ".join(selected_columns) + " |",
+            "| " + " | ".join(separator) + " |",
+        ]
+        for row_index in usable_indices:
+            row = df.iloc[row_index]
+            values = [cls._format_preview_value(row[col]) for col in selected_columns]
+            lines.append("| " + " | ".join(values) + " |")
+        return "\n".join(lines)
+
+    @classmethod
+    def _make_issue(
+        cls,
+        *,
+        issue_type: str,
+        description: str,
+        question: str,
+        details_markdown: str = "",
+        preview_kind: str = "table",
+        material_to_result: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "source": "router_evidence",
+            "issue_type": issue_type,
+            "description": description,
+            "question": question,
+            "details_markdown": details_markdown,
+            "preview_kind": preview_kind,
+            "material_to_result": material_to_result,
+            "metadata": metadata or {},
+        }
+
+    @classmethod
+    def _question_is_merge_like(cls, user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = (
+            "merge",
+            "using another file",
+            "using another csv",
+            "join",
+            "combine",
+            "match",
+            "rank the candidates",
+            "fill missing",
+            "dashboard",
+            "screening",
+        )
+        return any(marker in q for marker in markers)
+
+    @classmethod
+    def _is_unique_key_like_header(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        return any(
+            token in normalized
+            for token in ("id", "identifier", "email", "code", "tutorid", "employee id", "customer id", "order id")
+        )
+
+    @classmethod
+    def _header_matches_candidate(cls, column_name: str, candidate: str) -> bool:
+        column_norm = cls._normalize_header_name(column_name)
+        candidate_norm = cls._normalize_header_name(candidate)
+        if not column_norm or not candidate_norm:
+            return False
+        if column_norm == candidate_norm:
+            return True
+        column_tokens = set(column_norm.split())
+        candidate_tokens = set(candidate_norm.split())
+        if candidate_tokens and candidate_tokens.issubset(column_tokens):
+            return True
+        if candidate_norm in column_norm or column_norm in candidate_norm:
+            return True
+        return False
+
+    @classmethod
+    def _is_period_like_column(cls, series: pd.Series, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if "year" in normalized or "date" in normalized or "month" in normalized:
+            return True
+        sample = [cls._normalize_cell_text(value) for value in series.tolist()[:12] if cls._normalize_cell_text(value)]
+        if not sample:
+            return False
+        if sum(1 for value in sample if re.fullmatch(r"(19|20)\d{2}", value)) >= max(2, len(sample) // 2):
+            return True
+        if sum(1 for value in sample if re.search(r"(19|20)\d{2}", value)) >= max(2, len(sample) // 2):
+            return True
+        return False
+
+    @classmethod
+    def _extract_requested_years(cls, user_question: str) -> List[int]:
+        years = sorted({int(token) for token in re.findall(r"\b(19\d{2}|20\d{2})\b", user_question or "")})
+        return years
+
+    @classmethod
+    def _extract_available_years(cls, df: pd.DataFrame) -> List[int]:
+        years: set[int] = set()
+        for column_name in map(str, getattr(df, "columns", [])):
+            series = df[column_name]
+            if not cls._is_period_like_column(series, column_name):
+                continue
+            for raw_value in series.tolist():
+                text = cls._normalize_cell_text(raw_value)
+                if not text:
+                    continue
+                match = re.search(r"\b(19\d{2}|20\d{2})\b", text)
+                if match:
+                    years.add(int(match.group(1)))
+        return sorted(years)
+
+    @classmethod
+    def _is_time_or_unit_column(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        return any(token in normalized for token in ("time", "duration", "hour", "hours", "minute", "minutes", "rate", "amount", "price", "cost", "spending", "weight", "unit"))
+
+    @classmethod
+    def _is_id_like_value(cls, text: str) -> bool:
+        value = cls._normalize_cell_text(text)
+        if not value:
+            return False
+        if re.fullmatch(r"[A-Za-z]{2,}\d{2,}", value):
+            return True
+        if re.fullmatch(r"[A-Za-z]{1,5}[-_ ]?\d{2,}", value):
+            return True
+        if re.fullmatch(r"\d{3,}", value):
+            return True
+        return False
+
+    @classmethod
+    def _id_like_ratio(cls, values: List[Any]) -> float:
+        cleaned = [cls._normalize_cell_text(value) for value in values if cls._normalize_cell_text(value)]
+        if not cleaned:
+            return 0.0
+        matches = sum(1 for value in cleaned if cls._is_id_like_value(value))
+        return matches / len(cleaned)
+
+    @classmethod
+    def _value_pattern_kind(cls, text: str) -> str:
+        value = cls._normalize_cell_text(text)
+        if not value:
+            return ""
+        lowered = value.lower()
+        if re.fullmatch(r"\d{1,2}:\d{2}(\s*-\s*\d{1,2}:\d{2})?", lowered):
+            return "time_hhmm"
+        if re.fullmatch(r"\d{1,2}\s*(am|pm)(\s*-\s*\d{1,2}\s*(am|pm))?", lowered):
+            return "time_ampm"
+        if re.fullmatch(r"-?\d+(\.\d+)?", lowered):
+            return "plain_number"
+        if re.fullmatch(r"-?\d+(\.\d+)?\s*[a-z%£$]+", lowered):
+            return "number_with_unit"
+        if re.fullmatch(r"[a-z]+\s*-?\d+(\.\d+)?", lowered):
+            return "prefixed_unit"
+        return "other"
+
+    @classmethod
+    def _build_schema_preview(cls, df: pd.DataFrame) -> str:
+        headers = [str(col) for col in getattr(df, "columns", [])]
+        if not headers:
+            return "Context preview:\nNo visible headers were found."
+        lines = [
+            "Context preview:",
+            "Headers: " + ", ".join(headers[:12]),
+        ]
+        preview = cls._build_markdown_preview(df, [0, 1], [])
+        if preview:
+            preview_lines = preview.splitlines()
+            if preview_lines and preview_lines[0].strip() == "Context preview:":
+                preview_lines = preview_lines[1:]
+            lines.extend(preview_lines)
+        return "\n".join(lines)
+
+    @classmethod
+    def _index_is_default_range(cls, df: pd.DataFrame) -> bool:
+        index = getattr(df, "index", None)
+        if isinstance(index, pd.RangeIndex):
+            return True
+        if index is None:
+            return True
+        try:
+            return list(index) == list(range(len(df)))
+        except Exception:
+            return False
+
+    @classmethod
+    def _detect_row_alignment_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        if not cls._question_is_merge_like(user_question):
+            return []
+        overflow_excel_rows = list(getattr(df, "attrs", {}).get("overflow_excel_rows") or [])
+        if not overflow_excel_rows:
+            return []
+
+        columns = [str(col) for col in getattr(df, "columns", [])]
+        key_like_columns = [col for col in columns if cls._is_entity_key_header(col)]
+        if not key_like_columns:
+            return []
+
+        suspicious_column = columns[-1] if columns else None
+        for column_name in key_like_columns:
+            visible_ratio = cls._id_like_ratio(df[column_name].tolist()[:10])
+            if visible_ratio <= 0.2 and suspicious_column is None:
+                suspicious_column = column_name
+        suspicious_column = suspicious_column or key_like_columns[0]
+
+        non_empty_row_indices: List[int] = []
+        for row_index in range(len(df)):
+            excel_row = cls._excel_row_number(df, row_index)
+            if excel_row not in overflow_excel_rows:
+                continue
+            if cls._row_has_any_data(df.iloc[row_index]):
+                non_empty_row_indices.append(row_index)
+            if len(non_empty_row_indices) >= 2:
+                break
+        if not non_empty_row_indices:
+            return []
+
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        description = (
+            f"In sheet `{sheet_key}`, some rows appear to contain more populated cells than the header allows."
+        )
+        question = (
+            f"I noticed that in `{file_name}` / `{sheet_name}`, some rows appear to contain more values than the header structure allows, "
+            f"and the visible columns look shifted near `{suspicious_column}`. This suggests the CSV may have been split incorrectly during parsing. "
+            "Should I reconstruct those shifted rows before matching them with the other files?"
+        )
+        preview = cls._build_markdown_preview(df, non_empty_row_indices, columns[: min(len(columns), 6)])
+        preview = (
+            "Context preview:\n"
+            f"Rows with suspected overflow values include Excel row(s): {', '.join(str(value) for value in overflow_excel_rows[:4])}.\n"
+            "The visible columns may be shifted because the raw CSV row contains more cells than the header.\n"
+            + "\n".join(preview.splitlines()[1:])
+        )
+        return [
+            cls._make_issue(
+                issue_type="row_alignment",
+                description=description,
+                question=question,
+                details_markdown=preview,
+                preview_kind="row_pair",
+                metadata={
+                    "sheet_key": sheet_key,
+                    "suspicious_column": suspicious_column,
+                    "overflow_excel_rows": overflow_excel_rows,
+                },
+            )
+        ]
+
+    @classmethod
+    def _detect_duplicate_header_issues(cls, sheet_key: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
         if df is None or not hasattr(df, "columns"):
             return []
         raw_headers = [str(col) for col in df.columns]
@@ -186,13 +642,90 @@ class DiagnoseRouter:
             if raw not in normalized_to_raw[normalized]:
                 normalized_to_raw[normalized].append(raw)
 
-        issues: List[str] = []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
         for normalized, raw_variants in normalized_to_raw.items():
             if normalized and len(raw_variants) > 1:
                 joined = ", ".join(f"`{item}`" for item in raw_variants[:4])
-                issues.append(
-                    f"In sheet `{sheet_key}`, multiple headers normalize to the same meaning ({joined}). Which header should be treated as authoritative?"
+                description = (
+                    f"In sheet `{sheet_key}`, multiple headers normalize to the same meaning ({joined})."
                 )
+                question = (
+                    f"I noticed that in `{file_name}` / `{sheet_name}`, the headers {joined} look like the same field after normalization. "
+                    "Which header should I treat as the authoritative one for this task?"
+                )
+                details = "Context preview:\n- Headers: " + ", ".join(raw_headers[:8])
+                issues.append(
+                    cls._make_issue(
+                        issue_type="duplicate_header",
+                        description=description,
+                        question=question,
+                        details_markdown=details,
+                        preview_kind="schema",
+                        metadata={"sheet_key": sheet_key, "headers": raw_variants},
+                    )
+                )
+        return issues
+
+    @classmethod
+    def _detect_missing_key_column_issues(
+        cls,
+        workbook_view: Dict[str, pd.DataFrame],
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if not cls._question_is_merge_like(user_question):
+            return []
+        if len(workbook_view) < 2:
+            return []
+
+        all_normalized_headers: Dict[str, set[str]] = {}
+        for sheet_key, df in workbook_view.items():
+            for column_name in map(str, getattr(df, "columns", [])):
+                normalized = cls._normalize_header_name(column_name)
+                if not normalized:
+                    continue
+                all_normalized_headers.setdefault(normalized, set()).add(sheet_key)
+
+        common_key_candidates = [
+            normalized for normalized, sheets in all_normalized_headers.items()
+            if len(sheets) >= 2 and (
+                cls._is_entity_key_header(normalized)
+                or cls._is_entity_descriptor_header(normalized)
+            )
+        ]
+        if not common_key_candidates:
+            return []
+
+        issues: List[Dict[str, Any]] = []
+        for sheet_key, df in workbook_view.items():
+            raw_headers = [str(col) for col in getattr(df, "columns", [])]
+            if any(
+                cls._header_matches_candidate(column_name, candidate)
+                for candidate in common_key_candidates
+                for column_name in raw_headers
+            ):
+                continue
+            file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+            display_candidates = ", ".join(f"`{candidate}`" for candidate in common_key_candidates[:4])
+            description = (
+                f"In sheet `{sheet_key}`, no clear matching key column was found for the multi-file task."
+            )
+            question = (
+                f"I could not find a clear matching key in `{file_name}` / `{sheet_name}` for this multi-file task. "
+                f"The other file(s) appear to match on fields like {display_candidates}. Which column in this sheet should I use to match rows?"
+            )
+            issues.append(
+                cls._make_issue(
+                    issue_type="missing_key_column",
+                    description=description,
+                    question=question,
+                    details_markdown=cls._build_schema_preview(df),
+                    preview_kind="schema",
+                    metadata={"sheet_key": sheet_key, "candidate_keys": common_key_candidates},
+                )
+            )
+            if len(issues) >= 1:
+                break
         return issues
 
     @classmethod
@@ -228,11 +761,12 @@ class DiagnoseRouter:
         return any(token in normalized for token in descriptor_like)
 
     @classmethod
-    def _detect_conflicting_key_mapping_issues(cls, sheet_key: str, df: pd.DataFrame) -> List[str]:
+    def _detect_conflicting_key_mapping_issues(cls, sheet_key: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
         if df is None or df.empty or not hasattr(df, "columns"):
             return []
 
-        issues: List[str] = []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
         columns = [str(col) for col in df.columns]
         key_columns = [col for col in columns if cls._is_entity_key_header(col)]
         descriptor_columns = [col for col in columns if cls._is_entity_descriptor_header(col)]
@@ -240,41 +774,457 @@ class DiagnoseRouter:
             return []
 
         for key_col in key_columns:
-            working = df[[key_col] + [col for col in descriptor_columns if col != key_col]].copy()
-            working[key_col] = working[key_col].map(cls._normalize_cell_text)
-            working = working[working[key_col] != ""]
-            if working.empty:
-                continue
-
             for descriptor_col in [col for col in descriptor_columns if col != key_col]:
-                normalized_descriptor = working[descriptor_col].map(cls._normalize_cell_text)
-                compare = pd.DataFrame({
-                    "key": working[key_col],
-                    "value": normalized_descriptor,
-                    "raw_value": working[descriptor_col].astype(str),
-                })
-                compare = compare[compare["value"] != ""]
-                if compare.empty:
+                working = df[[key_col, descriptor_col]].copy()
+                row_index_column = "___router_row_index___"
+                working[row_index_column] = list(range(len(df)))
+                working[key_col] = working[key_col].map(cls._normalize_cell_text)
+                working["__normalized_descriptor__"] = working[descriptor_col].map(cls._normalize_cell_text)
+                working = working[(working[key_col] != "") & (working["__normalized_descriptor__"] != "")]
+                if working.empty:
                     continue
 
-                grouped = compare.groupby("key")["value"].nunique(dropna=True)
+                grouped = working.groupby(key_col)["__normalized_descriptor__"].nunique(dropna=True)
                 conflict_keys = grouped[grouped > 1].index.tolist()
                 if not conflict_keys:
                     continue
 
                 example_key = conflict_keys[0]
-                sample_rows = compare[compare["key"] == example_key]
-                raw_values = sorted(set(sample_rows["raw_value"].tolist()))[:3]
-                example_text = ", ".join(f"`{value}`" for value in raw_values)
+                sample_rows = working[working[key_col] == example_key].head(2)
+                raw_values = sorted({cls._normalize_cell_text(value) for value in sample_rows[descriptor_col].tolist() if cls._normalize_cell_text(value)})[:3]
+                row_indices = [int(value) for value in sample_rows[row_index_column].tolist()]
+                description = (
+                    f"In sheet `{sheet_key}`, `{key_col}` value `{example_key}` maps to multiple `{descriptor_col}` values."
+                )
+                question = (
+                    f"I noticed that in `{file_name}` / `{sheet_name}`, `{key_col}` value `{example_key}` is linked to different `{descriptor_col}` values "
+                    f"({', '.join(raw_values)}). Which value should I use as correct?"
+                )
                 issues.append(
-                    f"In sheet `{sheet_key}`, `{key_col}` value `{example_key}` maps to multiple `{descriptor_col}` values ({example_text}). Which value should be treated as correct?"
+                    cls._make_issue(
+                        issue_type="conflicting_mapping",
+                        description=description,
+                        question=question,
+                        details_markdown=cls._build_markdown_preview(df, row_indices, [key_col, descriptor_col]),
+                        preview_kind="row_pair",
+                        metadata={
+                            "sheet_key": sheet_key,
+                            "key_column": key_col,
+                            "descriptor_column": descriptor_col,
+                            "entity_key": example_key,
+                        },
+                    )
                 )
                 if len(issues) >= 2:
                     return issues
         return issues
 
     @classmethod
-    def _detect_blocking_data_issues(cls, workbook_view, user_question: str) -> List[str]:
+    def _detect_missing_value_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
+        relevant_columns = cls._relevant_columns(df, user_question)
+        if not relevant_columns:
+            return []
+
+        for column_name in relevant_columns:
+            series = df[column_name]
+            normalized_column = cls._normalize_header_name(column_name)
+            for row_index, value in enumerate(series.tolist()):
+                if not cls._is_missing_value(value):
+                    continue
+                row = df.iloc[row_index]
+                if not cls._row_has_any_data(row):
+                    continue
+                excel_row = cls._excel_row_number(df, row_index)
+                context_label = cls._row_context_label(df, row_index, column_name)
+                description = (
+                    f"In sheet `{sheet_key}`, column `{column_name}` is empty at Excel row {excel_row}."
+                )
+                question = (
+                    f"I noticed that in `{file_name}` / `{sheet_name}`, the value in column `{column_name}` is empty at Excel row {excel_row}"
+                )
+                if context_label:
+                    question += f" ({context_label})"
+                if normalized_column == "depends on":
+                    question += (
+                        ". Does this mean the task has no prerequisite and should be treated as a root task, "
+                        "or should I treat it as missing data?"
+                    )
+                else:
+                    question += ". How should I handle it for this task?"
+
+                if row_index > 0:
+                    preview_rows = [row_index - 1, row_index]
+                else:
+                    preview_rows = [row_index]
+                issues.append(
+                    cls._make_issue(
+                        issue_type="missing_value",
+                        description=description,
+                        question=question,
+                        details_markdown=cls._build_markdown_preview(df, preview_rows, [column_name]),
+                        preview_kind="cell_issue",
+                        metadata={
+                            "sheet_key": sheet_key,
+                            "column": column_name,
+                            "row_index": row_index,
+                            "excel_row": excel_row,
+                        },
+                    )
+                )
+                break
+            if len(issues) >= 2:
+                break
+        return issues
+
+    @classmethod
+    def _detect_internal_blank_row_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        question_lower = (user_question or "").lower()
+        if not any(token in question_lower for token in ("average", "total", "sum", "merge", "combine", "report", "analysis", "calculate")):
+            return []
+
+        row_has_data = [cls._row_has_any_data(df.iloc[idx]) for idx in range(len(df))]
+        if not any(row_has_data):
+            return []
+        first_data = next((idx for idx, has_data in enumerate(row_has_data) if has_data), None)
+        last_data = next((idx for idx in range(len(row_has_data) - 1, -1, -1) if row_has_data[idx]), None)
+        if first_data is None or last_data is None or first_data >= last_data:
+            return []
+
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        for row_index in range(first_data + 1, last_data):
+            if row_has_data[row_index]:
+                continue
+            previous_index = row_index - 1
+            if previous_index < 0 or not row_has_data[previous_index]:
+                continue
+            excel_row = cls._excel_row_number(df, row_index)
+            description = f"In sheet `{sheet_key}`, Excel row {excel_row} is blank inside an active table."
+            question = (
+                f"I noticed that `{file_name}` / `{sheet_name}` has a blank row at Excel row {excel_row} in the middle of the table. "
+                "Should I ignore this blank row and continue reading the surrounding rows as one table?"
+            )
+            return [
+                cls._make_issue(
+                    issue_type="blank_row",
+                    description=description,
+                    question=question,
+                    details_markdown=cls._build_markdown_preview(df, [previous_index, row_index], []),
+                    preview_kind="boundary",
+                    metadata={"sheet_key": sheet_key, "row_index": row_index, "excel_row": excel_row},
+                )
+            ]
+        return []
+
+    @classmethod
+    def _is_name_like_column(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        return any(token in normalized for token in ("name", "student", "tutor", "teacher", "employee", "customer"))
+
+    @classmethod
+    def _has_actionable_format_variation(cls, raw_values: List[str]) -> bool:
+        cleaned = [value for value in raw_values if value]
+        if len(cleaned) < 2:
+            return False
+        lower_values = {value.lower() for value in cleaned}
+        if len(lower_values) > 1:
+            comma_variation = any("," in value for value in cleaned)
+            whitespace_variation = any(value != value.strip() or "  " in value for value in cleaned)
+            order_like_variation = any("," in value for value in cleaned) and any("," not in value for value in cleaned)
+            return comma_variation or whitespace_variation or order_like_variation
+        return any(value != cleaned[0] for value in cleaned[1:])
+
+    @classmethod
+    def _detect_format_inconsistency_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
+        candidate_columns = [
+            col for col in cls._relevant_columns(df, user_question)
+            if cls._is_name_like_column(col)
+        ]
+        if not candidate_columns:
+            candidate_columns = [
+                str(col) for col in getattr(df, "columns", [])
+                if cls._is_name_like_column(str(col))
+            ]
+
+        for column_name in candidate_columns[:3]:
+            working = pd.DataFrame({
+                "raw": df[column_name].tolist(),
+                "normalized": [cls._normalize_cell_text(value) for value in df[column_name].tolist()],
+                "row_index": list(range(len(df))),
+            })
+            working = working[(working["normalized"] != "") & (working["raw"].map(lambda value: not cls._is_missing_value(value)))]
+            if working.empty:
+                continue
+
+            for normalized_value, group in working.groupby("normalized"):
+                raw_variants = []
+                row_indices = []
+                for _, record in group.iterrows():
+                    raw_text = str(record["raw"])
+                    if raw_text not in raw_variants:
+                        raw_variants.append(raw_text)
+                        row_indices.append(int(record["row_index"]))
+                if len(raw_variants) < 2:
+                    continue
+                if not cls._has_actionable_format_variation(raw_variants):
+                    continue
+
+                display_variants = [cls._normalize_cell_text(value) or str(value) for value in raw_variants[:2]]
+                description = (
+                    f"In sheet `{sheet_key}`, column `{column_name}` uses inconsistent textual formats for the same value `{normalized_value}`."
+                )
+                question = (
+                    f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` uses both `{display_variants[0]}` and `{display_variants[1]}` for what looks like the same value. "
+                    "Should I treat them as the same value and normalize them before matching?"
+                )
+                issues.append(
+                    cls._make_issue(
+                        issue_type="format_inconsistency",
+                        description=description,
+                        question=question,
+                        details_markdown=cls._build_markdown_preview(df, row_indices[:2], [column_name]),
+                        preview_kind="row_pair",
+                        metadata={
+                            "sheet_key": sheet_key,
+                            "column": column_name,
+                            "normalized_value": normalized_value,
+                        },
+                    )
+                )
+                if len(issues) >= 1:
+                    return issues
+        return issues
+
+    @classmethod
+    def _detect_unit_or_time_format_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
+        question_lower = (user_question or "").lower()
+        candidate_columns = [
+            column_name for column_name in cls._relevant_columns(df, user_question)
+            if cls._is_time_or_unit_column(column_name)
+        ]
+        for column_name in candidate_columns:
+            normalized_column = cls._normalize_header_name(column_name)
+            if normalized_column not in question_lower and not any(
+                marker in question_lower
+                for marker in ("calculate", "average", "total", "sum", "duration", "hours", "minutes", "schedule", "scheduling")
+            ):
+                continue
+            if "preferred" in normalized_column:
+                continue
+            values = []
+            for row_index, raw_value in enumerate(df[column_name].tolist()):
+                text = cls._normalize_cell_text(raw_value)
+                if not text:
+                    continue
+                kind = cls._value_pattern_kind(text)
+                values.append((row_index, text, kind))
+            if len(values) < 2:
+                continue
+
+            kinds = {}
+            for row_index, text, kind in values:
+                kinds.setdefault(kind, []).append((row_index, text))
+            kinds = {kind: rows for kind, rows in kinds.items() if kind}
+            if len(kinds) < 2:
+                continue
+
+            kind_items = sorted(kinds.items(), key=lambda item: len(item[1]), reverse=True)
+            primary_kind, primary_rows = kind_items[0]
+            secondary_kind, secondary_rows = kind_items[1]
+            preview_rows = [primary_rows[0][0], secondary_rows[0][0]]
+            description = (
+                f"In sheet `{sheet_key}`, column `{column_name}` mixes different time/unit formats."
+            )
+            question = (
+                f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` mixes different formats such as "
+                f"`{primary_rows[0][1]}` and `{secondary_rows[0][1]}`. "
+                "Should I normalize these values into one consistent format before using them in the calculation?"
+            )
+            issues.append(
+                cls._make_issue(
+                    issue_type="unit_or_time_format",
+                    description=description,
+                    question=question,
+                    details_markdown=cls._build_markdown_preview(df, preview_rows, [column_name]),
+                    preview_kind="cell_issue",
+                    metadata={
+                        "sheet_key": sheet_key,
+                        "column": column_name,
+                        "formats": [primary_kind, secondary_kind],
+                    },
+                )
+            )
+            if len(issues) >= 1:
+                break
+        return issues
+
+    @classmethod
+    def _detect_missing_period_endpoint_issues(
+        cls,
+        workbook_view: Dict[str, pd.DataFrame],
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        requested_years = cls._extract_requested_years(user_question)
+        if not requested_years:
+            return []
+
+        issues: List[Dict[str, Any]] = []
+        requested_set = set(requested_years)
+        for sheet_key, df in workbook_view.items():
+            available_years = cls._extract_available_years(df)
+            if not available_years:
+                continue
+            available_set = set(available_years)
+            missing_years = sorted(requested_set - available_set)
+            if not missing_years:
+                continue
+            file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+            latest_available = max(available_years)
+            details_lines = [
+                "Context preview:",
+                f"Requested years: {', '.join(str(year) for year in requested_years)}",
+                f"Available years: {', '.join(str(year) for year in available_years[:12])}",
+            ]
+            description = (
+                f"In sheet `{sheet_key}`, requested period values {missing_years} are missing from the available data."
+            )
+            question = (
+                f"I noticed that `{file_name}` / `{sheet_name}` does not contain the requested year(s) "
+                f"{', '.join(str(year) for year in missing_years)}. "
+                f"The latest available year is `{latest_available}`. Should I use the latest available year instead and state that assumption in the result?"
+            )
+            issues.append(
+                cls._make_issue(
+                    issue_type="missing_period_endpoint",
+                    description=description,
+                    question=question,
+                    details_markdown="\n".join(details_lines),
+                    preview_kind="period",
+                    metadata={
+                        "sheet_key": sheet_key,
+                        "requested_years": requested_years,
+                        "available_years": available_years,
+                    },
+                )
+            )
+            if len(issues) >= 1:
+                break
+        return issues
+
+    @classmethod
+    def _detect_duplicate_conflicting_row_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        issues: List[Dict[str, Any]] = []
+        key_columns = [str(col) for col in getattr(df, "columns", []) if cls._is_unique_key_like_header(str(col))]
+        if not key_columns:
+            return []
+
+        for key_col in key_columns:
+            working = df.copy()
+            working["__key__"] = working[key_col].map(cls._normalize_cell_text)
+            working["__row_index__"] = list(range(len(working)))
+            working = working[working["__key__"] != ""]
+            if working.empty:
+                continue
+            duplicate_keys = working["__key__"].value_counts()
+            duplicate_keys = duplicate_keys[duplicate_keys > 1].index.tolist()
+            for duplicate_key in duplicate_keys:
+                sample = working[working["__key__"] == duplicate_key].head(2)
+                compare_rows = []
+                for _, record in sample.iterrows():
+                    row_index = int(record["__row_index__"])
+                    compare_rows.append({
+                        "row_index": row_index,
+                        "values": {
+                            str(col): cls._normalize_cell_text(df.iloc[row_index][col])
+                            for col in getattr(df, "columns", [])
+                        },
+                    })
+                if len(compare_rows) < 2:
+                    continue
+                differing_columns = []
+                for column_name in map(str, getattr(df, "columns", [])):
+                    values = {row["values"].get(column_name, "") for row in compare_rows}
+                    values = {value for value in values if value != ""}
+                    if len(values) > 1:
+                        differing_columns.append(column_name)
+                if not differing_columns:
+                    continue
+                if len(differing_columns) == 1 and cls._is_entity_descriptor_header(differing_columns[0]):
+                    continue
+                description = (
+                    f"In sheet `{sheet_key}`, key `{key_col} = {duplicate_key}` appears in multiple rows with conflicting values."
+                )
+                question = (
+                    f"I noticed that in `{file_name}` / `{sheet_name}`, `{key_col} = {duplicate_key}` appears more than once, "
+                    f"and the rows differ in fields like `{differing_columns[0]}`. "
+                    "Should I keep one row as authoritative, or treat both rows as valid records?"
+                )
+                issues.append(
+                    cls._make_issue(
+                        issue_type="duplicate_conflicting_rows",
+                        description=description,
+                        question=question,
+                        details_markdown=cls._build_markdown_preview(
+                            df,
+                            [row["row_index"] for row in compare_rows],
+                            [key_col] + differing_columns[:2],
+                        ),
+                        preview_kind="row_pair",
+                        metadata={
+                            "sheet_key": sheet_key,
+                            "key_column": key_col,
+                            "key_value": duplicate_key,
+                            "differing_columns": differing_columns,
+                        },
+                    )
+                )
+                if len(issues) >= 1:
+                    return issues
+        return issues
+
+    @classmethod
+    def _detect_blocking_data_issues(cls, workbook_view, user_question: str) -> List[Dict[str, Any]]:
         if cls._is_self_reporting_issue_task(user_question):
             return []
 
@@ -282,12 +1232,46 @@ class DiagnoseRouter:
         if not coerced:
             return []
 
-        issues: List[str] = []
-        for sheet_key, df in coerced.items():
-            issues.extend(cls._detect_duplicate_header_issues(sheet_key, df))
-            issues.extend(cls._detect_conflicting_key_mapping_issues(sheet_key, df))
+        issues: List[Dict[str, Any]] = []
+        cross_sheet_detectors = (
+            cls._detect_missing_key_column_issues,
+            cls._detect_missing_period_endpoint_issues,
+        )
+        for detector in cross_sheet_detectors:
+            found = detector(coerced, user_question)
+            issues.extend(found)
             if len(issues) >= 4:
-                break
+                return issues[:4]
+
+        row_alignment_sheets: set[str] = set()
+        for sheet_key, df in coerced.items():
+            found = cls._detect_row_alignment_issues(sheet_key, df, user_question)
+            if found:
+                row_alignment_sheets.add(sheet_key)
+                issues.extend(found)
+                if len(issues) >= 4:
+                    return issues[:4]
+
+        detectors = (
+            (cls._detect_missing_value_issues, True),
+            (cls._detect_unit_or_time_format_issues, True),
+            (cls._detect_format_inconsistency_issues, True),
+            (cls._detect_duplicate_conflicting_row_issues, True),
+            (cls._detect_internal_blank_row_issues, True),
+            (cls._detect_duplicate_header_issues, False),
+            (cls._detect_conflicting_key_mapping_issues, False),
+        )
+        for sheet_key, df in coerced.items():
+            if sheet_key in row_alignment_sheets:
+                continue
+            for detector, needs_question in detectors:
+                if needs_question:
+                    found = detector(sheet_key, df, user_question)  # type: ignore[misc]
+                else:
+                    found = detector(sheet_key, df)  # type: ignore[misc]
+                issues.extend(found)
+                if len(issues) >= 4:
+                    return issues[:4]
         return issues[:4]
 
     def _ask_llm(self, prompt: str) -> Optional[bool]:

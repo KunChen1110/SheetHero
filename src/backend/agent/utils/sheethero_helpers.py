@@ -85,6 +85,9 @@ def log_final_report(progress_logger: Any, session: Any) -> None:
 
     exec_result = (session.result or {}).get("execution_result", {})
     val_result = (session.result or {}).get("validation_result", {})
+    result = session.result or {}
+    final_answer = result.get("final_answer", exec_result.get("answer", ""))
+    short_answer = result.get("short_answer", "")
 
     progress_logger.log("\n" + "=" * 80, to_terminal=False)
     progress_logger.log("🎯 [FINAL SUMMARY]", to_terminal=False)
@@ -102,9 +105,14 @@ def log_final_report(progress_logger: Any, session: Any) -> None:
         to_terminal=False
     )
     progress_logger.log(
-        f"Final Answer: {exec_result.get('answer', '')}",
+        f"Final Answer: {final_answer}",
         to_terminal=False
     )
+    if short_answer:
+        progress_logger.log(
+            f"Short Answer: {short_answer}",
+            to_terminal=False
+        )
     progress_logger.log("=" * 80, to_terminal=False)
 
 
