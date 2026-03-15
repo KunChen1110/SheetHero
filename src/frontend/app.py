@@ -29,6 +29,7 @@ class App(TkinterDnD.Tk):
         self.base_url: Optional[str] = frontend_defaults["base_url"]
         self.deployment: str = str(frontend_defaults["deployment"])
         self.max_turns: int = int(frontend_defaults["max_turns"])
+        self.enable_diagnose: bool = bool(frontend_defaults["enable_diagnose"])
 
         container = ctk.CTkFrame(self)
         container.pack(fill="both", expand=True)
