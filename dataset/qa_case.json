@@ -1,0 +1,115 @@
+[
+  {
+    "id": 5,
+    "input": {
+      "question_list": [
+        "Is market_share * shipment a good estimation approach? The market share percentages sum to 100%, but should I convert percentages to decimals first (e.g., 20% → 0.20) or treat them as whole numbers (20% → 20) in the calculation?",
+        "How should I handle the overlapping years - should I focus only on Q1 2017 to Q2 2025 where both datasets have data?",
+        "I notice some brands have missing values (shown as '-') in certain quarters. Should I treat these as 0% market share or exclude those quarters from calculation?"
+      ],
+      "user_responses": [
+        "Convert percentages to decimal format before multiplication (20% = 0.20)",
+        "Focus only on the overlapping period Q1 2017 to Q2 2025",
+        "Treat missing values as 0"
+      ]
+    },
+    "output": {
+      "cleaning_actions": [
+        "Convert all market share percentages to decimal format by dividing by 100",
+        "Filter data to include only Q1 2017 to Q2 2025 overlapping period",
+        "Replace '-' with 0 in all brand market share columns"
+      ]
+    }
+  },
+  {
+    "id": 6,
+    "input": {
+      "question_list": [
+        "I found missing values in the dataset — approximately 20% of Age values are missing, 77% of Cabin values are missing, and 2 Embarked values are missing. How would you like me to handle them?",
+        "For categorical variables like Sex, I'll need to encode them numerically (0=male, 1=female) to calculate Pearson correlation. Is this approach correct?",
+        "The Cabin column has excessive missing data. Should I extract just the deck letter (A, B, C, etc.) and encode categorically, or exclude the column entirely?"
+      ],
+      "user_responses": [
+        "Use pairwise deletion (exclude only the specific missing value pairs, not entire rows)",
+        "Yes, encode Sex as binary (0=male, 1=female)",
+        "Extract deck letter and encode as binary (1 if cabin info exists, 0 otherwise)"
+      ]
+    },
+    "output": {
+      "cleaning_actions": [
+        "Apply pairwise deletion for missing values - exclude only specific missing pairs",
+        "Encode Sex column as binary: male=0, female=1",
+        "Encode Cabin column as binary: 1 if cabin info exists, 0 if missing"
+      ]
+    }
+  },
+  {
+    "id": 7,
+    "input": {
+      "question_list": [
+        "I notice there's also a 'Rain' column in the dataset that could be a predictor. Should I include it as a binary variable (1=rain, 0=no rain)?",
+        "Should I normalize/standardize the features before fitting, or use raw values?",
+        "There are only 20 data points in this dataset. Should I be concerned about overfitting with 4 predictors?"
+      ],
+      "user_responses": [
+        "Yes, include Rain as a binary variable (1=rain, 0=no rain)",
+        "Use raw values (not normalized) so coefficients represent actual business impact",
+        "Proceed with the full model despite small sample size"
+      ]
+    },
+    "output": {
+      "cleaning_actions": [
+        "Convert 'Did it rain on that day?' column to binary: Yes=1, No=0",
+        "Keep all features in raw values without normalization",
+        "Use all 4 predictors (Temperature, Price, Tourists, Rain) for regression"
+      ]
+    }
+  },
+  {
+    "id": 8,
+    "input": {
+      "question_list": [
+        "Would you like me to include the species name 'Iris-setosa' as a title above the table, or as a separate column?",
+        "Should I apply conditional formatting (green for positive correlations, red for negative) in the Excel output?",
+        "The dataset contains 3 species. Should I also generate correlation matrices for the other two species as separate sheets?"
+      ],
+      "user_responses": [
+        "Include 'Iris-setosa' as a sheet name or table title, not as a column",
+        "Plain values are fine, but apply conditional formatting if output is Excel",
+        "No, only calculate for Iris-setosa as requested"
+      ]
+    },
+    "output": {
+      "cleaning_actions": [
+        "Filter dataset to include only Iris-setosa species",
+        "Set Excel sheet name to 'Iris-setosa'",
+        "Apply conditional formatting: green for positive correlations, red for negative",
+        "Select only numeric columns: sepal_length, sepal_width, petal_length, petal_width"
+      ]
+    }
+  },
+  {
+    "id": 9,
+    "input": {
+      "question_list": [
+        "I notice 2017 had a significant one-time tax expense due to the US Tax Cuts and Jobs Act. Should I exclude this one-time charge when calculating the 2017 OCF/Net Income ratio?",
+        "Do you want these metrics year-by-year or just the 10-year average?",
+        "The data spans multiple sheets. Should I extract all metrics from Cash Flow statement directly, or cross-reference with P&L?"
+      ],
+      "user_responses": [
+        "Show data year-by-year, but add a note about 2017 anomaly. Do not adjust figures",
+        "Show year-by-year with 10-year summary totals at bottom",
+        "Extract Net Income from P&L, OCF and CapEx from Cash Flow statement"
+      ]
+    },
+    "output": {
+      "cleaning_actions": [
+        "Extract Net Income row from Profit & Loss statement for years 2009-2018",
+        "Extract Operating Cash Flow row from Cash Flow statement for years 2009-2018",
+        "Extract Capital Expenditures (Purchases of property, plant and equipment) from Cash Flow statement",
+        "Transpose data so years become rows with columns for each metric",
+        "Add note about 2017 tax anomaly without adjusting values"
+      ]
+    }
+  }
+]
