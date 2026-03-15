@@ -20,13 +20,14 @@ FRONTEND_DEPLOYMENT_CHOICES = [
 ]
 
 
-def build_frontend_defaults(deployment: str, max_turns: int) -> Dict[str, Any]:
+def build_frontend_defaults(deployment: str, max_turns: int, enable_diagnose: bool) -> Dict[str, Any]:
     """Return only the config values the frontend is allowed to edit."""
     return {
         "api_key": "",
         "base_url": None,
         "deployment": deployment,
         "max_turns": max_turns,
+        "enable_diagnose": enable_diagnose,
     }
 
 
@@ -67,6 +68,12 @@ def build_frontend_schema(
             "default": defaults["max_turns"],
             "minimum": 1,
             "maximum": 10,
+            "frontend_editable": True,
+        },
+        "enable_diagnose": {
+            "label": "Enable Diagnose",
+            "type": "bool",
+            "default": defaults["enable_diagnose"],
             "frontend_editable": True,
         },
         "output_mode": {
