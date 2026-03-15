@@ -338,6 +338,16 @@ class SheetHero:
         return {"type": "progress", "stage": "diagnosing"}
 
     def _handle_diagnosing(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
+        if not self.config.enable_diagnose:
+            append_ui_thought(
+                session,
+                "diagnosing",
+                "skipped",
+                "Diagnose disabled by configuration"
+            )
+            session.state = "executing"
+            return {"type": "progress", "stage": "executing"}
+
         wb_view = self.sandbox.get_workbook_view()
         decision = self.diagnose_router.decide(
             user_question=current_request,
@@ -348,7 +358,7 @@ class SheetHero:
         if decision.should_diagnose:
             append_ui_thought(session, "diagnosing", "running", "Diagnosing data quality risks")
             if decision.issues:
-                question_list = [{"description": issue} for issue in decision.issues]
+                question_list = decision.issues
             else:
                 question_list = self.diagnose_module.run_readonly(
                     workbooks=wb_view,
@@ -359,10 +369,15 @@ class SheetHero:
             self.qa_stage.reset()
             self.qa_stage.start(question_list=question_list, original_question=session.original_query)
 
-            question = self.qa_stage.next_question()
-            if question:
+            question_payload = self.qa_stage.next_question_payload()
+            if question_payload:
                 session.state = "qa"
-                return {"type": "clarification", "stage": "qa", "message": question}
+                return {
+                    "type": "clarification",
+                    "stage": "qa",
+                    "message": question_payload.get("message"),
+                    "details_markdown": question_payload.get("details_markdown", ""),
+                }
 
             self.qa_stage.finalize_decision()
             session.state = "cleaning"
@@ -385,18 +400,24 @@ class SheetHero:
 
         qa_stage.consume_user_reply(user_input)
         if qa_stage.get_last_mismatch():
-            followup = qa_stage.next_question()
+            followup_payload = qa_stage.next_question_payload()
             hint = qa_stage.get_last_mismatch()
-            if followup:
+            if followup_payload:
                 return {
                     "type": "clarification",
                     "stage": "qa",
-                    "message": f"{hint}\n\nPlease answer this question:\n{followup}",
+                    "message": f"{hint}\n\nPlease answer this question:\n{followup_payload.get('message', '')}",
+                    "details_markdown": followup_payload.get("details_markdown", ""),
                 }
             qa_stage.clear_last_mismatch()
-        question = qa_stage.next_question()
-        if question:
-            return {"type": "clarification", "stage": "qa", "message": question}
+        question_payload = qa_stage.next_question_payload()
+        if question_payload:
+            return {
+                "type": "clarification",
+                "stage": "qa",
+                "message": question_payload.get("message"),
+                "details_markdown": question_payload.get("details_markdown", ""),
+            }
 
         qa_stage.finalize_decision()
         session.state = "cleaning"
@@ -406,6 +427,7 @@ class SheetHero:
                          qa_stage: Optional[QualityAssuranceStage],
                          current_request: str) -> Dict[str, Any]:
         actions = qa_stage.export_cleaning_actions() if qa_stage else []
+        session.qa_policy_notes = qa_stage.export_interpretation_policies() if qa_stage else []
         append_ui_thought(session, "cleaning", "running", actions)
         self.cleaning_module.apply(
             sandbox=self.sandbox,
@@ -433,6 +455,12 @@ class SheetHero:
                 session.current_workbooks
             ).build(self.config.total_token_budget)
         execution_context = session.spreadsheet_summary or ""
+        if session.qa_policy_notes:
+            execution_context = (
+                execution_context.rstrip()
+                + "\n\n[User clarification policies]\n- "
+                + "\n- ".join(str(item).strip() for item in session.qa_policy_notes if str(item).strip())
+            ).strip()
         self.execution_module.runner.excel_context_execution = execution_context
         append_ui_thought(session, "executing", "running", "Generating and running execution code")
         session.execution_validation_cycles += 1
