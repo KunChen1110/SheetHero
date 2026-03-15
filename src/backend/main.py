@@ -182,7 +182,11 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
 
             if event_type == "clarification":
                 question = event.get("message") or "Please clarify your request."
-                user_reply = input(f"Agent: {question}\nYou: ")
+                details = str(event.get("details_markdown") or "").strip()
+                if details:
+                    user_reply = input(f"Agent: {question}\n\n{details}\nYou: ")
+                else:
+                    user_reply = input(f"Agent: {question}\nYou: ")
                 stream = driver.reply(user_reply)
                 break  # restart loop with new stream
 

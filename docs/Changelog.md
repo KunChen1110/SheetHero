@@ -256,3 +256,44 @@
   - Deleted deprecated `OutputFormatter` in `src/backend/agent/io/formatter.py`.
 - Removed stale execution helper definitions from the main execution runtime after modular extraction
   - Old intent-detector and loop-breaker blocks are no longer kept inline in `runtime.py`.
+
+
+## 15/3/2026
+### --- Added ---
+- Added shared sheet-table extraction helper in `src/backend/environment/spreadsheet/tools/cross_workbook.py`
+  - Introduced `extract_sheet_table(...)` so diagnose and execution can use the same header detection, column trimming, note-row stopping, and text normalization logic.
+  - Added row-to-Excel mapping metadata (`excel_rows`, `header_excel_row`) for more accurate QA previews.
+  - Added overflow-row metadata for malformed CSV detection.
+
+### --- Changed ---
+- Improved diagnose and QA behavior in `src/backend/router/diagnose_router.py`
+  - Diagnose now reuses shared table extraction instead of rebuilding DataFrames from raw workbook first rows.
+  - QA previews now preserve original column order and use real Excel row numbers.
+  - For first-row issues, previews now include a comparison row automatically.
+  - Missing dependency questions are now more concrete, e.g. asking whether a blank `Depends on` means a root task.
+  - Added stronger relevance scoring for dependency-related columns in scheduling tasks.
+  - Reworked CSV row-shift detection to identify rows whose raw values overflow the visible header structure.
+
+- Improved QA answer handling in `src/backend/stages/qa/stage.py`
+  - Reply matching now prioritizes the exact user-facing clarification question instead of the internal abstract description.
+  - Interpretation-style answers such as “this is the root task” are now preserved as explicit policies instead of being silently dropped.
+
+- Updated session/execution context flow
+  - Added QA interpretation policy storage to `SheetHeroSession`.
+  - `SheetHero` now forwards interpretation policies into execution context before code generation.
+
+- Updated execution preflight coverage in `src/backend/stages/execution/runtime.py`
+  - Added helper-first allowlisting for `build_ecommerce_merge_report(...)` so ecommerce merge tasks are not incorrectly blocked by generic linear I/O preflight checks.
+
+- Updated final logging output in `src/backend/agent/utils/sheethero_helpers.py`
+  - Final logger summaries now include both `Final Answer` and `Short Answer`.
+
+### --- Fixed ---
+- Fixed repeated QA mismatch loops for valid direct answers
+  - Responses like “this is the root task” are now accepted correctly for dependency clarification.
+- Fixed incorrect preview labeling
+  - `comparison row` and `issue row` are now shown correctly in QA previews.
+- Fixed diagnose/execution schema drift
+  - Diagnose no longer uses a separate raw-workbook interpretation path that could disagree with execution-time table extraction.
+- Fixed vague CSV clarification issues in merge-like tasks
+  - `Task02`-style malformed CSV rows are now surfaced as row-alignment problems instead of unrelated abstract conflicts.

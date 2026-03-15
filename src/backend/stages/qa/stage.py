@@ -1,6 +1,7 @@
 """Quality assurance stage (LLM-assisted matching + cleaning action)."""
 
-from typing import Any, Optional
+from copy import deepcopy
+from typing import Any, Dict, Optional
 
 from ...prompt.prompt_builder import PromptBuilder
 from ...log.logger_registry import LoggerRegistry
@@ -23,6 +24,7 @@ class QualityAssuranceStage:
         self.current_problem = None
         self.answers = []
         self.cleaning_actions = []
+        self.interpretation_policies = []
         self.max_qa_rounds = 30
         self.qa_rounds = 0
         self.last_mismatch = ""
@@ -35,6 +37,7 @@ class QualityAssuranceStage:
         self.current_problem = None
         self.answers = []
         self.cleaning_actions = []
+        self.interpretation_policies = []
         self.qa_rounds = 0
         self.last_mismatch = ""
 
@@ -42,16 +45,28 @@ class QualityAssuranceStage:
         self.reset()
         self.quality_table = self._filter_format_questions(question_list or [])
         self.original_question = original_question
-        self.unresolved_problems = [
-            {"id": idx, "description": self._problem_description(item)}
-            for idx, item in enumerate(self.quality_table)
-        ]
+        self.unresolved_problems = []
+        for idx, item in enumerate(self.quality_table):
+            if isinstance(item, dict):
+                problem = deepcopy(item)
+                problem.setdefault("id", idx)
+                problem.setdefault("description", self._problem_description(item))
+                problem.setdefault("question", "")
+                problem.setdefault("details_markdown", "")
+            else:
+                problem = {
+                    "id": idx,
+                    "description": self._problem_description(item),
+                    "question": "",
+                    "details_markdown": "",
+                }
+            self.unresolved_problems.append(problem)
         self._log_progress(
             f"[QA] Started with {len(self.unresolved_problems)} issue(s) to clarify."
         )
 
-    def next_question(self) -> Optional[str]:
-        if not self.unresolved_problems:
+    def next_question_payload(self) -> Optional[Dict[str, str]]:
+        if not self.unresolved_problems and self.current_problem is None:
             return None
         if self.qa_rounds >= self.max_qa_rounds:
             self._log_progress("[QA] Reached max QA rounds. Stopping questions.")
@@ -62,12 +77,20 @@ class QualityAssuranceStage:
             self.current_problem = self.unresolved_problems.pop(0)
             self.qa_rounds += 1
 
-        self._log_progress(
-            f"[QA] Question about: {self.current_problem.get('description')}"
-        )
+        description = str(self.current_problem.get("description") or "").strip()
+        direct_question = str(self.current_problem.get("question") or "").strip()
+        details_markdown = str(self.current_problem.get("details_markdown") or "").strip()
+        self._log_progress(f"[QA] Question about: {description}")
+
+        if direct_question:
+            return {
+                "message": direct_question,
+                "details_markdown": details_markdown,
+            }
+
         prompt_text = self.prompt_builder.build_qa_question_prompt(
             self._format_quality_table(self.quality_table),
-            self.current_problem.get("description", str(self.current_problem))
+            description
         )
         messages = [{"role": "user", "content": prompt_text}]
 
@@ -78,13 +101,22 @@ class QualityAssuranceStage:
 
         content = (response.choices[0].message.content or "").strip()
         question = content or "Please clarify your preferences for data cleaning."
-        return self._ensure_qa_scope(question)
+        return {
+            "message": self._ensure_qa_scope(question),
+            "details_markdown": details_markdown,
+        }
+
+    def next_question(self) -> Optional[str]:
+        payload = self.next_question_payload()
+        if not payload:
+            return None
+        return payload.get("message")
 
     def consume_user_reply(self, reply: str) -> None:
         if self.current_problem is None:
             return
         matched, action, feedback = self._match_reply(
-            self.current_problem.get("description"),
+            self.current_problem.get("question") or self.current_problem.get("description"),
             reply
         )
         if not matched:
@@ -98,7 +130,8 @@ class QualityAssuranceStage:
             "problem_id": self.current_problem.get("id"),
             "problem": self.current_problem.get("description"),
             "reply": reply,
-            "action": action or "NO_OP"
+            "action": action or "NO_OP",
+            "policy": self._build_interpretation_policy(self.current_problem, reply, action or "NO_OP"),
         })
         self._log_progress(
             f"[QA] Reply received for: {self.current_problem.get('description')}"
@@ -110,18 +143,29 @@ class QualityAssuranceStage:
         for item in self.answers:
             problem = item.get("problem")
             action = item.get("action")
+            policy = item.get("policy")
             if problem and action and action != "NO_OP":
                 last_action[problem] = action
+            if policy:
+                self.interpretation_policies.append(str(policy))
         self.cleaning_actions = list(last_action.values())
         self._log_progress(
             f"[QA] actions={self._truncate(self.cleaning_actions)}"
         )
+        if self.interpretation_policies:
+            self._log_progress(
+                f"[QA] policies={self._truncate(self.interpretation_policies)}"
+            )
 
     def export_cleaning_actions(self) -> list:
         return self.cleaning_actions or []
 
     def clear_cleaning_actions(self) -> None:
         self.cleaning_actions = []
+        self.interpretation_policies = []
+
+    def export_interpretation_policies(self) -> list:
+        return self.interpretation_policies or []
 
     def get_last_mismatch(self) -> str:
         return self.last_mismatch
@@ -146,7 +190,79 @@ class QualityAssuranceStage:
             return problem.get("description", str(problem))
         return str(problem)
 
+    @staticmethod
+    def _normalize_reply(reply: str) -> str:
+        return " ".join((reply or "").strip().lower().split())
+
+    def _heuristic_match_reply(self, question: str, reply: str) -> Optional[tuple[bool, str, str]]:
+        normalized_reply = self._normalize_reply(reply)
+        normalized_question = self._normalize_reply(question)
+        if not normalized_reply:
+            return False, "", "Please answer the question directly."
+
+        no_change_tokens = (
+            "ignore",
+            "keep",
+            "keep as is",
+            "keep as-is",
+            "leave it as is",
+            "leave as is",
+            "leave blank",
+            "do nothing",
+            "no change",
+            "as is",
+            "as-is",
+        )
+        if any(token in normalized_reply for token in no_change_tokens):
+            return True, "NO_OP", ""
+
+        if "depends on" in normalized_question and (
+            "root task" in normalized_reply
+            or "root" in normalized_reply
+            or "no prerequisite" in normalized_reply
+            or "no dependency" in normalized_reply
+            or "does not depend on" in normalized_reply
+            or "doesn't depend on" in normalized_reply
+            or "depend on no other" in normalized_reply
+        ):
+            return True, "NO_OP", ""
+
+        return None
+
+    def _build_interpretation_policy(self, problem: Dict[str, Any], reply: str, action: str) -> str:
+        if action != "NO_OP":
+            return ""
+        normalized_reply = self._normalize_reply(reply)
+        question_text = self._normalize_reply(
+            str(problem.get("question") or problem.get("description") or "")
+        )
+        metadata = problem.get("metadata") or {}
+        issue_type = str(problem.get("issue_type") or "")
+
+        if issue_type == "missing_value" and "depends on" in question_text and (
+            "root task" in normalized_reply
+            or "root" in normalized_reply
+            or "no prerequisite" in normalized_reply
+            or "no dependency" in normalized_reply
+            or "does not depend on" in normalized_reply
+            or "doesn't depend on" in normalized_reply
+            or "depend on no other" in normalized_reply
+        ):
+            sheet_key = str(metadata.get("sheet_key") or "current sheet")
+            column_name = str(metadata.get("column") or "Depends on")
+            excel_row = metadata.get("excel_row")
+            row_text = f" at Excel row {excel_row}" if excel_row else ""
+            return (
+                f"Interpret blank `{column_name}`{row_text} in `{sheet_key}` as meaning the task is a root task "
+                "with no prerequisite dependency."
+            )
+        return ""
+
     def _match_reply(self, question: str, reply: str) -> tuple[bool, str, str]:
+        heuristic = self._heuristic_match_reply(question, reply)
+        if heuristic is not None:
+            return heuristic
+
         prompt_text = self.prompt_builder.build_qa_match_prompt(question, reply)
         messages = [{"role": "user", "content": prompt_text}]
         try:
@@ -210,6 +326,9 @@ class QualityAssuranceStage:
         }
         filtered = []
         for item in question_list:
+            if isinstance(item, dict) and item.get("source") == "router_evidence":
+                filtered.append(item)
+                continue
             if isinstance(item, dict):
                 description = str(item.get("description", "")).strip()
             else:
