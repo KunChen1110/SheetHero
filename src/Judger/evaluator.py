@@ -1,16 +1,3 @@
-"""
-Universal Table Evaluator
-Works for any table structure:
-  - Simple flat tables (test4, test5, test6, test7, test10, test12, test13)
-  - Tables with a metrics section at the bottom (test1, test9)
-  - Wide/transposed tables (test3, test8)
-  - Multi-section tables (test11)
-  - Tables with formatting inconsistencies (test2 room spacing)
-  - Row-order differences (test25) — rows sorted before comparing
-
-Scoring: table = 70pts, text = 30pts (text optional)
-"""
-
 import pandas as pd
 import json
 import os
@@ -218,51 +205,57 @@ def apply_structural_normalization(df: pd.DataFrame, instructions: Dict) -> pd.D
 
 def compare_and_score(client: OpenAI, normalized_md: str, reference_md: str, structure_type: str) -> Tuple[float, str]:
     """
-    Compare normalized output vs reference and score out of 70.
-    Prompt adapts based on structure type.
+    Semantically compare output vs reference and return a raw score 0-100.
+    The LLM judges whether each cell expresses the SAME INFORMATION as the reference,
+    regardless of formatting differences. Weighting is applied externally.
     """
 
     structure_hint = {
-        "flat": "This is a flat table. Compare all cells directly.",
+        "flat": "This is a flat table.",
         "data_with_metrics": "This table has a data section and a metrics/summary section at the bottom.",
-        "multi_section": "This table has multiple sections. Each section may have its own headers and data.",
+        "multi_section": "This table has multiple sections, each with their own headers and data.",
     }.get(structure_type, "")
 
-    prompt = f"""Compare these two tables cell-by-cell and calculate a score out of 70 points.
+    prompt = f"""You are an intelligent table evaluator. Your job is to judge whether each cell in the OUTPUT expresses the SAME INFORMATION as the corresponding cell in the REFERENCE — regardless of formatting.
 
 {structure_hint}
-
-**Normalized OUTPUT:**
-{normalized_md}
 
 **REFERENCE:**
 {reference_md}
 
-Scoring rules (per cell, excluding header rows):
-- Exact string match → 1.0 (full credit)
-- Same number, minor rounding difference (e.g. 69.78 vs 69.784) → 0.9
-- Same date, different time component (e.g. "2025-11-08" vs "2025-11-08 00:00:00") → 0.8
-- Same meaning, different format or spacing (e.g. "I23" vs "I 23", "True" vs "TRUE") → 0.8
-- Wrong value or missing → 0.0
+**OUTPUT:**
+{normalized_md}
 
-Count:
-- total_cells: all non-header cells
-- exact: exact matches
-- rounding: numeric rounding only
-- semantic: same meaning different format
-- wrong: wrong or missing
+## Your evaluation philosophy:
+You are checking if the OUTPUT *means the same thing* as the REFERENCE, not whether it looks identical.
 
-Score = (exact*1.0 + rounding*0.9 + semantic*0.8) / total_cells * 70
+These should be treated as CORRECT (full credit):
+- Same date in different formats: "2025-11-08" vs "2025-11-08 00:00:00" ✅
+- Same number rounded differently: "69.78" vs "69.784483" ✅
+- Same text with different spacing: "I23" vs "I 23" ✅
+- Same boolean: "True" vs "TRUE" vs "1" ✅
+- Same category with different capitalisation: "entertainment" vs "Entertainment" ✅
+- Empty cell vs "0" or "0.0" when context implies zero ✅
+
+These should be treated as WRONG (no credit):
+- Genuinely different numbers: "72.28" vs "69.78" ❌
+- Different dates that are not the same day ❌
+- Different names or categories ❌
+- Missing value when reference has a real value (and context does not imply zero) ❌
+
+## Instructions:
+1. Go through each data cell (skip header rows)
+2. For each cell, judge: does the OUTPUT cell express the same information as the REFERENCE cell?
+3. Count: correct (same meaning) vs wrong (genuinely different or missing)
+4. Score = (correct / total_cells) * 100
 
 Return JSON only:
 {{
-  "score": <float 0-70>,
-  "exact": <int>,
-  "rounding": <int>,
-  "semantic": <int>,
+  "score": <float 0-100>,
+  "correct": <int>,
   "wrong": <int>,
   "total_cells": <int>,
-  "feedback": "<brief summary of main differences>"
+  "feedback": "<brief list of the main genuine errors found, if any>"
 }}"""
 
     response = client.chat.completions.create(
@@ -284,7 +277,7 @@ def score_text(client: OpenAI, output_text: str, reference_text: str) -> Tuple[f
     if not output_text.strip() or not reference_text.strip():
         return 0.0, "No text provided."
 
-    prompt = f"""Compare the OUTPUT answer to the REFERENCE answer semantically.
+    prompt = f"""You are an intelligent answer evaluator. Judge whether the OUTPUT conveys the same information as the REFERENCE — wording and phrasing do not matter, only meaning.
 
 REFERENCE:
 {reference_text}
@@ -292,13 +285,17 @@ REFERENCE:
 OUTPUT:
 {output_text}
 
-Score the OUTPUT out of 30 points:
-- Correct key facts → full credit
-- Same meaning, different wording → full credit
-- Missing or wrong facts → lose points
+Your evaluation philosophy:
+- Different phrasing of the same fact = full credit
+- Same numbers expressed differently (e.g. "2 missing" vs "two missing entries") = full credit
+- Correct facts with extra detail = full credit
+- Missing key facts = lose points
+- Wrong facts = lose points
+
+Score out of 100 based on how much of the reference meaning is correctly captured.
 
 Return JSON only:
-{{"score": <float 0-30>, "feedback": "<brief explanation>"}}"""
+{{"score": <float 0-100>, "feedback": "<brief explanation of what was correct or missing>"}}"""
 
     response = client.chat.completions.create(
         model=MODEL,
@@ -311,6 +308,54 @@ Return JSON only:
 
 
 # ──────────────────────────────────────────────
+# Step 5: Decide weights dynamically
+# ──────────────────────────────────────────────
+
+def decide_weights(client, reference_md: str, reference_text: str) -> dict:
+    """
+    Dynamically decide how much weight to give table vs text (must sum to 1.0).
+    Based on how much meaningful information each part contains.
+    """
+    has_table = bool(reference_md.strip())
+    has_text = bool(reference_text.strip())
+
+    if has_table and not has_text:
+        return {"table_weight": 1.0, "text_weight": 0.0, "reasoning": "No text output - table is 100% of score."}
+    if has_text and not has_table:
+        return {"table_weight": 0.0, "text_weight": 1.0, "reasoning": "No table output - text is 100% of score."}
+
+    prompt = (
+            "You are deciding how to split 100 scoring points between two parts of an answer.\n\n"
+            "**Reference TABLE:**\n" + reference_md + "\n\n"
+                "**Reference TEXT:**\n" + reference_text + "\n\n"
+                    "Decide the weight for each part (must sum to 1.0) based on:\n"
+                    "- How much meaningful information each part contains\n"
+                    "- Which part is the main deliverable\n"
+                    "- If text is just a short confirmation or file path -> low weight (0.1)\n"
+                    "- If table is large and detailed -> high weight (0.8-0.9)\n"
+                    "- If text has unique insights not in table -> higher text weight\n"
+                    "Minimum weight for either part: 0.1\n\n"
+                    'Return JSON only: {"table_weight": <float>, "text_weight": <float>, "reasoning": "<one sentence>"}'
+    )
+
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
+        response_format={"type": "json_object"}
+    )
+    result = json.loads(response.choices[0].message.content)
+    tw = max(0.1, float(result.get("table_weight", 0.7)))
+    xw = max(0.1, float(result.get("text_weight", 0.3)))
+    total = tw + xw
+    return {
+        "table_weight": round(tw / total, 3),
+        "text_weight": round(xw / total, 3),
+        "reasoning": result.get("reasoning", "")
+    }
+
+
+# ──────────────────────────────────────────────
 # Main evaluate()
 # ──────────────────────────────────────────────
 
@@ -320,10 +365,11 @@ def evaluate(
         output_text: str = "",
         reference_text: str = "",
         save_normalized: bool = False,
-) -> Dict:
+) -> dict:
     """
     Universal evaluation function. Works for any table structure.
-    Returns dict with total_score (0-100), table_score (0-70), text_score (0-30).
+    Weights between table and text are decided dynamically based on content importance.
+    Returns dict with total_score (0-100) and full breakdown.
     """
     client = OpenAI(api_key=API_KEY)
 
@@ -334,39 +380,42 @@ def evaluate(
     print(f"  Output:    {output_path}")
     print(f"  Reference: {reference_path}")
 
-    # ── Load ──
+    # Load
     print("\n[1] Loading Excel files...")
     df_output = pd.read_excel(output_path)
     df_reference = pd.read_excel(reference_path)
     print(f"   Output shape:    {df_output.shape}")
     print(f"   Reference shape: {df_reference.shape}")
 
-    # ── Detect structure ──
+    # Detect structure
     print("[2] Detecting table structure...")
     structure_type = detect_structure(df_output)
     print(f"   Structure type: {structure_type}")
 
-    # ── Convert to markdown ──
+    # Convert to markdown
     print("[3] Converting to Markdown...")
     output_md = excel_to_markdown(output_path)
     reference_md = excel_to_markdown(reference_path)
 
-    # ── Cell-level normalization (spaces, dates, etc.) ──
-    print("[4] Applying cell-level normalization...")
+    # Decide weights dynamically
+    print("[4] Deciding table vs text weights...")
+    weights = decide_weights(client, reference_md, reference_text)
+    table_weight = weights["table_weight"]
+    text_weight = weights["text_weight"]
+    print(f"   Table weight: {table_weight:.0%}  |  Text weight: {text_weight:.0%}")
+    print(f"   Reason: {weights['reasoning']}")
+
+    # Cell-level normalization
+    print("[5] Applying cell-level normalization...")
     df_normalized = normalize_dataframe(df_output)
 
-    # ── Structural normalization (column names/order) via LLM ──
-    print("[5] Getting structural normalization from LLM...")
+    # Structural normalization via LLM
+    print("[6] Getting structural normalization from LLM...")
     instructions = get_structural_normalization(client, output_md, reference_md)
     print(f"   Instructions: {json.dumps(instructions, indent=2)}")
     df_normalized = apply_structural_normalization(df_normalized, instructions)
 
-    # ── Row ordering fix ──
-    print("[6] Aligning row order to reference...")
-    df_ref_normalized = normalize_dataframe(df_reference)
-    df_normalized = sort_dataframe_like_reference(df_normalized, df_ref_normalized)
-
-    # ── Save normalized if requested ──
+    # Save normalized if requested
     if save_normalized:
         output_dir = os.path.dirname(output_path) or "."
         normalized_path = os.path.join(output_dir, "normalized_" + os.path.basename(output_excel))
@@ -375,36 +424,46 @@ def evaluate(
 
     normalized_md = df_normalized.fillna("").to_markdown(index=False)
 
-    # ── Table scoring ──
+    # Table scoring: raw score out of 100, then apply weight
     print("[7] Comparing and scoring table...")
-    table_score, table_feedback = compare_and_score(client, normalized_md, reference_md, structure_type)
+    table_raw, table_feedback = compare_and_score(client, normalized_md, reference_md, structure_type)
+    table_score = round(table_raw * table_weight, 2)
 
-    # ── Text scoring ──
-    text_score, text_feedback = 0.0, "No text provided."
+    # Text scoring: raw score out of 100, then apply weight
+    text_raw, text_feedback = 0.0, "No text provided."
+    text_score = 0.0
     if output_text.strip() and reference_text.strip():
         print("[8] Scoring natural language output...")
-        text_score, text_feedback = score_text(client, output_text, reference_text)
+        text_raw, text_feedback = score_text(client, output_text, reference_text)
+        text_score = round(text_raw * text_weight, 2)
 
-    total_score = table_score + text_score
+    total_score = round(table_score + text_score, 2)
 
     result = {
-        "total_score": round(total_score, 2),
-        "table_score": round(table_score, 2),
-        "text_score": round(text_score, 2),
+        "total_score": total_score,
+        "table_score": table_score,
+        "text_score": text_score,
+        "table_raw": round(table_raw, 2),
+        "text_raw": round(text_raw, 2),
+        "table_weight": table_weight,
+        "text_weight": text_weight,
+        "weight_reasoning": weights["reasoning"],
         "structure_type": structure_type,
         "table_feedback": table_feedback,
         "text_feedback": text_feedback,
-        "instructions": instructions,
     }
 
     print(f"\n📊 RESULTS:")
-    print(f"   Structure:   {structure_type}")
-    print(f"   Table Score: {table_score:.1f} / 70")
-    print(f"   Text Score:  {text_score:.1f} / 30")
-    print(f"   TOTAL:       {total_score:.1f} / 100")
-    print(f"   Feedback:    {table_feedback}")
+    print(f"   Structure:    {structure_type}")
+    print(f"   Table weight: {table_weight:.0%}  |  Text weight: {text_weight:.0%}")
+    print(f"   Table:  {table_raw:.1f}/100 raw  ->  {table_score:.1f} weighted pts")
+    print(f"   Text:   {text_raw:.1f}/100 raw  ->  {text_score:.1f} weighted pts")
+    print(f"   TOTAL:  {total_score:.1f} / 100")
+    print(f"   Table feedback: {table_feedback}")
 
     return result
+
+
 
 
 # ──────────────────────────────────────────────
