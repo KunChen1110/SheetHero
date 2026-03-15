@@ -13,6 +13,7 @@ class Config:
 
     # === Processing Configuration ===
     max_turns: int = 9
+    enable_diagnose: bool = True
     max_qa_rounds: int = 30
     total_token_budget: int = 5000
 
@@ -73,6 +74,7 @@ class ConfigFactory:
         return build_frontend_defaults(
             deployment=config.deployment,
             max_turns=config.max_turns,
+            enable_diagnose=config.enable_diagnose,
         )
 
     @staticmethod

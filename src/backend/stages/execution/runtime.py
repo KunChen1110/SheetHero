@@ -352,6 +352,7 @@ class ExecutionRuntime(StageRuntime):
         uses_diabetes_region_helper = "build_diabetes_region_report(" in lower
         uses_mobile_reviews_summary_helper = "build_mobile_reviews_summary_report(" in lower
         uses_store_feature_analysis_helper = "build_store_feature_analysis_report(" in lower
+        uses_ecommerce_merge_helper = "build_ecommerce_merge_report(" in lower
         uses_missing_data_helper = "build_missing_data_report(" in lower
         uses_room_format_helper = "build_room_format_report(" in lower
         top_level_returns = [
@@ -378,7 +379,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Return one full corrected code block.\n"
                 "- Keep string quoting simple and avoid nested double quotes inside f-strings."
             )
-        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_missing_data_helper and not uses_room_format_helper:
+        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read runtime inputs via `load_all_tables()` or `list_all_workbooks()`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
@@ -410,7 +411,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Use the injected runtime variable only: `save_workbook_to(output_path)`.\n"
                 "- Do not redefine `output_path`."
             )
-        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_region_growth_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_missing_data_helper and not uses_room_format_helper:
+        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_region_growth_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read tabular content via `load_all_tables()` or `read_table_multi(...)`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
