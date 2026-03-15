@@ -350,6 +350,7 @@ class PromptPage(ctk.CTkFrame):
                 config.base_url = base_url
                 config.deployment = deployment
                 config.max_turns = max_turns
+                config.enable_diagnose = bool(self.controller.enable_diagnose)
                 config.output_mode = "file"
                 config.output_file = export_path
 
@@ -363,6 +364,9 @@ class PromptPage(ctk.CTkFrame):
                 if response_type == "clarification":
                     self._awaiting_clarification = True
                     self.add_chat_bubble(str(response.get("message") or "Please clarify your answer."), False)
+                    details_markdown = str(response.get("details_markdown") or "").strip()
+                    if details_markdown:
+                        self.add_chat_bubble(details_markdown, False)
                 elif response_type == "final":
                     self._awaiting_clarification = False
                     result = response.get("result") if isinstance(response.get("result"), dict) else {}
