@@ -1,3 +1,14 @@
+"""
+Universal Table Evaluator
+
+Usage:
+  # Recommended: evaluate by task ID, reads everything automatically
+  result = evaluate_task("Test 1", "artifacts/logger/sheethero_tc01_xxx.md", dataset_path="dataset.json")
+
+  # Manual: pass everything explicitly
+  result = evaluate("test1_output.xlsx", "tc01_output01.xlsx", output_text="...", reference_text="...")
+"""
+
 import pandas as pd
 import json
 import os
@@ -7,6 +18,106 @@ from openai import OpenAI
 
 API_KEY = ""
 MODEL = "gpt-4o-mini"
+
+
+# ──────────────────────────────────────────────
+# Dataset + logger loaders
+# ──────────────────────────────────────────────
+
+def load_task_from_dataset(task_id: str, dataset_path: str) -> dict:
+    """Load a task entry from dataset.json by task_id e.g. 'Test 1'."""
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        dataset = json.load(f)
+    for entry in dataset:
+        if entry.get("task_id", "").strip().lower() == task_id.strip().lower():
+            return entry
+    raise ValueError(f"Task '{task_id}' not found in {dataset_path}")
+
+
+def extract_output_from_logger(logger_path: str) -> dict:
+    """
+    Parse a SheetHero logger .md file and extract:
+      - output_text:  Short Answer (new format) or last meaningful Final Answer (old format)
+      - output_excel: the saved output .xlsx path
+
+    New format has: 'Short Answer: <summary>'
+    Old format has: 'Final Answer: <text or file path>'
+    """
+    output_text = ""
+    output_excel = ""
+
+    with open(logger_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    for line in lines:
+        stripped = line.strip()
+
+        # New format: Short Answer is always the human-readable summary
+        if stripped.startswith("Short Answer:"):
+            output_text = stripped.split(":", 1)[1].strip()
+
+        # Both formats: grab Excel file path from Final Answer line
+        if stripped.startswith("Final Answer:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value.lower().endswith(".xlsx") or value.lower().endswith(".xls"):
+                output_excel = value
+            elif not output_text and not os.path.splitext(value)[1]:
+                # Old format fallback: use as text if it is not a file path
+                output_text = value
+
+    return {"output_text": output_text, "output_excel": output_excel}
+
+
+def evaluate_task(
+        task_id: str,
+        logger_path: str,
+        dataset_path: str = "dataset.json",
+        output_excel: str = "",
+        save_normalized: bool = False,
+) -> dict:
+    """
+    Evaluate a SheetHero task automatically from the logger and dataset.json.
+
+    Args:
+        task_id:         e.g. "Test 1", "Test 22"
+        logger_path:     path to the SheetHero logger .md file
+        dataset_path:    path to dataset.json (default: "dataset.json")
+        output_excel:    override the output Excel path (optional)
+        save_normalized: save the normalized Excel for inspection
+
+    Returns: result dict with total_score, table_score, text_score, feedback etc.
+    """
+    print(f"\n Loading task '{task_id}' from dataset...")
+    task = load_task_from_dataset(task_id, dataset_path)
+
+    reference_text = task.get("answer", "")
+    reference_excel_list = task.get("expected_output_file", [])
+    reference_excel = reference_excel_list[0] if reference_excel_list else ""
+
+    print(f"   Reference text:  {repr(reference_text[:80])}")
+    print(f"   Reference Excel: {reference_excel}")
+
+    print(f"\n Parsing logger: {logger_path}")
+    parsed = extract_output_from_logger(logger_path)
+    output_text = parsed["output_text"]
+    if not output_excel:
+        output_excel = parsed["output_excel"]
+
+    print(f"   Output text:  {repr(output_text[:80])}")
+    print(f"   Output Excel: {output_excel}")
+
+    if not reference_excel:
+        raise ValueError(f"No expected_output_file in dataset for task '{task_id}'")
+    if not output_excel:
+        raise ValueError(f"Could not find output Excel path in logger: {logger_path}")
+
+    return evaluate(
+        output_excel=output_excel,
+        reference_excel=reference_excel,
+        output_text=output_text,
+        reference_text=reference_text,
+        save_normalized=save_normalized,
+    )
 
 
 # ──────────────────────────────────────────────
@@ -470,14 +581,99 @@ def evaluate(
 # CLI
 # ──────────────────────────────────────────────
 
+def find_latest_logger(task_id: str) -> str:
+    """
+    Find the most recent logger .md file for a given task.
+    Searches common logger directories for files containing the task input name.
+    e.g. task_id "Test 1" -> looks for files containing "tc01"
+    """
+    # Map task number to input file prefix e.g. "Test 1" -> "tc01"
+    match = re.search(r"\d+", task_id)
+    if match:
+        num = int(match.group())
+        prefix = f"tc{num:02d}"
+    else:
+        prefix = ""
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    search_dirs = [
+        os.path.join(script_dir, "../../artifacts/loggers"),
+        os.path.join(script_dir, "../../artifacts/logger"),
+        os.path.join(script_dir, "../../artifacts/logs"),
+        os.path.join(script_dir, "artifacts/loggers"),
+        os.path.join(script_dir, "artifacts/logger"),
+        os.path.join(script_dir, "artifacts/logs"),
+        "artifacts/loggers",
+        "artifacts/logger",
+        "artifacts/logs",
+    ]
+
+    candidates = []
+    for d in search_dirs:
+        if not os.path.isdir(d):
+            continue
+        for fname in os.listdir(d):
+            if fname.endswith(".md") and (not prefix or prefix in fname.lower()):
+                candidates.append(os.path.join(d, fname))
+
+    if not candidates:
+        raise FileNotFoundError(
+            f"No logger file found for task '{task_id}' (looked for files containing '{prefix}' in logger dirs)"
+        )
+
+    # Return the most recently modified one
+    return max(candidates, key=os.path.getmtime)
+
+
+def find_dataset(start_dir: str = ".") -> str:
+    """Search upward for dataset.json."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    search_paths = [
+        os.path.join(script_dir, "dataset.json"),
+        os.path.join(script_dir, "../../dataset/dataset.json"),
+        os.path.join(script_dir, "../dataset/dataset.json"),
+        "dataset.json",
+    ]
+    for p in search_paths:
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError("dataset.json not found. Pass --dataset <path> to specify it.")
+
+
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) >= 3:
-        output_file = sys.argv[1]
-        reference_file = sys.argv[2]
-        save_flag = "--save" in sys.argv
-        result = evaluate(output_file, reference_file, save_normalized=save_flag)
+    args = sys.argv[1:]
+    save_flag = "--save" in args
+
+    # Simple usage: python evaluator_universal.py "Test 1"
+    # Finds the latest logger and dataset.json automatically
+    if len(args) >= 1 and not args[0].endswith(".xlsx"):
+        task_id = args[0]
+
+        # Allow optional --dataset override
+        dataset_path = None
+        if "--dataset" in args:
+            dataset_path = args[args.index("--dataset") + 1]
+        else:
+            dataset_path = find_dataset()
+
+        # Allow optional explicit logger path
+        logger_path = None
+        if "--logger" in args:
+            logger_path = args[args.index("--logger") + 1]
+        else:
+            logger_path = find_latest_logger(task_id)
+            print(f"   Using logger: {os.path.basename(logger_path)}")
+
+        result = evaluate_task(task_id, logger_path, dataset_path=dataset_path, save_normalized=save_flag)
+
+    # Manual mode: python evaluator_universal.py output.xlsx reference.xlsx
+    elif len(args) >= 2:
+        result = evaluate(args[0], args[1], save_normalized=save_flag)
+
     else:
-        print("Usage: python evaluator_universal.py <output.xlsx> <reference.xlsx> [--save]")
-        print("Example: python evaluator_universal.py test1_output.xlsx tc01_output01.xlsx --save")
+        print("Usage:")
+        print("  Simple:  python evaluator_universal.py \"Test 1\"")
+        print("  Manual:  python evaluator_universal.py output.xlsx reference.xlsx")
+        print("  Options: [--dataset path/to/dataset.json] [--logger path/to/logger.md] [--save]")
