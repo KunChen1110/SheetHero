@@ -297,3 +297,86 @@
   - Diagnose no longer uses a separate raw-workbook interpretation path that could disagree with execution-time table extraction.
 - Fixed vague CSV clarification issues in merge-like tasks
   - `Task02`-style malformed CSV rows are now surfaced as row-alignment problems instead of unrelated abstract conflicts.
+
+## 23/3/2026
+### --- Added ---
+- Added a centralized task-family registry in `src/backend/task_families.py`
+  - Introduced abstract spreadsheet capability families instead of relying on scattered task-specific branching.
+  - Centralized family-level policy for:
+    - helper selection
+    - diagnose skip behavior
+    - output mode
+    - output contract expectations
+    - execution strict rules
+    - loop breakers
+    - final-response labels
+
+- Added deterministic execution families for high-frequency spreadsheet workflows
+  - Added or formalized deterministic family paths for:
+    - `schema_aligned_merge_summary`
+    - `reference_guided_completion`
+    - `grouped_aggregation_ranking`
+    - `temporal_aggregation_ranking`
+    - `relational_join_enrichment`
+    - `composite_key_relational_join`
+    - `dependency_constrained_schedule`
+    - `relational_assignment_schedule`
+    - `capacity_constrained_allocation`
+    - `tabular_regression_analysis`
+    - `pairwise_correlation_matrix`
+    - `temporal_growth_visual_report`
+    - text-only scan/report families
+    - dashboard / ranking / summary helper families
+
+- Added generalized helper workflows for new abstract families
+  - `build_time_series_aggregation_report(...)`
+  - `build_grouped_aggregation_ranking_report(...)`
+  - `build_relational_join_enrichment_report(...)`
+  - `build_multi_key_relational_join_report(...)`
+  - `build_capacity_constrained_allocation_report(...)`
+
+- Added synthetic family regression coverage
+  - Added `test/utils/run_family_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
+  - Added CLI support for one-command execution via `!FamilySyntheticTest`.
+
+### --- Changed ---
+- Reworked the backend from task-oriented patches to family-oriented architecture
+  - Understanding, diagnose, execution, validation, and final response now share the same family abstraction.
+  - The system now reasons in terms of spreadsheet capability families rather than individual benchmark task IDs.
+
+- Strengthened deterministic execution and reduced LLM dependence
+  - For covered families, execution now prefers deterministic helper-first fast paths before invoking model-generated code.
+  - Reduced runtime latency and improved reliability for covered spreadsheet task families.
+
+- Strengthened family-aware validation
+  - Added family-specific deterministic workbook inspectors for:
+    - grouped aggregation
+    - temporal aggregation
+    - relational join
+    - allocation
+    - assignment schedule
+    - dependency schedule
+    - regression
+    - correlation
+    - comparative multi-sheet summaries
+    - temporal growth visual reports
+
+- Improved detector generalization
+  - Expanded natural-language family detection for:
+    - grouped analysis
+    - temporal analysis
+    - regression and correlation
+    - assignment/scheduling
+    - capacity-constrained allocation
+    - multi-key joins
+  - Detection is now less dependent on testcase wording and better aligned with generic spreadsheet task phrasing.
+
+### --- Fixed ---
+- Fixed validation mismatches for deterministic allocation outputs
+  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a family-specific summary row is already valid.
+
+- Fixed large-task architectural drift
+  - Moved additional execution/validation family routing logic into centralized registry mappings to reduce duplicated branching and future regression risk.
+
+- Fixed synthetic regression coverage gaps
+  - Added end-to-end synthetic validation for newly introduced abstract families, including multi-key joins, temporal growth reporting, and capacity-constrained allocation.

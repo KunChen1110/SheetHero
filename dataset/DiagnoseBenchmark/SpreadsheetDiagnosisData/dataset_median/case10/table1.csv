@@ -1,0 +1,26 @@
+CampaignID,Campaign_Name,Channel,Objective,Campaign_Start_Date,Budget_USD,Impressions,Clicks,Conversions,ROAS
+CAMP101,Spring Sale 2023,Search (SEM),Brand Awareness,2023-09-19,117933.0,3552898,19845,322,2.63
+CAMP102,Brand Launch Q1,Social Media,Lead Generation,2023-04-13,116109.0,2111332,33222,1137,5.98
+CAMP103,Summer Promo,Display Ads,Sales Conversion,2023-11-11,55179.0,4148850,47919,1324,6.6
+CAMP104,Back to School,Email,Retargeting,2023-08-06,147891.0,3004267,11592,296,6.46
+CAMP105,Holiday Season,Influencer,Customer Retention,2023-08-06,183795.0,4597773,42561,1970,1.63
+CAMP106,New Product Launch,Video (YouTube),Brand Awareness,2023-01-27,170106.0,456968,918,854,2.2
+CAMP107,Loyalty Rewards,Content Marketing,Lead Generation,2023-11-08,18254.0,1316928,1099,457,4.89
+CAMP108,Black Friday,Affiliate,Sales Conversion,2023-06-02,125478.0,4103410,43706,1009,1.31
+CAMP109,Cyber Monday,Search (SEM),Retargeting,2023-09-18,85211.0,190309,35195,1489,3.21
+CAMP110,Valentine's Day,Social Media,Customer Retention,2023-05-01,102932.0,3661909,12248,229,7.9
+CAMP111,Easter Deals,Display Ads,Brand Awareness,2023-09-05,51989.0,4466232,17042,1679,3.79
+CAMP112,Mother's Day,Email,Lead Generation,2023-07-03,77745.0,3456004,30580,1167,2.98
+CAMP113,Father's Day,Influencer,Sales Conversion,2023-12-08,63495.0,726263,43343,1767,5.94
+CAMP114,End of Year,Video (YouTube),Retargeting,2023-01-03,84029.0,3213927,36721,984,1.61
+CAMP115,Q1 Acquisition,Content Marketing,Customer Retention,2023-01-23,38420.0,4243116,28936,1330,6.93
+CAMP116,Q2 Growth,Affiliate,Brand Awareness,2023-10-28,194899.0,4480520,3288,480,2.74
+CAMP117,Q3 Retention,Search (SEM),Lead Generation,2023-12-19,97723.0,440590,5372,1411,7.96
+CAMP118,Q4 Revenue Push,Social Media,Sales Conversion,2023-09-19,133331.0,1554534,21110,42,8.22
+CAMP119,Year-Round Awareness,Display Ads,Retargeting,2023-10-05,151690.0,3391149,5542,622,2.39
+CAMP120,Flash Sale Jan,Email,Customer Retention,2023-04-19,167757.0,3314482,44870,1846,5.15
+CAMP121,Flash Sale Mar,Influencer,Brand Awareness,2023-07-25,149250.0,707899,33319,1536,8.31
+CAMP122,Partnership Promo,Video (YouTube),Lead Generation,2023-01-04,90232.0,687687,22821,1249,6.81
+CAMP123,Referral Program,Content Marketing,Sales Conversion,2023-10-13,193940.0,2787845,2441,1308,3.2
+CAMP124,Winback Campaign,Affiliate,Retargeting,2023-08-16,49487.0,4689216,25103,894,2.56
+CAMP125,Anniversary Sale,Search (SEM),Customer Retention,2023-10-22,79114.0,2527822,16651,1470,1.74

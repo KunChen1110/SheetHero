@@ -1,0 +1,22 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "semantic_anomaly",
+    "locations": [
+      "row=3,column=Room_Rate_USD",
+      "row=6,column=Room_Rate_USD"
+    ],
+    "description": "Suite room rate is $1.50/night (B003) and $2.25/night (B006), implausibly low for a hotel suite (standard suite rate: $389–$459/night). Likely a decimal point error: $1.50→$150 or $389, $2.25→$225 or $459.",
+    "business_context": "Hotel PMS. Absurd room rates would cause massive revenue leakage if bookings were confirmed at these prices."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=2,column=Check_Out_Date",
+      "row=4,column=Check_Out_Date"
+    ],
+    "description": "Check_Out_Date missing for bookings B002 and B004. Expected: B002 → 2024-04-13 (2 nights from 04-11), B004 → 2024-04-15 (2 nights from 04-13).",
+    "business_context": "Hotel room availability calendar. Missing check-out dates prevent room turnover scheduling and double-booking prevention."
+  }
+]
