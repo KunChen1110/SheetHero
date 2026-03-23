@@ -1,0 +1,21 @@
+RecordID,BusinessUnit,Year,Quarter,Revenue_USD,YoY_Growth_Pct,Gross_Margin_Pct,Headcount,New_Clients,Churn_Rate_Pct
+1,Cloud Services,2020,Q1,7516899.0,14.3,41.3,468,62,5.98
+2,Hardware,2020,Q2,12807987.0,-3.9,46.5,339,94,7.09
+3,Software Licensing,2020,Q3,3637134.0,3.2,45.6,690,80,5.8
+4,Professional Services,2020,Q4,23474375.0,9.9,56.8,713,24,7.4
+5,Consumer Products,2020,Q1,21012517.0,-2.5,41.6,364,81,6.37
+6,Cloud Services,2021,Q2,15091762.0,5.1,40.0,755,43,6.05
+7,Hardware,2021,Q3,23681554.0,12.5,54.8,132,81,1.76
+8,Software Licensing,2021,Q4,11936659.0,6.3,45.0,143,34,7.75
+9,Professional Services,2021,Q1,21227048.0,15.1,73.0,738,110,3.25
+10,Consumer Products,2021,Q2,2925328.0,21.5,53.8,717,61,7.45
+11,Cloud Services,2022,Q3,6174250.0,15.5,60.4,553,16,4.56
+12,Hardware,2022,Q4,11392006.0,6.2,39.2,214,47,4.18
+13,Software Licensing,2022,Q1,13395787.0,18.2,51.0,613,9,4.46
+14,Professional Services,2022,Q2,9233895.0,6.3,73.8,463,115,4.84
+15,Consumer Products,2022,Q3,24726742.0,18.0,56.7,473,11,2.72
+16,Cloud Services,2023,Q4,10320925.0,21.5,60.0,102,31,3.24
+17,Hardware,2023,Q1,5013304.0,5.1,70.2,546,20,1.69
+18,Software Licensing,2023,Q2,16490512.0,23.0,63.4,368,75,1.59
+19,Professional Services,2023,Q3,11383786.0,2.9,68.7,166,64,7.66
+20,Consumer Products,2023,Q4,16897323.0,0.4,72.3,348,70,6.09

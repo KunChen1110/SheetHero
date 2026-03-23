@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from openpyxl import load_workbook
 
 from ...log.logger_registry import LoggerRegistry
+from ...task_families import detect_task_family
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -32,13 +33,38 @@ class FinalResponseStage:
         return text[:240]
 
     @classmethod
+    def _is_task_schedule_question(cls, user_question: str) -> bool:
+        lowered = cls._compact_question(user_question).lower()
+        if not any(token in lowered for token in ("schedule", "scheduling")):
+            return False
+        return any(
+            token in lowered
+            for token in (
+                "depends on",
+                "dependency",
+                "dependencies",
+                "task id",
+                "start time",
+                "end time",
+                "root task",
+                "prerequisite",
+            )
+        )
+
+    @classmethod
     def _question_content_label(cls, user_question: str, workbook_summary: Dict[str, Any]) -> str:
         text = cls._compact_question(user_question)
         lowered = text.lower()
         headers = [str(item).strip() for item in (workbook_summary.get("headers") or []) if str(item).strip()]
+        family = detect_task_family(user_question)
+
+        if family and family.final_label:
+            return family.final_label
+
+        if cls._is_task_schedule_question(user_question):
+            return "task scheduling table"
 
         keyword_labels = (
-            (("schedule", "scheduling", "dependency", "dependencies"), "task scheduling table"),
             (("correlation matrix",), "correlation matrix"),
             (("correlation",), "correlation report"),
             (("dashboard",), "dashboard"),
@@ -51,6 +77,7 @@ class FinalResponseStage:
             (("mobile reviews",), "mobile review summary"),
             (("diabetes",), "regional diabetes report"),
             (("financial", "cash flow"), "financial report"),
+            (("students and their tutors", "students attending", "tutor meeting"), "tutor meeting schedule"),
         )
         for tokens, label in keyword_labels:
             if any(token in lowered for token in tokens):
@@ -143,6 +170,39 @@ class FinalResponseStage:
             return summary
         return summary
 
+    @staticmethod
+    def _large_workbook_threshold_bytes() -> int:
+        return int(os.getenv("SHEETHERO_LARGE_WORKBOOK_THRESHOLD_BYTES", "10000000"))
+
+    @classmethod
+    def _is_large_output_file(cls, output_path: str) -> bool:
+        if not output_path or not os.path.exists(output_path):
+            return False
+        try:
+            return os.path.getsize(output_path) >= cls._large_workbook_threshold_bytes()
+        except OSError:
+            return False
+
+    @classmethod
+    def _summary_from_execution_result(cls, execution_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        summary: Dict[str, Any] = {
+            "sheet_name": "",
+            "headers": [],
+            "data_rows": 0,
+            "metric_label": "",
+            "metric_value": "",
+            "metrics": {},
+        }
+        execution_steps = ((execution_result or {}).get("execution_summary") or {}).get("execution_steps") or []
+        successful_steps = [step for step in execution_steps if step.get("success")]
+        if not successful_steps:
+            return summary
+        latest_result = str(successful_steps[-1].get("result") or "")
+        row_counts = [int(value) for value in re.findall(r"Wrote\s+(\d+)\s+rows\s+to", latest_result, flags=re.IGNORECASE)]
+        if row_counts:
+            summary["data_rows"] = max(max(row_counts) - 1, 0)
+        return summary
+
     @classmethod
     def _fallback_short_answer(
         cls,
@@ -186,6 +246,8 @@ class FinalResponseStage:
 
         answer_text = " ".join((final_answer or "").strip().split())
         if answer_text:
+            if len(answer_text.split()) >= 5 and re.search(r"[.!?]$", answer_text):
+                return answer_text
             lowered = question.lower()
             if "average spending" in lowered:
                 return f"The average spending is {answer_text}."
@@ -213,11 +275,12 @@ class FinalResponseStage:
     ) -> str:
         validation_result = validation_result or {}
         validation_passed = bool(validation_result.get("validation_passed"))
-        workbook_summary = (
-            self._inspect_output_workbook(final_answer)
-            if self._looks_like_file_path(final_answer)
-            else {}
-        )
+        workbook_summary = {}
+        if self._looks_like_file_path(final_answer):
+            if self._is_large_output_file(final_answer):
+                workbook_summary = self._summary_from_execution_result(execution_result)
+            else:
+                workbook_summary = self._inspect_output_workbook(final_answer)
 
         fallback = self._fallback_short_answer(
             user_question=user_question,

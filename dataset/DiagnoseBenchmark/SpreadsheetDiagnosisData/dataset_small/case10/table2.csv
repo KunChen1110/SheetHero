@@ -1,0 +1,7 @@
+Building,Month,Total_kWh,Avg_Daily_kWh,Monthly_Cost_USD
+Office Block A,2024-01,4280.5,138.1,642.08
+Office Block B,2024-01,3950.2,127.4,592.53
+Warehouse C,2024-01,-1820.4,-58.7,-273.06
+Retail Unit D,2024-01,2140.8,69.1,321.12
+Parking Garage E,2024-01,890.3,28.7,133.55
+Data Center F,2024-01,-9240.6,-298.1,-1386.09

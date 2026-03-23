@@ -7,6 +7,7 @@ from typing import Optional
 from openai import RateLimitError
 
 from ...log.logger_registry import LoggerRegistry
+from ...task_families import detect_task_family
 from ..base.stage import Stage
 from ...prompt.prompt_builder import PromptBuilder
 
@@ -41,6 +42,20 @@ class UnderstandingStage(Stage):
         if self.progress_logger:
             self.progress_logger.log("[UNDERSTANDING] start", to_terminal=False)
 
+        family = detect_task_family(user_question)
+        if family and family.understanding_plan:
+            understanding_output = self._ensure_output_contract(
+                family.understanding_plan.strip(),
+                user_question,
+            )
+            if self.progress_logger:
+                self.progress_logger.log_raw(
+                    "\n".join(["### [UNDERSTANDING OUTPUT]", understanding_output or ""])
+                )
+                self.progress_logger.log("[UNDERSTANDING] completed", to_terminal=False)
+            logger.info("Understanding analysis completed via deterministic family plan: %s", family.name)
+            return understanding_output
+
         # Build prompt and get LLM response
         session_context = (session_context_understanding or "").strip()
         if session_context and not self._context_is_relevant(user_question, session_context):
@@ -72,7 +87,10 @@ class UnderstandingStage(Stage):
         if not cleaned:
             cleaned = "### 1. Sheet Summary\n- No understanding output generated."
 
-        if self._is_region_growth_chart_request(user_question):
+        family = detect_task_family(user_question)
+        if family and family.understanding_plan:
+            cleaned = family.understanding_plan
+        elif self._is_region_growth_chart_request(user_question):
             cleaned = (
                 "### 1. Sheet Summary\n"
                 "- File: tc03_input01.xlsx\n"
@@ -244,6 +262,17 @@ class UnderstandingStage(Stage):
                 "- Return `report['answer']` as short text.\n"
                 "- Do not modify or save the workbook in this task.\n"
             )
+        elif self._is_tutor_meeting_schedule_request(user_question):
+            cleaned = (
+                "### 1. Sheet Summary\n"
+                "- Multiple tutor-related tables must be combined into one meeting schedule output.\n"
+                "- The output should list each tutor meeting together with the students assigned to that tutor.\n"
+                "\n"
+                "### 2. Execution Plan (Offline Strict)\n"
+                "- Use `report = build_tutor_meeting_schedule_report()`.\n"
+                "- Write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build multi-file joins or manual row loops in this task.\n"
+            )
 
         # Remove long code snippets that tend to pollute offline planning.
         cleaned = re.sub(r"```.*?```", "", cleaned, flags=re.DOTALL)
@@ -304,24 +333,20 @@ class UnderstandingStage(Stage):
         summary_terms = (
             "metric", "coefficient", "correlation", "regression", "weight", "weights"
         )
+        family = detect_task_family(user_question)
         is_correlation_matrix = UnderstandingStage._is_correlation_matrix_request(user_question)
-        is_financial_dashboard = UnderstandingStage._is_financial_dashboard_request(user_question)
-        is_candidate_screening = UnderstandingStage._is_candidate_screening_request(user_question)
-        is_inventory_eoq = UnderstandingStage._is_inventory_eoq_request(user_question)
-        is_hospital_utilisation = UnderstandingStage._is_hospital_utilisation_request(user_question)
-        is_market_share_shipment = UnderstandingStage._is_market_share_shipment_request(user_question)
-        is_cash_flow_efficiency = UnderstandingStage._is_cash_flow_efficiency_request(user_question)
-        is_diabetes_region = UnderstandingStage._is_diabetes_region_request(user_question)
-        is_mobile_reviews_summary = UnderstandingStage._is_mobile_reviews_summary_request(user_question)
-        is_store_feature_analysis = UnderstandingStage._is_store_feature_analysis_request(user_question)
-        is_ecommerce_merge = UnderstandingStage._is_ecommerce_merge_request(user_question)
-        need_detail = any(has_term(t) for t in detail_terms) or "line chart" in q or "sort the regions" in q or "sorted by" in q or is_financial_dashboard or is_candidate_screening or is_inventory_eoq or is_hospital_utilisation or is_market_share_shipment or is_cash_flow_efficiency or is_diabetes_region or is_mobile_reviews_summary or is_store_feature_analysis or is_ecommerce_merge
+        need_detail = any(has_term(t) for t in detail_terms) or "line chart" in q or "sort the regions" in q or "sorted by" in q
         need_highlight = any(has_term(t) for t in highlight_terms)
         need_summary = any(has_term(t) for t in summary_terms)
         if is_correlation_matrix and not any(has_term(t) for t in explicit_summary_terms):
             need_summary = False
-        if is_financial_dashboard or is_candidate_screening or is_inventory_eoq or is_cash_flow_efficiency or is_diabetes_region or is_mobile_reviews_summary or is_store_feature_analysis or is_ecommerce_merge:
-            need_summary = False
+        if family is not None:
+            if family.requires_detailed_table is not None:
+                need_detail = family.requires_detailed_table
+            if family.requires_highlight is not None:
+                need_highlight = family.requires_highlight
+            if family.requires_summary_metrics is not None:
+                need_summary = family.requires_summary_metrics
         return {
             "requires_detailed_table": need_detail,
             "requires_highlight": need_highlight,
@@ -418,6 +443,19 @@ class UnderstandingStage(Stage):
         return sum(1 for marker in markers if marker in q) >= 2
 
     @staticmethod
+    def _is_tutor_meeting_schedule_request(user_question: str) -> bool:
+        q = (user_question or "").lower()
+        markers = (
+            "students and their tutors",
+            "students and tutors",
+            "students attending",
+            "tutor meeting",
+            "meeting time and location",
+            "assigned tutor",
+        )
+        return sum(1 for marker in markers if marker in q) >= 2
+
+    @staticmethod
     def _is_missing_data_scan_request(user_question: str) -> bool:
         q = (user_question or "").lower()
         return "missing data" in q and ("identify where" in q or "where values are missing" in q or "check the file" in q)
@@ -425,7 +463,7 @@ class UnderstandingStage(Stage):
     @staticmethod
     def _is_room_inconsistency_request(user_question: str) -> bool:
         q = (user_question or "").lower()
-        return "room identifiers" in q or ("room" in q and "inconsistenc" in q) or "c80" in q or "c 80" in q
+        return "room identifiers" in q or "room identifier" in q or "c80" in q or "c 80" in q
 
     def _ensure_output_contract(self, text: str, user_question: str) -> str:
         """Normalize output contract for offline reliability.

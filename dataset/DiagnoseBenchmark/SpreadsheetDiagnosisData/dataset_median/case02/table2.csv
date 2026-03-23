@@ -1,0 +1,21 @@
+Country,Continent,Capital,Currency,Area_km2,Total_Population,Development_Status,HDI_Category
+China,Asia,Beijing,CNY,9596960,1412000000,Developing,High
+Nigeria,Africa,Abuja,NGN,923768,213000000,Developing,Medium
+Brazil,S. America,Brasília,BRL,8515767,213000000,Developing,Medium-High
+India,Asia,New Delhi,INR,3287263,1380000000,Developing,High
+Egypt,Africa,Cairo,EGP,1002450,100000000,Developing,Medium
+Mexico,N. America,Mexico City,MXN,1964375,128000000,developing,Medium-High
+Bangladesh,Asia,Dhaka,BDT,147570,165000000,Developing,Medium
+Japan,Asia,Tokyo,JPY,377975,126000000,Developed,High
+Pakistan,Asia,Islamabad,PKR,881913,220000000,Developing,Low-Medium
+Turkey,Europe,Ankara,TRY,783356,84000000,Developing,Medium-High
+Argentina,S. America,Buenos Aires,ARS,2780400,45000000,Developing,Medium
+DR Congo,Africa,Kinshasa,CDF,2344858,90000000,Developing,Low
+Philippines,Asia,Manila,PHP,300000,110000000,Developing,Medium
+Russia,Europe,Moscow,RUB,17098242,145000000,DEVELOPING,Medium-High
+Indonesia,Asia,Jakarta,IDR,1904569,273000000,Developing,Medium
+USA,N. America,Washington DC,USD,9833517,331000000,Developed,Very High
+Germany,Europe,Berlin,EUR,357114,83000000,Developed,Very High
+UK,Europe,London,GBP,242495,67000000,Developed,Very High
+France,Europe,Paris,EUR,643801,67000000,Developed,Very High
+Australia,Oceania,Canberra,AUD,7692024,25000000,Developed,Very High
