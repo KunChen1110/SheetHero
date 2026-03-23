@@ -1,0 +1,7 @@
+{
+  "issue_type": "inconsistency",
+  "table": "table2.csv",
+  "location": "row=3,column=Avg_CTR_Pct; row=7,column=Avg_CTR_Pct",
+  "description": "Avg_CTR_Pct is stored as a percentage in 6 of 8 rows (e.g. 3.8 meaning 3.8%), but rows 3 (Display Ads) and 7 (Content Marketing) store raw fractions: 0.004 and 0.055, which are 100× smaller than the correct values of 0.4% and 5.5%. To fix: multiply these two values by 100.",
+  "business_context": "Digital marketing channel benchmarks. CTR unit inconsistency causes budget optimisation models to massively underestimate click-through performance for Display and Content channels."
+}

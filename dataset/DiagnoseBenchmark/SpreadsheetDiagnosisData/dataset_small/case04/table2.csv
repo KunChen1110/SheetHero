@@ -1,0 +1,7 @@
+Ticker,Company,Sector,Market_Cap_B,Country
+AAPL,Apple Inc.,technology,2900,USA
+MSFT,Microsoft Corp.,Technology,2800,USA
+GOOGL,Alphabet Inc.,TECHNOLOGY,1700,USA
+AMZN,Amazon.com Inc.,Consumer Discretionary,1600,USA
+META,Meta Platforms,technology,1100,USA
+TSLA,Tesla Inc.,Consumer Discretionary,600,USA

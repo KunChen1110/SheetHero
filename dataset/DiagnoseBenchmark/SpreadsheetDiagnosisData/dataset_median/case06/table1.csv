@@ -1,0 +1,26 @@
+EmployeeID,FirstName,LastName,Department,JobTitle,Age,Years_at_Company,Annual_Salary_USD,Performance_Score,Country
+EMP1001,James,Smith,Engineering,Junior Engineering Specialist,32,5,91181.0,2.8,USA
+EMP1002,Mary,Johnson,Marketing,Mid Marketing Specialist,55,14,76962.0,3.5,UK
+EMP1003,John,Williams,Finance,Senior Finance Specialist,38,12,64009.0,4.7,Germany
+EMP1004,Patricia,Brown,Sales,Lead Sales Specialist,26,4,57343.0,4.8,Canada
+EMP1005,Robert,Jones,Operations,Manager Operations Specialist,44,19,108661.0,3.5,Australia
+EMP1006,Jennifer,Garcia,HR,Director HR Specialist,50,10,69397.0,2.6,India
+EMP1007,Michael,Miller,Legal,VP Legal Specialist,44,6,155165.0,4.0,Singapore
+EMP1008,Linda,Davis,Product,Junior Product Specialist,47,3,109589.0,2.8,USA
+EMP1009,William,Wilson,Customer Success,Mid Customer Success Specialist,51,19,105056.0,2.7,UK
+EMP1010,Barbara,Moore,IT,Senior IT Specialist,43,11,82697.0,4.4,Germany
+EMP1011,David,Taylor,Engineering,Lead Engineering Specialist,28,5,134153.0,3.8,Canada
+EMP1012,Susan,Anderson,Marketing,Manager Marketing Specialist,36,13,98672.0,4.3,Australia
+EMP1013,Richard,Thomas,Finance,Director Finance Specialist,33,4,67851.0,3.1,India
+EMP1014,Jessica,Jackson,Sales,VP Sales Specialist,35,10,74109.0,4.4,Singapore
+EMP1015,Joseph,White,Operations,Junior Operations Specialist,28,2,173912.0,4.1,USA
+EMP1016,Sarah,Harris,HR,Mid HR Specialist,53,19,149985.0,3.6,UK
+EMP1017,Thomas,Martin,Legal,Senior Legal Specialist,44,11,73870.0,2.7,Germany
+EMP1018,Karen,Thompson,Product,Lead Product Specialist,52,10,154541.0,4.0,Canada
+EMP1019,Charles,Garcia,Customer Success,Manager Customer Success Specialist,46,17,64274.0,3.7,Australia
+EMP1020,Lisa,Martinez,IT,Director IT Specialist,26,1,101092.0,3.2,India
+EMP1021,Daniel,Robinson,Engineering,VP Engineering Specialist,29,5,129260.0,3.5,Singapore
+EMP1022,Nancy,Clark,Marketing,Junior Marketing Specialist,26,4,168631.0,3.9,USA
+EMP1023,Matthew,Rodriguez,Finance,Mid Finance Specialist,36,6,130626.0,3.8,UK
+EMP1024,Betty,Lewis,Sales,Senior Sales Specialist,27,4,67938.0,4.7,Germany
+EMP1025,Anthony,Lee,Operations,Lead Operations Specialist,45,3,118069.0,2.9,Canada

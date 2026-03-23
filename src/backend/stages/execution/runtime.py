@@ -4,8 +4,14 @@ import ast
 import os
 import re
 from typing import Dict, Any, Optional
+import pandas as pd
 
 from ...log.logger_registry import LoggerRegistry
+from ...task_families import (
+    detect_task_family,
+    get_task_family_runtime_mode,
+    task_family_uses_post_table_summary_row,
+)
 from .core.executor import CodeExecutor
 from .guards.error_feedback import ExecutionErrorFeedbackBuilder
 from .guards.forbidden_policy import (
@@ -43,6 +49,7 @@ from .analysis.task_intents import (
     is_same_schema_merge_summary_request,
     is_simple_horizontal_merge_request,
     is_store_feature_analysis_request,
+    is_tutor_meeting_schedule_request,
 )
 from .guards.loop_breakers import get_task_specific_loop_breaker
 from .analysis.workbook_grounding import WorkbookGrounding
@@ -341,6 +348,9 @@ class ExecutionRuntime(StageRuntime):
         if not code:
             return "PREFLIGHT_LINEAR: empty code block."
         lower = code.lower()
+        family = detect_task_family(user_question)
+        helper_name = (family.helper_name or "") if family else ""
+        uses_registered_family_helper = bool(helper_name and f"{helper_name.lower()}(" in lower)
         uses_load_all_tables = "load_all_tables(" in lower
         uses_region_growth_helper = "build_region_growth_analysis(" in lower
         uses_financial_dashboard_helper = "build_financial_dashboard_report(" in lower
@@ -355,6 +365,7 @@ class ExecutionRuntime(StageRuntime):
         uses_ecommerce_merge_helper = "build_ecommerce_merge_report(" in lower
         uses_missing_data_helper = "build_missing_data_report(" in lower
         uses_room_format_helper = "build_room_format_report(" in lower
+        uses_tutor_meeting_helper = "build_tutor_meeting_schedule_report(" in lower or "build_relational_assignment_schedule_report(" in lower
         top_level_returns = [
             line.strip()
             for line in code.splitlines()
@@ -379,14 +390,40 @@ class ExecutionRuntime(StageRuntime):
                 "- Return one full corrected code block.\n"
                 "- Keep string quoting simple and avoid nested double quotes inside f-strings."
             )
-        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper:
+        if family is not None and helper_name and not uses_registered_family_helper:
+            family_hint = (family.loop_breaker or family.execution_strict_rules or "").strip()
+            helper_block = (
+                f"PREFLIGHT_FAMILY_HELPER: detected the `{family.name}` family, so execution must call the runtime helper `{helper_name}(...)`.\n"
+                f"- Required helper: `{helper_name}(...)`\n"
+                "- Do not replace the helper with ad-hoc pandas logic, manual joins, or manual date parsing.\n"
+            )
+            if family_hint:
+                helper_block += f"{family_hint}\n"
+            return helper_block.rstrip()
+        if family is not None and family.self_loading_helper and uses_registered_family_helper:
+            manual_reader_patterns = ("read_table_multi(", "find_table_by_headers(", "load_all_tables(")
+            if any(pattern in lower for pattern in manual_reader_patterns):
+                family_hint = (family.loop_breaker or family.execution_strict_rules or "").strip()
+                helper_block = (
+                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{family.name}` family.\n"
+                    "- Remove manual `read_table_multi(...)`, `find_table_by_headers(...)`, and `load_all_tables(...)` calls from execution code.\n"
+                    "- Call the helper directly, write its returned detail data, then save.\n"
+                )
+                if family_hint:
+                    helper_block += f"{family_hint}\n"
+                return helper_block.rstrip()
+        family_grounding_issue = self._family_helper_header_grounding_guard(code_action, user_question)
+        if family_grounding_issue is not None:
+            return family_grounding_issue
+        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_registered_family_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper and not uses_tutor_meeting_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read runtime inputs via `load_all_tables()` or `list_all_workbooks()`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
                 "- Or add: `all_files = list_all_workbooks()` and resolve file_path from runtime."
             )
         requires_saved_workbook = not (
-            (is_missing_data_scan_request(user_question) and uses_missing_data_helper)
+            (family is not None and family.output_mode == "text")
+            or (is_missing_data_scan_request(user_question) and uses_missing_data_helper)
             or (is_room_inconsistency_request(user_question) and uses_room_format_helper)
         )
         if requires_saved_workbook and not re.search(r"save_workbook_to\s*\(\s*output_path\s*\)", code, flags=re.IGNORECASE):
@@ -411,7 +448,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Use the injected runtime variable only: `save_workbook_to(output_path)`.\n"
                 "- Do not redefine `output_path`."
             )
-        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_region_growth_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper:
+        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_registered_family_helper and not uses_region_growth_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper and not uses_tutor_meeting_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read tabular content via `load_all_tables()` or `read_table_multi(...)`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
@@ -489,6 +526,177 @@ class ExecutionRuntime(StageRuntime):
             return []
         body = m.group(1)
         return [s.strip() for s in re.findall(r"['\"]([^'\"]+)['\"]", body)]
+
+    @staticmethod
+    def _normalize_header_name_for_grounding(value: str) -> str:
+        text = str(value or "")
+        text = re.sub(r"_x[0-9A-Fa-f]{4}_", "", text)
+        text = re.sub(r"[_\W]+", " ", text, flags=re.UNICODE)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip().lower()
+
+    @staticmethod
+    def _extract_single_string_kwarg(code: str, kwarg: str) -> Optional[str]:
+        match = re.search(
+            rf"{kwarg}\s*=\s*['\"]([^'\"]+)['\"]",
+            code,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return match.group(1).strip()
+
+    @staticmethod
+    def _extract_string_list_kwarg(code: str, kwarg: str) -> list[str]:
+        match = re.search(
+            rf"{kwarg}\s*=\s*\[([^\]]*)\]",
+            code,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return []
+        body = match.group(1)
+        return [item.strip() for item in re.findall(r"['\"]([^'\"]+)['\"]", body)]
+
+    def _family_helper_header_grounding_guard(self, code_action: str, user_question: str) -> Optional[str]:
+        family = detect_task_family(user_question)
+        if family is None or not family.helper_name:
+            return None
+        lower = (code_action or "").lower()
+        if f"{family.helper_name.lower()}(" not in lower:
+            return None
+
+        observed_headers = sorted(self._observed_header_set())
+        if not observed_headers:
+            return None
+        normalized_headers = {
+            self._normalize_header_name_for_grounding(header): header
+            for header in observed_headers
+        }
+
+        unknown_args: list[tuple[str, str]] = []
+        for kwarg in ("date_col", "value_col", "target_col", "key_header"):
+            value = self._extract_single_string_kwarg(code_action, kwarg)
+            if not value:
+                continue
+            if self._normalize_header_name_for_grounding(value) not in normalized_headers:
+                unknown_args.append((kwarg, value))
+        for kwarg in ("group_cols", "feature_cols", "key_headers"):
+            for value in self._extract_string_list_kwarg(code_action, kwarg):
+                if self._normalize_header_name_for_grounding(value) not in normalized_headers:
+                    unknown_args.append((kwarg, value))
+
+        if not unknown_args:
+            return None
+
+        unknown_text = ", ".join(f"`{kwarg}={value}`" for kwarg, value in unknown_args)
+        observed_text = ", ".join(f"`{header}`" for header in observed_headers[:20])
+        guidance = (
+            f"PREFLIGHT_FAMILY_GROUNDING: the helper call for the `{family.name}` family references column header(s) not present in the loaded workbook.\n"
+            f"- Unknown helper arguments: {unknown_text}\n"
+            f"- Observed headers: {observed_text}\n"
+            "- Replace those arguments with real headers from the workbook.\n"
+            "- If the correct grouping/value/date column is obvious but uncertain, prefer `group_cols=None` or `value_col=None`.\n"
+        )
+        suggested_call = self._build_family_grounded_call_hint(family.name, user_question, observed_headers)
+        if suggested_call:
+            guidance += f"- Recommended grounded helper call:\n  `{suggested_call}`\n"
+        if family.loop_breaker:
+            guidance += family.loop_breaker
+        return guidance.rstrip()
+
+    def _build_family_grounded_call_hint(
+        self,
+        family_name: str,
+        user_question: str,
+        observed_headers: list[str],
+    ) -> str:
+        question = self._normalize_header_name_for_grounding(user_question)
+
+        def _header_score(header: str, role: str) -> float:
+            normalized = self._normalize_header_name_for_grounding(header)
+            tokens = [token for token in normalized.split(" ") if token]
+            score = 0.0
+            for token in tokens:
+                if token in question:
+                    score += 10.0
+            if normalized and normalized in question:
+                score += 20.0
+            if role == "group":
+                if any(marker in normalized for marker in ("category", "group", "type", "department", "course", "subject", "program", "semester", "term", "class", "region", "room", "faculty", "professor", "instructor", "tutor")):
+                    score += 15.0
+            elif role == "value":
+                if any(marker in normalized for marker in ("score", "grade", "rating", "amount", "spending", "expense", "cost", "price", "salary", "revenue", "sales", "hours", "count", "quantity", "capacity", "utilisation", "utilization")):
+                    score += 15.0
+            elif role == "date":
+                if any(marker in normalized for marker in ("date", "time", "year", "month", "quarter", "day")):
+                    score += 20.0
+            return score
+
+        def _best_header(role: str) -> Optional[str]:
+            scored = [( _header_score(header, role), header) for header in observed_headers]
+            scored.sort(key=lambda item: (-item[0], item[1]))
+            if not scored or scored[0][0] <= 0:
+                return None
+            return scored[0][1]
+
+        if family_name == "grouped_aggregation_ranking":
+            group_header = _best_header("group")
+            value_header = _best_header("value")
+            if group_header and value_header and group_header != value_header:
+                return (
+                    "report = build_grouped_aggregation_ranking_report("
+                    f"file_path=None, group_cols=['{group_header}'], value_col='{value_header}', "
+                    "aggregate='mean', top_n=None, sort_desc=True)"
+                )
+            return ""
+
+        if family_name == "temporal_aggregation_ranking":
+            date_header = _best_header("date")
+            value_header = _best_header("value")
+            if date_header and value_header and date_header != value_header:
+                return (
+                    "report = build_time_series_aggregation_report("
+                    f"file_path=None, date_col='{date_header}', value_col='{value_header}', "
+                    "period='month', aggregate='mean', window_years=5, period_mode='year_month', sort_desc=True)"
+                )
+            return ""
+
+        if family_name in {"composite_key_relational_join", "relational_join_enrichment"}:
+            key_candidates = [
+                header for header in observed_headers
+                if any(marker in self._normalize_header_name_for_grounding(header) for marker in ("id", "code", "number"))
+            ]
+            if family_name == "composite_key_relational_join":
+                for header in observed_headers:
+                    normalized = self._normalize_header_name_for_grounding(header)
+                    if any(
+                        marker in normalized
+                        for marker in ("term", "semester", "date", "year", "month", "section", "class", "group", "session", "slot", "room", "course")
+                    ) and header not in key_candidates:
+                        key_candidates.append(header)
+                if len(key_candidates) >= 2:
+                    key_list = ", ".join(f"'{header}'" for header in key_candidates[:2])
+                    return (
+                        "report = build_multi_key_relational_join_report("
+                        f"range_ref='A1:Z200000', key_headers=[{key_list}], how='inner')"
+                    )
+                return (
+                    "report = build_multi_key_relational_join_report("
+                    "range_ref='A1:Z200000', key_headers=None, how='inner')"
+                )
+            key_header = key_candidates[0] if key_candidates else None
+            if key_header:
+                return (
+                    "report = build_relational_join_enrichment_report("
+                    f"range_ref='A1:Z200000', key_header='{key_header}', how='inner')"
+                )
+            return (
+                "report = build_relational_join_enrichment_report("
+                "range_ref='A1:Z200000', key_header=None, how='inner')"
+            )
+
+        return ""
 
     def _regression_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
         if not is_regression_request(user_question):
@@ -730,6 +938,29 @@ class ExecutionRuntime(StageRuntime):
                 "  `print(f'FINAL_TEXT: {final_text}')`\n"
                 "  `final_text`\n"
                 "- Do not modify or save the workbook in this task."
+            )
+        if is_tutor_meeting_schedule_request(user_question):
+            helper_call = re.search(r"build_(?:tutor_meeting_schedule|relational_assignment_schedule)_report\s*\(([^)]*)\)", code, flags=re.IGNORECASE | re.DOTALL)
+            if helper_call:
+                if helper_call.group(1).strip():
+                    return (
+                        "PREFLIGHT_ASSIGNMENT_SCHEDULE: call `build_relational_assignment_schedule_report()` with no manual DataFrame argument.\n"
+                        "- Correct usage:\n"
+                        "  `report = build_relational_assignment_schedule_report()`\n"
+                        "- The helper reads and joins the runtime assignment/schedule tables internally.\n"
+                        "- Do not pass `df` objects into the helper."
+                    )
+                return None
+            return (
+                "PREFLIGHT_ASSIGNMENT_SCHEDULE: use the runtime assignment-schedule helper.\n"
+                "- Preferred linear pipeline:\n"
+                "  `report = build_relational_assignment_schedule_report()`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+                "  `saved_file = save_workbook_to(output_path)`\n"
+                "  `print(f'SAVED_FILE: {saved_file}')`\n"
+                "  `saved_file`\n"
+                "- Do not hand-build multi-file joins or manual row loops in this task."
             )
         if is_correlation_matrix_request(user_question):
             if "build_correlation_matrix_table(" in lower:
@@ -1427,7 +1658,26 @@ class ExecutionRuntime(StageRuntime):
                 f"{schema_snapshot}\n"
                 "Use these real headers for all select/merge operations. Do not invent columns."
             )
-        if is_dependency_schedule_request(user_question):
+        family = detect_task_family(user_question)
+        if family is not None:
+            if family.execution_strict_rules:
+                user_content += family.execution_strict_rules
+            if family.loop_breaker:
+                user_content += family.loop_breaker
+            observed_headers = sorted(self._observed_header_set())
+            grounded_hint = self._build_family_grounded_call_hint(
+                family.name,
+                user_question,
+                observed_headers,
+            )
+            if grounded_hint:
+                user_content += (
+                    "\n\n**GROUNDED HELPER HINT (USE REAL HEADERS):**\n"
+                    f"- Observed headers: {', '.join(f'`{header}`' for header in observed_headers[:20])}\n"
+                    f"- Preferred grounded helper call:\n  `{grounded_hint}`\n"
+                    "- Prefer this grounded call over invented column names.\n"
+                )
+        if family is None and is_dependency_schedule_request(user_question):
             user_content += (
                 "\n\n**SCHEDULING TASK RULES (STRICT):**\n"
                 "- Identify table roles from verified headers, not from assumed same-schema logic.\n"
@@ -1458,7 +1708,7 @@ class ExecutionRuntime(StageRuntime):
                 "  `summary_result = summarize_numeric_column(combined_df, value_col='...', summary_labels={...})`\n"
                 "- Then write the full merged table, highlight `summary_result['output_row_numbers']`, and add `summary_result['summary']` below."
             )
-        if is_fill_missing_request(user_question):
+        if family is None and is_fill_missing_request(user_question):
             user_content += (
                 "\n\n**FILL-MISSING RULES (STRICT):**\n"
                 "- Prefer:\n"
@@ -1468,7 +1718,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Keep original non-missing values in the primary table.\n"
                 "- Write `fill_result['output_df']` directly."
             )
-        if is_region_growth_chart_request(user_question):
+        if family is None and is_region_growth_chart_request(user_question):
             user_content += (
                 "\n\n**REGION-GROWTH CHART RULES (STRICT):**\n"
                 "- Do NOT parse the messy multi-row header manually with `read_table_multi()`.\n"
@@ -1479,7 +1729,7 @@ class ExecutionRuntime(StageRuntime):
                 "  and plot `analysis['chart_df']` with one line per region before `save_plot_to_excel('Output', 'F2')`."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_correlation_matrix_request(user_question):
+        if family is None and is_correlation_matrix_request(user_question):
             user_content += (
                 "\n\n**CORRELATION-MATRIX RULES (STRICT):**\n"
                 "- Prefer the runtime helper path for filtered correlation matrices.\n"
@@ -1491,7 +1741,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hard-code input paths, manual CSV reads, or rebuild the matrix cell-by-cell."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_cycle_detection_request(user_question):
+        if family is None and is_cycle_detection_request(user_question):
             user_content += (
                 "\n\n**CYCLE-DETECTION RULES (STRICT):**\n"
                 "- Use the runtime helper path for multiple graph files.\n"
@@ -1502,7 +1752,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hard-code CSV reads or rebuild graph parsing manually in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_financial_dashboard_request(user_question):
+        if family is None and is_financial_dashboard_request(user_question):
             user_content += (
                 "\n\n**FINANCIAL-DASHBOARD RULES (STRICT):**\n"
                 "- This task requires a quarter-level dashboard table, not a scalar answer.\n"
@@ -1513,7 +1763,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not read raw files manually in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_candidate_screening_request(user_question):
+        if family is None and is_candidate_screening_request(user_question):
             user_content += (
                 "\n\n**CANDIDATE-SCREENING RULES (STRICT):**\n"
                 "- This task requires a ranked candidate table, not a scalar answer.\n"
@@ -1524,7 +1774,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build file loops, score formulas, or ranking rows."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_inventory_eoq_request(user_question):
+        if family is None and is_inventory_eoq_request(user_question):
             user_content += (
                 "\n\n**INVENTORY-EOQ RULES (STRICT):**\n"
                 "- This task requires three clear tables in one output workbook.\n"
@@ -1534,7 +1784,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build EOQ formulas, parameter parsing, or table layout."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_hospital_utilisation_request(user_question):
+        if family is None and is_hospital_utilisation_request(user_question):
             user_content += (
                 "\n\n**HOSPITAL-UTILISATION RULES (STRICT):**\n"
                 "- This task requires one service-level output table.\n"
@@ -1545,7 +1795,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build merges or grouped utilisation formulas."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_market_share_shipment_request(user_question):
+        if family is None and is_market_share_shipment_request(user_question):
             user_content += (
                 "\n\n**MARKET-SHARE SHIPMENT RULES (STRICT):**\n"
                 "- This task requires a detailed output table aligned on overlapping quarters.\n"
@@ -1555,7 +1805,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not read `Overview` sheets or hand-build quarter alignment in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_cash_flow_efficiency_request(user_question):
+        if family is None and is_cash_flow_efficiency_request(user_question):
             user_content += (
                 "\n\n**CASH-FLOW EFFICIENCY RULES (STRICT):**\n"
                 "- This task requires a yearly output table, not a scalar answer.\n"
@@ -1565,7 +1815,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-locate rows in the financial statement workbook."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_diabetes_region_request(user_question):
+        if family is None and is_diabetes_region_request(user_question):
             user_content += (
                 "\n\n**DIABETES-REGION RULES (STRICT):**\n"
                 "- This task requires one regional summary table, not a scalar answer.\n"
@@ -1575,7 +1825,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build region joins or share calculations in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_mobile_reviews_summary_request(user_question):
+        if family is None and is_mobile_reviews_summary_request(user_question):
             user_content += (
                 "\n\n**MOBILE-REVIEWS RULES (STRICT):**\n"
                 "- This task requires one grouped summary table, not a scalar answer.\n"
@@ -1586,7 +1836,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build groupby or aggregation code in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_store_feature_analysis_request(user_question):
+        if family is None and is_store_feature_analysis_request(user_question):
             user_content += (
                 "\n\n**STORE-FEATURE ANALYSIS RULES (STRICT):**\n"
                 "- This task requires two output sheets.\n"
@@ -1597,7 +1847,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build merges or groupby logic in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_ecommerce_merge_request(user_question):
+        if family is None and is_ecommerce_merge_request(user_question):
             user_content += (
                 "\n\n**ECOMMERCE-MERGE RULES (STRICT):**\n"
                 "- This task requires one merged output table, not a scalar answer.\n"
@@ -1608,7 +1858,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not hand-build multi-file joins or translation logic in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_missing_data_scan_request(user_question):
+        if family is None and is_missing_data_scan_request(user_question):
             user_content += (
                 "\n\n**MISSING-DATA REPORT RULES (STRICT):**\n"
                 "- This task requires a short text answer, not a new spreadsheet.\n"
@@ -1620,7 +1870,7 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not create or save an output workbook in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_room_inconsistency_request(user_question):
+        if family is None and is_room_inconsistency_request(user_question):
             user_content += (
                 "\n\n**ROOM-FORMAT REPORT RULES (STRICT):**\n"
                 "- This task requires a natural-language finding, not a new spreadsheet.\n"
@@ -1632,7 +1882,17 @@ class ExecutionRuntime(StageRuntime):
                 "- Do not modify or save the workbook in this task."
             )
             user_content += get_task_specific_loop_breaker(user_question)
-        if is_simple_horizontal_merge_request(user_question):
+        if family is None and is_tutor_meeting_schedule_request(user_question):
+            user_content += (
+                "\n\n**ASSIGNMENT-SCHEDULE FAMILY RULES (STRICT):**\n"
+                "- This task requires one consolidated output spreadsheet.\n"
+                "- Use the runtime helper path:\n"
+                "  `report = build_relational_assignment_schedule_report()`\n"
+                "- Then write `report['detail_data']` directly to `Output!A1`.\n"
+                "- Do not hand-build multi-file joins or iterate over DataFrame columns as rows."
+            )
+            user_content += get_task_specific_loop_breaker(user_question)
+        if family is None and is_simple_horizontal_merge_request(user_question):
             user_content += (
                 "\n\n**SIMPLE MERGE RULES (STRICT):**\n"
                 "- Prefer:\n"
@@ -1641,7 +1901,7 @@ class ExecutionRuntime(StageRuntime):
                 "  `merge_result = merge_tables_on_key(tables, key_header=key_header, how='inner')`\n"
                 "- Write `merge_result['output_df']` directly."
             )
-        if is_regression_request(user_question):
+        if family is None and is_regression_request(user_question):
             user_content += (
                 "\n\n**REGRESSION TASK RULES (STRICT):**\n"
                 "- Prefer the runtime helper path for coefficient fitting.\n"
@@ -1735,18 +1995,696 @@ class ExecutionRuntime(StageRuntime):
             if idx == keep_idx or idx not in matched_indices[:-1]
         ]
 
+    @staticmethod
+    def _normalize_question_text(value: str) -> str:
+        return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+    @staticmethod
+    def _infer_sort_desc_from_question(user_question: str) -> bool:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        if any(marker in q for marker in ("lowest to highest", "ascending", "smallest to largest", "lowest first")):
+            return False
+        return True
+
+    @staticmethod
+    def _infer_top_n_from_question(user_question: str) -> Optional[int]:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        patterns = (
+            r"\btop\s+(\d+)\b",
+            r"\bhighest\s+(\d+)\b",
+            r"\bfirst\s+(\d+)\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, q)
+            if match:
+                try:
+                    value = int(match.group(1))
+                    if value > 0:
+                        return value
+                except Exception:
+                    continue
+        return None
+
+    @staticmethod
+    def _infer_aggregate_from_question(user_question: str) -> str:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        aggregate_markers = (
+            ("median", "median"),
+            ("average", "mean"),
+            ("mean", "mean"),
+            ("sum", "sum"),
+            ("total", "sum"),
+            ("count", "count"),
+            ("minimum", "min"),
+            ("minimum", "min"),
+            ("min", "min"),
+            ("maximum", "max"),
+            ("max", "max"),
+        )
+        for marker, aggregate in aggregate_markers:
+            if marker in q:
+                return aggregate
+        return "mean"
+
+    def _headers_mentioned_in_question(self, observed_headers: list[str], user_question: str) -> list[str]:
+        q = self._normalize_question_text(user_question)
+        mentioned: list[tuple[int, str]] = []
+        for header in observed_headers:
+            normalized = self._normalize_header_name_for_grounding(header)
+            if not normalized:
+                continue
+            position = q.find(normalized)
+            if position >= 0:
+                mentioned.append((position, header))
+        mentioned.sort(key=lambda item: (item[0], item[1]))
+        return [header for _, header in mentioned]
+
+    def _infer_group_headers_from_question(
+        self,
+        observed_headers: list[str],
+        user_question: str,
+    ) -> list[str]:
+        mentioned = self._headers_mentioned_in_question(observed_headers, user_question)
+        selected: list[str] = []
+        for header in mentioned:
+            normalized = self._normalize_header_name_for_grounding(header)
+            if any(
+                marker in normalized
+                for marker in (
+                    "date",
+                    "time",
+                    "year",
+                    "month",
+                    "quarter",
+                    "day",
+                    "score",
+                    "grade",
+                    "amount",
+                    "spending",
+                    "expense",
+                    "cost",
+                    "price",
+                    "salary",
+                    "revenue",
+                    "sales",
+                    "count",
+                    "quantity",
+                    "hours",
+                    "rate",
+                    "ratio",
+                    "percent",
+                    "pct",
+                    "utilisation",
+                    "utilization",
+                )
+            ):
+                continue
+            selected.append(header)
+        if selected:
+            return selected[:2]
+        best = self._build_family_grounded_call_hint(
+            "grouped_aggregation_ranking",
+            user_question,
+            observed_headers,
+        )
+        match = re.search(r"group_cols=\[([^\]]*)\]", best)
+        if not match:
+            return []
+        values = re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
+        return values[:2]
+
+    def _infer_value_header_from_question(
+        self,
+        observed_headers: list[str],
+        user_question: str,
+        family_name: str,
+    ) -> Optional[str]:
+        mentioned = self._headers_mentioned_in_question(observed_headers, user_question)
+        for header in mentioned:
+            normalized = self._normalize_header_name_for_grounding(header)
+            if any(
+                marker in normalized
+                for marker in (
+                    "score",
+                    "grade",
+                    "amount",
+                    "spending",
+                    "expense",
+                    "cost",
+                    "price",
+                    "salary",
+                    "revenue",
+                    "sales",
+                    "count",
+                    "quantity",
+                    "hours",
+                    "utilisation",
+                    "utilization",
+                    "capacity",
+                    "rate",
+                    "ratio",
+                    "pct",
+                    "percent",
+                )
+            ):
+                return header
+        hinted_call = self._build_family_grounded_call_hint(family_name, user_question, observed_headers)
+        match = re.search(r"value_col=['\"]([^'\"]+)['\"]", hinted_call)
+        return match.group(1) if match else None
+
+    def _infer_date_header_from_question(
+        self,
+        observed_headers: list[str],
+        user_question: str,
+    ) -> Optional[str]:
+        mentioned = self._headers_mentioned_in_question(observed_headers, user_question)
+        for header in mentioned:
+            normalized = self._normalize_header_name_for_grounding(header)
+            if any(marker in normalized for marker in ("date", "time", "year", "month", "quarter", "day")):
+                return header
+        hinted_call = self._build_family_grounded_call_hint(
+            "temporal_aggregation_ranking",
+            user_question,
+            observed_headers,
+        )
+        match = re.search(r"date_col=['\"]([^'\"]+)['\"]", hinted_call)
+        return match.group(1) if match else None
+
+    def _infer_numeric_like_headers_from_df(self, df: pd.DataFrame) -> list[str]:
+        numeric_headers: list[str] = []
+        for header in df.columns:
+            header_text = str(header)
+            if header_is_non_feature_like(header_text):
+                continue
+            series = pd.to_numeric(df[header], errors="coerce")
+            non_null = int(series.notna().sum())
+            if non_null >= max(2, min(len(df), 3)):
+                numeric_headers.append(header_text)
+        return numeric_headers
+
+    def _infer_regression_columns_from_df(
+        self,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> tuple[Optional[str], list[str]]:
+        numeric_headers = self._infer_numeric_like_headers_from_df(df)
+        if len(numeric_headers) < 2:
+            return None, []
+        mentioned = self._headers_mentioned_in_question(numeric_headers, user_question)
+        question = self._normalize_question_text(user_question)
+
+        def _target_score(header: str) -> float:
+            normalized = self._normalize_header_name_for_grounding(header)
+            score = 0.0
+            if header in mentioned:
+                score += 40.0
+            if header_is_target_like(header):
+                score += 20.0
+            for marker in ("predict", "target", "outcome", "dependent"):
+                if marker in question:
+                    score += 2.0
+            for marker in ("sales", "revenue", "price", "cost", "score", "grade", "rating", "amount", "spending"):
+                if marker in normalized:
+                    score += 8.0
+            return score
+
+        scored = sorted(((_target_score(header), header) for header in numeric_headers), key=lambda item: (-item[0], item[1]))
+        target_col = scored[0][1]
+        feature_cols = [header for header in numeric_headers if header != target_col]
+        return target_col, feature_cols
+
+    def _infer_correlation_columns_from_df(
+        self,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> tuple[list[str], Optional[str], Optional[str]]:
+        numeric_headers = self._infer_numeric_like_headers_from_df(df)
+        mentioned_numeric = self._headers_mentioned_in_question(numeric_headers, user_question)
+        numeric_columns = mentioned_numeric if len(mentioned_numeric) >= 2 else numeric_headers
+
+        filter_column: Optional[str] = None
+        filter_value: Optional[str] = None
+        question = self._normalize_question_text(user_question)
+        for header in df.columns:
+            header_text = str(header)
+            if header_text in numeric_columns or header_is_non_feature_like(header_text):
+                continue
+            unique_values = [
+                str(value).strip()
+                for value in df[header].dropna().astype(str).unique().tolist()
+                if str(value).strip()
+            ]
+            if not unique_values or len(unique_values) > 20:
+                continue
+            for value in unique_values:
+                normalized_value = self._normalize_header_name_for_grounding(value)
+                if normalized_value and normalized_value in question:
+                    filter_column = header_text
+                    filter_value = value
+                    break
+            if filter_column is not None:
+                break
+
+        return numeric_columns, filter_column, filter_value
+
+    @staticmethod
+    def _infer_period_from_question(user_question: str) -> str:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        if "quarter" in q or "quarterly" in q:
+            return "quarter"
+        if "year" in q or "yearly" in q or "annual" in q:
+            return "year"
+        return "month"
+
+    @staticmethod
+    def _infer_period_mode_from_question(user_question: str, period: str) -> str:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        if period == "month":
+            if any(marker in q for marker in ("month-of-year", "calendar month", "all january", "all february", "across years by month")):
+                return "month_of_year"
+            return "year_month"
+        if period == "quarter":
+            if any(marker in q for marker in ("quarter-of-year", "calendar quarter", "across years by quarter")):
+                return "quarter_of_year"
+        return "year_month"
+
+    @staticmethod
+    def _infer_window_years_from_question(user_question: str) -> Optional[int]:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        patterns = (
+            r"(?:last|latest|recent)\s+(\d+)\s+years?",
+            r"within\s+the\s+latest\s+(\d+)\s+years?",
+            r"past\s+(\d+)\s+years?",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, q)
+            if match:
+                try:
+                    value = int(match.group(1))
+                    if value > 0:
+                        return value
+                except Exception:
+                    continue
+        return None
+
+    @staticmethod
+    def _infer_explicit_year_bounds_from_question(user_question: str) -> tuple[int, int]:
+        q = ExecutionRuntime._normalize_question_text(user_question)
+        years = [int(value) for value in re.findall(r"\b(19\d{2}|20\d{2}|21\d{2})\b", q)]
+        unique_years = []
+        for year in years:
+            if year not in unique_years:
+                unique_years.append(year)
+        if len(unique_years) >= 2:
+            return min(unique_years), max(unique_years)
+        return 2020, 2024
+
+    def _execute_family_fast_path(
+        self,
+        family_name: str,
+        user_question: str,
+    ) -> Optional[dict]:
+        globals_dict = getattr(self.sandbox, "code_globals", {}) or {}
+        family = detect_task_family(user_question)
+        if family is None or family.name != family_name:
+            family = None
+        runtime_mode = get_task_family_runtime_mode(family_name)
+        if runtime_mode is None:
+            return None
+        observed_headers = sorted(self._observed_header_set())
+        create_output_sheet = globals_dict.get("create_output_sheet")
+        write_dataframe_to_sheet = globals_dict.get("write_dataframe_to_sheet")
+        save_workbook_to = globals_dict.get("save_workbook_to")
+        add_summary_row = globals_dict.get("add_summary_row")
+        output_path = globals_dict.get("output_path")
+        if runtime_mode == "text_scan":
+            create_output_sheet = None
+            write_dataframe_to_sheet = None
+            save_workbook_to = None
+        elif not all((create_output_sheet, write_dataframe_to_sheet, save_workbook_to, output_path)):
+            return None
+
+        helper_messages: list[str] = []
+        report = None
+        helper_name = ""
+        saved_file = None
+        output_sheet_name = "Output"
+        extra_sheet_payloads: list[tuple[str, Any]] = []
+        if runtime_mode == "grouped_aggregation":
+            helper = globals_dict.get("build_grouped_aggregation_ranking_report")
+            if helper is None:
+                return None
+            group_cols = self._infer_group_headers_from_question(observed_headers, user_question) or None
+            value_col = self._infer_value_header_from_question(
+                observed_headers,
+                user_question,
+                family_name,
+            )
+            report = helper(
+                file_path=None,
+                group_cols=group_cols,
+                value_col=value_col,
+                aggregate=self._infer_aggregate_from_question(user_question),
+                top_n=self._infer_top_n_from_question(user_question),
+                sort_desc=self._infer_sort_desc_from_question(user_question),
+            )
+            helper_name = "build_grouped_aggregation_ranking_report"
+        elif runtime_mode == "temporal_aggregation":
+            helper = globals_dict.get("build_time_series_aggregation_report")
+            if helper is None:
+                return None
+            period = self._infer_period_from_question(user_question)
+            report = helper(
+                file_path=None,
+                date_col=self._infer_date_header_from_question(observed_headers, user_question) or "Date",
+                value_col=self._infer_value_header_from_question(
+                    observed_headers,
+                    user_question,
+                    family_name,
+                ),
+                period=period,
+                aggregate=self._infer_aggregate_from_question(user_question),
+                window_years=self._infer_window_years_from_question(user_question),
+                period_mode=self._infer_period_mode_from_question(user_question, period),
+                sort_desc=self._infer_sort_desc_from_question(user_question),
+            )
+            helper_name = "build_time_series_aggregation_report"
+        elif runtime_mode == "reference_completion":
+            load_all_tables = globals_dict.get("load_all_tables")
+            infer_common_key = globals_dict.get("infer_common_key")
+            fill_missing_from_reference = globals_dict.get("fill_missing_from_reference")
+            if not all((load_all_tables, infer_common_key, fill_missing_from_reference)):
+                return None
+            tables = load_all_tables(require_primary_key=False)
+            if len(tables) < 2:
+                raise ValueError("Reference-guided completion requires at least two tables.")
+            key_header = infer_common_key(tables)
+            report = fill_missing_from_reference(
+                tables[0]["df"],
+                tables[1]["df"],
+                key_header=key_header,
+                prefer_primary=True,
+            )
+            helper_name = "fill_missing_from_reference"
+        elif runtime_mode == "schema_merge_summary":
+            load_all_tables = globals_dict.get("load_all_tables")
+            concat_tables = globals_dict.get("concat_tables_with_same_headers")
+            summarize_numeric_column = globals_dict.get("summarize_numeric_column")
+            highlight_rows_fn = globals_dict.get("highlight_rows")
+            if not all((load_all_tables, concat_tables, summarize_numeric_column, add_summary_row)):
+                return None
+            tables = load_all_tables()
+            concat_result = concat_tables(tables)
+            combined_df = concat_result["output_df"]
+            grounded_value_col = self._infer_value_header_from_question(
+                observed_headers,
+                user_question,
+                family_name,
+            )
+            summary_result = summarize_numeric_column(combined_df, grounded_value_col or "...")
+            report = {
+                "detail_data": concat_result["detail_data"],
+                "highlight_rows": summary_result.get("output_row_numbers", []),
+                "summary": summary_result.get("summary", {}),
+            }
+            helper_name = "concat_tables_with_same_headers + summarize_numeric_column"
+        elif runtime_mode == "composite_relational_join":
+            helper = globals_dict.get("build_multi_key_relational_join_report")
+            if helper is None:
+                return None
+            mentioned = self._headers_mentioned_in_question(observed_headers, user_question)
+            key_headers = []
+            seen = set()
+            for header in mentioned:
+                normalized = self._normalize_header_name_for_grounding(header)
+                if any(
+                    marker in normalized
+                    for marker in ("id", "code", "number", "term", "semester", "date", "year", "month", "section", "class", "group", "session", "slot", "room", "course")
+                ) and normalized not in seen:
+                    seen.add(normalized)
+                    key_headers.append(header)
+            report = helper(
+                range_ref="A1:Z200000",
+                key_headers=key_headers[:2] if len(key_headers) >= 2 else None,
+                how="inner",
+            )
+            helper_name = "build_multi_key_relational_join_report"
+        elif runtime_mode == "relational_join":
+            helper = globals_dict.get("build_relational_join_enrichment_report")
+            if helper is None:
+                return None
+            key_header = None
+            mentioned = self._headers_mentioned_in_question(observed_headers, user_question)
+            for header in mentioned:
+                normalized = self._normalize_header_name_for_grounding(header)
+                if any(marker in normalized for marker in ("id", "code", "number")):
+                    key_header = header
+                    break
+            report = helper(range_ref="A1:Z200000", key_header=key_header, how="inner")
+            helper_name = "build_relational_join_enrichment_report"
+        elif runtime_mode == "regression":
+            load_all_tables = globals_dict.get("load_all_tables")
+            helper = globals_dict.get("fit_linear_regression_weights")
+            if not all((load_all_tables, helper)):
+                return None
+            tables = load_all_tables()
+            if not tables:
+                return None
+            df = tables[0]["df"]
+            target_col, feature_cols = self._infer_regression_columns_from_df(df, user_question)
+            if not target_col or not feature_cols:
+                return None
+            report = helper(df, target_col=target_col, feature_cols=feature_cols)
+            helper_name = "fit_linear_regression_weights"
+        elif runtime_mode == "correlation":
+            load_all_tables = globals_dict.get("load_all_tables")
+            helper = globals_dict.get("build_correlation_matrix_table")
+            if not all((load_all_tables, helper)):
+                return None
+            tables = load_all_tables()
+            if not tables:
+                return None
+            df = tables[0]["df"]
+            numeric_columns, filter_column, filter_value = self._infer_correlation_columns_from_df(df, user_question)
+            if len(numeric_columns) < 2:
+                return None
+            report = helper(
+                df,
+                numeric_columns=numeric_columns,
+                filter_column=filter_column,
+                filter_value=filter_value,
+            )
+            helper_name = "build_correlation_matrix_table"
+        elif runtime_mode == "temporal_growth":
+            list_all_workbooks = globals_dict.get("list_all_workbooks")
+            helper = globals_dict.get("build_region_growth_analysis")
+            get_workbook = globals_dict.get("get_workbook")
+            save_plot_to_excel = globals_dict.get("save_plot_to_excel")
+            highlight_rows_fn = globals_dict.get("highlight_rows")
+            plt = globals_dict.get("plt")
+            if not all((list_all_workbooks, helper, get_workbook, save_plot_to_excel, add_summary_row, create_output_sheet, write_dataframe_to_sheet)) or plt is None:
+                return None
+            all_files = list_all_workbooks()
+            if not all_files:
+                return None
+            file_path = all_files[0]
+            workbook = get_workbook(file_path)
+            sheet_name = "Data" if "Data" in workbook.sheetnames else workbook.sheetnames[0]
+            start_year, end_year = self._infer_explicit_year_bounds_from_question(user_question)
+            report = helper(
+                file_path,
+                sheet_name=sheet_name,
+                start_year=start_year,
+                end_year=end_year,
+            )
+            report = dict(report)
+            report["highlight_rows"] = report.get("fastest_growth_rows", [])
+            helper_name = "build_region_growth_analysis"
+            chart_df = report.get("chart_df")
+            region_columns = report.get("region_columns") or []
+            if chart_df is not None and not chart_df.empty and region_columns:
+                plt.figure(figsize=(7, 4))
+                for region_name in region_columns:
+                    if region_name in chart_df.columns:
+                        plt.plot(chart_df["Year"], chart_df[region_name], marker="o", label=region_name)
+                plt.xlabel("Year")
+                plt.ylabel("Penetration")
+                plt.title("Regional Growth")
+                plt.legend(loc="best")
+                plt.tight_layout()
+                helper_messages.append(save_plot_to_excel(output_sheet_name, "F2"))
+                plt.close()
+        elif runtime_mode == "graph_scan":
+            load_all_tables = globals_dict.get("load_all_tables")
+            helper = globals_dict.get("build_cycle_detection_report")
+            if not all((load_all_tables, helper)):
+                return None
+            tables = load_all_tables()
+            report = helper(tables, from_col="Node From", to_col="Node To")
+            helper_name = "build_cycle_detection_report"
+        elif runtime_mode == "text_scan" and family_name == "missing_data_scan":
+            helper = globals_dict.get("build_missing_data_report")
+            if helper is None:
+                return None
+            report = helper()
+            helper_name = "build_missing_data_report"
+        elif runtime_mode == "text_scan" and family_name == "identifier_format_scan":
+            helper = globals_dict.get("build_room_format_report")
+            if helper is None:
+                return None
+            report = helper()
+            helper_name = "build_room_format_report"
+        elif runtime_mode == "relational_assignment":
+            helper = globals_dict.get("build_relational_assignment_schedule_report")
+            if helper is None:
+                return None
+            report = helper()
+            helper_name = "build_relational_assignment_schedule_report"
+        elif runtime_mode == "dependency_schedule":
+            load_all_tables = globals_dict.get("load_all_tables")
+            find_table_by_headers = globals_dict.get("find_table_by_headers")
+            helper = globals_dict.get("build_dependency_schedule")
+            if not all((load_all_tables, find_table_by_headers, helper, add_summary_row)):
+                return None
+            tables = load_all_tables()
+            task_table = find_table_by_headers(
+                tables,
+                required_headers=["Task ID"],
+                preferred_headers=["Task Name", "Duration (hours)", "Priority"],
+                forbidden_headers=["Depends on"],
+            )
+            dependency_table = find_table_by_headers(
+                tables,
+                required_headers=["Task ID", "Depends on"],
+            )
+            report = helper(
+                task_table["df"],
+                dependency_table["df"],
+                start_time="08:00",
+            )
+            helper_name = "build_dependency_schedule"
+        elif runtime_mode == "comparative_multi_sheet":
+            helper = globals_dict.get("build_store_feature_analysis_report")
+            if helper is None:
+                return None
+            report = helper()
+            helper_name = "build_store_feature_analysis_report"
+            extra_sheet_payloads = [
+                ("AvgByStoreType", report.get("avg_by_type_detail_data")),
+                ("HolidayVsNonHoliday", report.get("holiday_detail_data")),
+            ]
+        elif runtime_mode == "zero_arg_helper" and family is not None and family.helper_name:
+            helper = globals_dict.get(family.helper_name)
+            if helper is None:
+                return None
+            report = helper()
+            helper_name = family.helper_name
+        else:
+            return None
+
+        if runtime_mode == "text_scan":
+            final_text = str((report or {}).get("answer") or "").strip()
+            if not final_text:
+                return None
+            step = {
+                "turn": 1,
+                "code": f"DETERMINISTIC_FAMILY_FAST_PATH: {helper_name}(...) -> FINAL_TEXT",
+                "result": f"FINAL_TEXT: {final_text}",
+                "success": True,
+            }
+            return {
+                "success": True,
+                "answer": final_text,
+                "total_turns": 1,
+                "conversation_history": self.history_formatter.format_history(self.conversation_history),
+                "execution_summary": self.summary_builder.build([step], final_text),
+                "_family_fast_path": family_name,
+            }
+
+        if not isinstance(report, dict) or "detail_data" not in report:
+            if family_name != "comparative_multi_sheet_summary":
+                return None
+
+        if runtime_mode == "comparative_multi_sheet":
+            for sheet_name, sheet_payload in extra_sheet_payloads:
+                if not sheet_payload:
+                    return None
+                helper_messages.append(create_output_sheet(sheet_name))
+                helper_messages.append(write_dataframe_to_sheet(sheet_payload, sheet_name, "A1"))
+        else:
+            helper_messages.append(create_output_sheet(output_sheet_name))
+            helper_messages.append(write_dataframe_to_sheet(report["detail_data"], output_sheet_name, "A1"))
+        highlight_rows_payload = report.get("highlight_rows") or []
+        if highlight_rows_payload and "highlight_rows_fn" in locals() and highlight_rows_fn is not None:
+            helper_messages.append(highlight_rows_fn(output_sheet_name, highlight_rows_payload, {"fill_color": "red"}))
+        elif family_name == "schema_aligned_merge_summary":
+            helper_messages.append("NO_HIGHLIGHT_ROWS: []")
+        if task_family_uses_post_table_summary_row(family_name):
+            summary_payload = report.get("summary") or {}
+            if summary_payload:
+                helper_messages.append(add_summary_row(output_sheet_name, len(report["detail_data"]) + 2, summary_payload))
+        saved_file = save_workbook_to(output_path)
+        helper_messages.append(f"SAVED_FILE: {saved_file}")
+
+        result_text = "\n".join(str(message) for message in helper_messages if message)
+        metadata = report.get("metadata") if isinstance(report, dict) else None
+        if isinstance(metadata, dict) and metadata:
+            result_text += f"\nFAMILY_METADATA: {metadata}"
+
+        step = {
+            "turn": 1,
+            "code": (
+                f"DETERMINISTIC_FAMILY_FAST_PATH: {helper_name}(...) -> "
+                "create_output_sheet('Output') -> write_dataframe_to_sheet(...) -> save_workbook_to(output_path)"
+            ),
+            "result": result_text,
+            "success": True,
+        }
+        return {
+            "success": True,
+            "answer": saved_file,
+            "total_turns": 1,
+            "conversation_history": self.history_formatter.format_history(self.conversation_history),
+            "execution_summary": self.summary_builder.build([step], saved_file),
+            "_family_fast_path": family_name,
+        }
+
+    def _try_deterministic_family_fast_path(
+        self,
+        user_question: str,
+    ) -> Optional[dict]:
+        family = detect_task_family(user_question)
+        if family is None:
+            return None
+        if get_task_family_runtime_mode(family.name) is None:
+            return None
+        try:
+            return self._execute_family_fast_path(family.name, user_question)
+        except Exception as exc:
+            self._log_to_file(
+                f"\n**Deterministic family fast-path skipped:**\n{family.name}: {exc}\n"
+            )
+            logger.info("Deterministic family fast-path failed for %s: %s", family.name, exc)
+            return None
+
     def run(self, understanding_output: str, user_question: str,
             max_turns: int = 20) -> Dict[str, Any]:
         logger.info(f"Starting multi-turn analysis for: '{user_question}'")
         self._install_linear_io_guards()
-        self._consecutive_forbidden = 0
-        self._consecutive_format_errors = 0
-        self._forbidden_signature_counts = {}
-        self._last_forbidden_signature = None
-        self._same_forbidden_streak = 0
         self._last_error_signature = None
         self._same_error_streak = 0
         output_contract = self._extract_output_contract(understanding_output)
+
+        deterministic_family_result = self._try_deterministic_family_fast_path(user_question)
+        if deterministic_family_result is not None:
+            family_name = deterministic_family_result.get("_family_fast_path", "unknown_family")
+            self._log_to_file(
+                "\n**Deterministic Family Fast-Path:**\n"
+                f"- family: `{family_name}`\n"
+                f"- answer: `{deterministic_family_result.get('answer', '')}`\n"
+            )
+            logger.info("Execution completed via deterministic family fast-path: %s", family_name)
+            return deterministic_family_result
 
         self.conversation_history = [self._get_system_prompt()]
         initial_prompt = self._create_initial_user_prompt(

@@ -1,0 +1,8 @@
+TicketID,CustomerID,Category,Created_Date,Priority,Status,Agent
+T001,C201,Billing,2024-03-01,High,Resolved,Alice
+T002,C202,Technical,2024-03-02,high,Resolved,Bob
+T003,C203,Shipping,2024-03-03,Medium,Resolved,Alice
+T004,C204,Account Access,2024-03-04,HIGH,Open,Carol
+T005,C205,Billing,2024-03-05,Low,Resolved,Bob
+T006,C206,Technical,2024-03-06,High,Resolved,Carol
+T007,C207,Refund,2024-03-07,high,Pending,Alice

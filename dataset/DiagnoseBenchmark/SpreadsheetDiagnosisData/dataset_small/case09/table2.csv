@@ -1,0 +1,6 @@
+Crop,Variety,Min_Yield,Max_Yield,Growing_Days,Region
+wheat,Winter Wheat,3.5,8.5,240,Temperate
+Maize,Dent Corn,5.0,12.0,120,Temperate
+Barley,Spring Barley,3.0,6.5,100,Temperate
+WHEAT,Spring Wheat,3.0,7.0,110,Temperate
+Soybean,Roundup Ready,2.5,4.0,130,Temperate
