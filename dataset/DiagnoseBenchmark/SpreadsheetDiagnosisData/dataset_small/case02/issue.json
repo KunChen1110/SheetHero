@@ -1,0 +1,23 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "semantic_anomaly",
+    "locations": [
+      "row=5,column=English_Score",
+      "row=7,column=English_Score"
+    ],
+    "description": "English_Score values of 149 and 174 exceed the maximum possible score of 100. Correct values are likely 49 and 74 (leading '1' prepended by error).",
+    "business_context": "School grade management. Impossible scores corrupt class ranking, GPA calculation, and pass/fail determination."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=2,column=Grade",
+      "row=4,column=Grade",
+      "row=5,column=Grade"
+    ],
+    "description": "Grade is missing for students S002, S004, and S005. Expected grades based on Avg_Score: S002→B, S004→D, S005→B.",
+    "business_context": "Student transcript system. Missing grades block report card generation and scholarship eligibility checks."
+  }
+]

@@ -1,0 +1,7 @@
+Date,Weekday,Staff_Count,Customers,Avg_Order_USD,Revenue_USD,Discount_USD,Net_Revenue_USD
+2024-03-04,Monday,3,87,8.5,739.5,22.1,717.4
+2024-03-05,Tuesday,3,94,8.75,822.5,18.6,803.9
+2024-03-06,Wednesday,4,110,9.2,,25.3,
+2024-03-07,Thursday,4,102,8.9,907.8,21.8,886.0
+2024-03-08,Friday,5,145,9.6,,34.5,
+2024-03-09,Saturday,5,178,10.2,,41.2,

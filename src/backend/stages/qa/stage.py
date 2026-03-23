@@ -1,6 +1,7 @@
 """Quality assurance stage (LLM-assisted matching + cleaning action)."""
 
 from copy import deepcopy
+import re
 from typing import Any, Dict, Optional
 
 from ...prompt.prompt_builder import PromptBuilder
@@ -115,10 +116,7 @@ class QualityAssuranceStage:
     def consume_user_reply(self, reply: str) -> None:
         if self.current_problem is None:
             return
-        matched, action, feedback = self._match_reply(
-            self.current_problem.get("question") or self.current_problem.get("description"),
-            reply
-        )
+        matched, action, feedback = self._match_reply(self.current_problem, reply)
         if not matched:
             self.last_mismatch = feedback or "Please answer the question directly."
             self.qa_rounds += 1
@@ -194,7 +192,7 @@ class QualityAssuranceStage:
     def _normalize_reply(reply: str) -> str:
         return " ".join((reply or "").strip().lower().split())
 
-    def _heuristic_match_reply(self, question: str, reply: str) -> Optional[tuple[bool, str, str]]:
+    def _heuristic_match_reply(self, question: str, reply: str, problem: Optional[Dict[str, Any]] = None) -> Optional[tuple[bool, str, str]]:
         normalized_reply = self._normalize_reply(reply)
         normalized_question = self._normalize_reply(question)
         if not normalized_reply:
@@ -227,6 +225,22 @@ class QualityAssuranceStage:
         ):
             return True, "NO_OP", ""
 
+        issue_type = str((problem or {}).get("issue_type") or "")
+        metadata = (problem or {}).get("metadata") or {}
+        if issue_type == "missing_value":
+            numeric_reply = (reply or "").strip().replace(",", "")
+            numeric_reply = re.sub(r"^[£$€]\s*", "", numeric_reply)
+            if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", numeric_reply):
+                sheet_key = str(metadata.get("sheet_key") or "current sheet")
+                column_name = str(metadata.get("column") or "value")
+                excel_row = metadata.get("excel_row")
+                row_text = f" at Excel row {excel_row}" if excel_row else ""
+                return (
+                    True,
+                    f"Fill the missing value in `{column_name}`{row_text} in `{sheet_key}` with {numeric_reply}.",
+                    "",
+                )
+
         return None
 
     def _build_interpretation_policy(self, problem: Dict[str, Any], reply: str, action: str) -> str:
@@ -258,8 +272,15 @@ class QualityAssuranceStage:
             )
         return ""
 
-    def _match_reply(self, question: str, reply: str) -> tuple[bool, str, str]:
-        heuristic = self._heuristic_match_reply(question, reply)
+    def _match_reply(self, question_or_problem: Any, reply: str) -> tuple[bool, str, str]:
+        if isinstance(question_or_problem, dict):
+            problem = question_or_problem
+            question = str(problem.get("question") or problem.get("description") or "")
+        else:
+            problem = None
+            question = str(question_or_problem or "")
+
+        heuristic = self._heuristic_match_reply(question, reply, problem)
         if heuristic is not None:
             return heuristic
 

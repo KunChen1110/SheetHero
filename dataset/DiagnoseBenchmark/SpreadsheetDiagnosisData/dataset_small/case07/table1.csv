@@ -1,0 +1,9 @@
+ReturnID,OrderID,Product,Return_Date,Return_Reason,Refund_USD
+R001,ORD1021,Laptop,2024-02-01,Defective,899.0
+R002,ORD1035,Running Shoes,2024-02-03,Wrong Size,89.99
+R003,ORD1042,Headphones,2024-02-05,,149.0
+R004,ORD1058,Smartwatch,2024-02-07,Changed Mind,299.0
+R005,ORD1063,USB-C Hub,2024-02-09,,49.99
+R006,ORD1071,Winter Jacket,2024-02-11,Defective,189.99
+R007,ORD1088,Tablet,2024-02-13,,649.0
+R008,ORD1092,Wireless Mouse,2024-02-15,Damaged in Transit,49.99

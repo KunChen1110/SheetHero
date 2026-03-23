@@ -11,6 +11,7 @@ import pandas as pd
 
 from ..log.logger_registry import LoggerRegistry
 from ..prompt.prompt_builder import PromptBuilder
+from ..task_families import should_skip_diagnose
 from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -158,7 +159,7 @@ class DiagnoseRouter:
         q = (user_question or "").lower()
         if "missing data" in q and ("identify where" in q or "where values are missing" in q or "check the file" in q):
             return True
-        if "room identifiers" in q or ("room" in q and "inconsistenc" in q):
+        if "room identifiers" in q or "room identifier" in q or "c80" in q or "c 80" in q:
             return True
         return False
 
@@ -215,7 +216,20 @@ class DiagnoseRouter:
     @classmethod
     def _normalize_question_tokens(cls, user_question: str) -> List[str]:
         raw_tokens = re.findall(r"[a-z0-9]+", (user_question or "").lower())
-        return [token for token in raw_tokens if token not in cls._QUESTION_STOPWORDS]
+        normalized: list[str] = []
+        expansions = {
+            "opex": ["operating", "expenses", "operating expenses"],
+            "ebitda": ["operating", "expenses", "revenue", "profit"],
+            "ctr": ["ctr", "click", "through", "rate", "percentage", "percent"],
+            "cvr": ["cvr", "conversion", "rate", "percentage", "percent"],
+            "pnl": ["profit", "loss", "revenue", "expenses"],
+        }
+        for token in raw_tokens:
+            if token in cls._QUESTION_STOPWORDS:
+                continue
+            normalized.append(token)
+            normalized.extend(expansions.get(token, []))
+        return normalized
 
     @classmethod
     def _column_relevance_score(cls, column_name: str, user_question: str) -> int:
@@ -431,10 +445,42 @@ class DiagnoseRouter:
     @classmethod
     def _is_unique_key_like_header(cls, column_name: str) -> bool:
         normalized = cls._normalize_header_name(column_name)
-        return any(
-            token in normalized
-            for token in ("id", "identifier", "email", "code", "tutorid", "employee id", "customer id", "order id")
+        blocked_suffix_markers = (
+            "opt in",
+            "required",
+            "status",
+            "type",
+            "level",
+            "rate",
+            "score",
+            "price",
+            "cost",
+            "qty",
+            "quantity",
+            "date",
+            "time",
         )
+        if any(normalized.endswith(marker) for marker in blocked_suffix_markers):
+            return False
+        if normalized in {"id", "identifier", "email", "code", "tutorid"}:
+            return True
+        explicit_phrases = (
+            "employee id",
+            "customer id",
+            "order id",
+            "record id",
+            "reading id",
+            "booking id",
+            "agent id",
+            "product id",
+            "student id",
+            "patient id",
+            "station id",
+            "appt id",
+        )
+        if normalized in explicit_phrases:
+            return True
+        return normalized.endswith("id") or normalized.endswith("identifier") or normalized.endswith("code")
 
     @classmethod
     def _header_matches_candidate(cls, column_name: str, candidate: str) -> bool:
@@ -455,7 +501,7 @@ class DiagnoseRouter:
     @classmethod
     def _is_period_like_column(cls, series: pd.Series, column_name: str) -> bool:
         normalized = cls._normalize_header_name(column_name)
-        if "year" in normalized or "date" in normalized or "month" in normalized:
+        if any(token in normalized for token in ("year", "date", "month", "week", "quarter")):
             return True
         sample = [cls._normalize_cell_text(value) for value in series.tolist()[:12] if cls._normalize_cell_text(value)]
         if not sample:
@@ -490,7 +536,236 @@ class DiagnoseRouter:
     @classmethod
     def _is_time_or_unit_column(cls, column_name: str) -> bool:
         normalized = cls._normalize_header_name(column_name)
-        return any(token in normalized for token in ("time", "duration", "hour", "hours", "minute", "minutes", "rate", "amount", "price", "cost", "spending", "weight", "unit"))
+        return any(
+            token in normalized
+            for token in (
+                "time", "duration", "hour", "hours", "minute", "minutes", "rate",
+                "amount", "price", "cost", "spending", "weight", "unit",
+                "pct", "percent", "percentage", "ctr", "cvr",
+            )
+        )
+
+    @classmethod
+    def _is_date_like_text(cls, text: str) -> bool:
+        value = cls._normalize_cell_text(text)
+        if not value:
+            return False
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return True
+        if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", value):
+            return True
+        return False
+
+    @classmethod
+    def _date_format_kind(cls, text: str) -> str:
+        value = cls._normalize_cell_text(text)
+        if not value:
+            return ""
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return "iso_ymd"
+        if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", value):
+            return "slash_dmy"
+        return ""
+
+    @classmethod
+    def _canonical_inconsistency_key(cls, column_name: str, value: Any) -> str:
+        text = cls._normalize_cell_text(value)
+        if not text:
+            return ""
+        normalized_column = cls._normalize_header_name(column_name)
+        if "date" in normalized_column:
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+                return text
+            if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", text):
+                parsed = pd.to_datetime(text, errors="coerce", format="%d/%m/%Y")
+            else:
+                parsed = pd.to_datetime(text, errors="coerce")
+            if not pd.isna(parsed):
+                return parsed.strftime("%Y-%m-%d")
+        canonical = text.lower()
+        canonical = re.sub(r"\s+", " ", canonical)
+        return canonical.strip()
+
+    @classmethod
+    def _is_label_like_column(cls, df: pd.DataFrame, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if cls._is_entity_key_header(column_name):
+            return False
+        if any(token in normalized for token in ("date", "time", "email", "id", "identifier")):
+            return False
+        series = df[column_name]
+        non_empty = [cls._normalize_cell_text(value) for value in series.tolist() if cls._normalize_cell_text(value)]
+        if not non_empty:
+            return False
+        if sum(1 for value in non_empty if re.fullmatch(r"-?\d+(\.\d+)?", value)) >= max(2, len(non_empty) - 1):
+            return False
+        unique_count = len(set(value.lower() for value in non_empty))
+        if unique_count <= min(12, max(3, len(non_empty) // 2)):
+            return True
+        label_markers = (
+            "status", "priority", "severity", "level", "category", "sector",
+            "type", "method", "crop", "grade", "class", "department", "region",
+        )
+        return any(marker in normalized for marker in label_markers)
+
+    @classmethod
+    def _missing_value_priority(cls, column_name: str) -> int:
+        normalized = cls._normalize_header_name(column_name)
+        score = 0
+        primary_markers = (
+            "revenue", "sales", "price", "hours worked", "closing price",
+            "kwh consumed", "score", "grade", "depends on", "check out date",
+            "return reason", "stock qty", "operating expenses",
+        )
+        derived_markers = (
+            "net ", "avg", "average", "pct", "percent", "ratio", "change",
+            "cost", "total", "monthly cost", "daily change", "net revenue",
+        )
+        if any(marker in normalized for marker in primary_markers):
+            score += 4
+        if any(marker in normalized for marker in ("id", "name", "date", "time")):
+            score += 2
+        if any(marker in normalized for marker in derived_markers):
+            score -= 3
+        if normalized.startswith("net "):
+            score -= 2
+        return score
+
+    @classmethod
+    def _coerce_numeric_series(cls, series: pd.Series) -> pd.Series:
+        return pd.to_numeric(series, errors="coerce")
+
+    @classmethod
+    def _semantic_numeric_bounds(cls, column_name: str) -> tuple[float | None, float | None]:
+        normalized = cls._normalize_header_name(column_name)
+        lower = None
+        upper = None
+        if any(token in normalized for token in ("score", "grade", "pct", "percent", "percentage", "ratio", "ctr")):
+            lower = 0.0
+            upper = 100.0
+        if re.search(r"(^| )rate($| )", normalized) and any(
+            token in normalized for token in ("success", "pass", "completion", "utilisation", "utilization", "occupancy")
+        ):
+            lower = 0.0
+            upper = 100.0
+        if "age" in normalized:
+            lower = 0.0
+            upper = 120.0
+        if "years experience" in normalized or "experience" in normalized:
+            lower = 0.0
+            upper = 80.0
+        if "systolic" in normalized:
+            lower = 50.0
+            upper = 300.0
+        if "diastolic" in normalized:
+            lower = 30.0
+            upper = 200.0
+        if "temp" in normalized and "avg" in normalized:
+            lower = -80.0
+            upper = 80.0
+        if any(token in normalized for token in ("yield", "consumed", "qty", "quantity", "price", "cost", "salary", "revenue", "sales", "stock")):
+            lower = 0.0 if lower is None else max(lower, 0.0)
+        return lower, upper
+
+    @classmethod
+    def _requires_non_negative_metric(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        return any(
+            token in normalized
+            for token in (
+                "yield",
+                "consumed",
+                "qty",
+                "quantity",
+                "price",
+                "cost",
+                "rate",
+                "salary",
+                "revenue",
+                "sales",
+                "stock",
+                "score",
+                "grade",
+                "pct",
+                "percent",
+                "percentage",
+                "ratio",
+                "ctr",
+                "cvr",
+                "systolic",
+                "diastolic",
+                "experience",
+                "age",
+            )
+        )
+
+    @classmethod
+    def _series_uniqueness_ratio(cls, series: pd.Series) -> float:
+        cleaned = [cls._normalize_cell_text(value) for value in series.tolist() if cls._normalize_cell_text(value)]
+        if not cleaned:
+            return 0.0
+        return len(set(cleaned)) / len(cleaned)
+
+    @classmethod
+    def _has_more_granular_unique_key(cls, df: pd.DataFrame, key_col: str) -> bool:
+        current_ratio = cls._series_uniqueness_ratio(df[key_col])
+        for column_name in map(str, getattr(df, "columns", [])):
+            if column_name == key_col:
+                continue
+            if not cls._is_unique_key_like_header(column_name):
+                continue
+            other_ratio = cls._series_uniqueness_ratio(df[column_name])
+            if other_ratio >= 0.95 and other_ratio > current_ratio + 0.1:
+                return True
+        return False
+
+    @classmethod
+    def _is_event_granularity_column(cls, df: pd.DataFrame, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if cls._is_period_like_column(df[column_name], column_name):
+            return True
+        if any(
+            token in normalized
+            for token in (
+                "order",
+                "booking",
+                "reading",
+                "transaction",
+                "event",
+                "appointment",
+                "appt",
+                "invoice",
+                "record",
+                "timestamp",
+                "datetime",
+            )
+        ):
+            return True
+        return cls._is_unique_key_like_header(column_name) and cls._series_uniqueness_ratio(df[column_name]) >= 0.95
+
+    @classmethod
+    def _is_metric_like_column(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if cls._is_entity_key_header(column_name) or "date" in normalized or "time" in normalized:
+            return False
+        metric_markers = (
+            "score", "price", "cost", "revenue", "sales", "salary", "hours",
+            "duration", "bp", "pressure", "temp", "yield", "kwh", "qty",
+            "quantity", "rate", "count", "stock", "experience", "age",
+        )
+        return any(marker in normalized for marker in metric_markers)
+
+    @classmethod
+    def _is_measure_like_column(cls, df: pd.DataFrame, column_name: str) -> bool:
+        if cls._is_metric_like_column(column_name):
+            return True
+        if column_name not in getattr(df, "columns", []):
+            return False
+        series = cls._coerce_numeric_series(df[column_name])
+        valid = series.dropna()
+        if len(valid) < max(2, len(series) // 3):
+            return False
+        return len(valid) >= max(2, int(len(series) * 0.6))
 
     @classmethod
     def _is_id_like_value(cls, text: str) -> bool:
@@ -734,31 +1009,35 @@ class DiagnoseRouter:
         relation_like = ("depends on", "node from", "node to", "source", "target")
         if any(token in normalized for token in relation_like):
             return False
-        entity_like = (
-            "id",
-            "identifier",
-            "code",
-            "room",
-            "email",
-            "tutorid",
-            "employee id",
-            "customer id",
-            "order id",
-        )
-        return any(token in normalized for token in entity_like)
+        if normalized in {"id", "identifier", "code", "email", "room", "tutorid"}:
+            return True
+        if any(token in normalized for token in ("employee id", "customer id", "order id")):
+            return True
+        if re.search(r"(^| )id($| )", normalized):
+            return True
+        if re.search(r"(^| )identifier($| )", normalized):
+            return True
+        if re.search(r"(^| )email($| )", normalized):
+            return True
+        if re.search(r"(^| )code($| )", normalized):
+            return True
+        if normalized.startswith("room ") and any(token in normalized for token in ("number", "id", "identifier", "code", "no")):
+            return True
+        return False
 
     @classmethod
     def _is_entity_descriptor_header(cls, column_name: str) -> bool:
         normalized = cls._normalize_header_name(column_name)
-        descriptor_like = (
-            "name",
-            "email",
-            "room",
-            "code",
-            "identifier",
-            "id",
+        if normalized in {"name", "email", "room", "code", "identifier", "id"}:
+            return True
+        if any(token in normalized for token in ("employee id", "customer id", "order id")):
+            return True
+        if normalized.startswith("room ") and any(token in normalized for token in ("number", "id", "identifier", "code", "no")):
+            return True
+        return any(
+            re.search(rf"(^| ){token}($| )", normalized)
+            for token in ("name", "email", "code", "identifier", "id")
         )
-        return any(token in normalized for token in descriptor_like)
 
     @classmethod
     def _detect_conflicting_key_mapping_issues(cls, sheet_key: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -833,54 +1112,58 @@ class DiagnoseRouter:
         relevant_columns = cls._relevant_columns(df, user_question)
         if not relevant_columns:
             return []
-
+        row_candidates: dict[int, list[str]] = {}
         for column_name in relevant_columns:
             series = df[column_name]
-            normalized_column = cls._normalize_header_name(column_name)
             for row_index, value in enumerate(series.tolist()):
                 if not cls._is_missing_value(value):
                     continue
                 row = df.iloc[row_index]
                 if not cls._row_has_any_data(row):
                     continue
-                excel_row = cls._excel_row_number(df, row_index)
-                context_label = cls._row_context_label(df, row_index, column_name)
-                description = (
-                    f"In sheet `{sheet_key}`, column `{column_name}` is empty at Excel row {excel_row}."
-                )
-                question = (
-                    f"I noticed that in `{file_name}` / `{sheet_name}`, the value in column `{column_name}` is empty at Excel row {excel_row}"
-                )
-                if context_label:
-                    question += f" ({context_label})"
-                if normalized_column == "depends on":
-                    question += (
-                        ". Does this mean the task has no prerequisite and should be treated as a root task, "
-                        "or should I treat it as missing data?"
-                    )
-                else:
-                    question += ". How should I handle it for this task?"
+                row_candidates.setdefault(row_index, []).append(column_name)
 
-                if row_index > 0:
-                    preview_rows = [row_index - 1, row_index]
-                else:
-                    preview_rows = [row_index]
-                issues.append(
-                    cls._make_issue(
-                        issue_type="missing_value",
-                        description=description,
-                        question=question,
-                        details_markdown=cls._build_markdown_preview(df, preview_rows, [column_name]),
-                        preview_kind="cell_issue",
-                        metadata={
-                            "sheet_key": sheet_key,
-                            "column": column_name,
-                            "row_index": row_index,
-                            "excel_row": excel_row,
-                        },
-                    )
+        for row_index in sorted(row_candidates):
+            candidate_columns = row_candidates[row_index]
+            candidate_columns.sort(
+                key=lambda col: (-cls._missing_value_priority(col), str(col).lower())
+            )
+            column_name = candidate_columns[0]
+            normalized_column = cls._normalize_header_name(column_name)
+            excel_row = cls._excel_row_number(df, row_index)
+            context_label = cls._row_context_label(df, row_index, column_name)
+            description = (
+                f"In sheet `{sheet_key}`, column `{column_name}` is empty at Excel row {excel_row}."
+            )
+            question = (
+                f"I noticed that in `{file_name}` / `{sheet_name}`, the value in column `{column_name}` is empty at Excel row {excel_row}"
+            )
+            if context_label:
+                question += f" ({context_label})"
+            if normalized_column == "depends on":
+                question += (
+                    ". Does this mean the task has no prerequisite and should be treated as a root task, "
+                    "or should I treat it as missing data?"
                 )
-                break
+            else:
+                question += ". How should I handle it for this task?"
+
+            preview_rows = [row_index - 1, row_index] if row_index > 0 else [row_index]
+            issues.append(
+                cls._make_issue(
+                    issue_type="missing_value",
+                    description=description,
+                    question=question,
+                    details_markdown=cls._build_markdown_preview(df, preview_rows, [column_name]),
+                    preview_kind="cell_issue",
+                    metadata={
+                        "sheet_key": sheet_key,
+                        "column": column_name,
+                        "row_index": row_index,
+                        "excel_row": excel_row,
+                    },
+                )
+            )
             if len(issues) >= 2:
                 break
         return issues
@@ -941,6 +1224,8 @@ class DiagnoseRouter:
         cleaned = [value for value in raw_values if value]
         if len(cleaned) < 2:
             return False
+        if all(cls._is_date_like_text(value) for value in cleaned):
+            return len({cls._date_format_kind(value) for value in cleaned if cls._date_format_kind(value)}) > 1
         lower_values = {value.lower() for value in cleaned}
         if len(lower_values) > 1:
             comma_variation = any("," in value for value in cleaned)
@@ -960,31 +1245,69 @@ class DiagnoseRouter:
             return []
         file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
         issues: List[Dict[str, Any]] = []
-        candidate_columns = [
-            col for col in cls._relevant_columns(df, user_question)
-            if cls._is_name_like_column(col)
-        ]
-        if not candidate_columns:
-            candidate_columns = [
+        candidate_columns = list(dict.fromkeys(
+            [
+                col for col in cls._relevant_columns(df, user_question)
+                if cls._is_name_like_column(col) or cls._is_label_like_column(df, col) or "date" in cls._normalize_header_name(col)
+            ] + [
                 str(col) for col in getattr(df, "columns", [])
-                if cls._is_name_like_column(str(col))
+                if cls._is_name_like_column(str(col)) or cls._is_label_like_column(df, str(col)) or "date" in cls._normalize_header_name(str(col))
             ]
+        ))
 
-        for column_name in candidate_columns[:3]:
+        for column_name in candidate_columns[:5]:
+            normalized_column = cls._normalize_header_name(column_name)
+            if "date" in normalized_column:
+                format_examples: dict[str, int] = {}
+                for row_index, value in enumerate(df[column_name].tolist()):
+                    kind = cls._date_format_kind(value)
+                    if kind and kind not in format_examples:
+                        format_examples[kind] = row_index
+                if len(format_examples) >= 2:
+                    row_indices = list(format_examples.values())[:2]
+                    example_values = [
+                        cls._normalize_cell_text(df.iloc[row_index][column_name])
+                        for row_index in row_indices
+                    ]
+                    description = (
+                        f"In sheet `{sheet_key}`, column `{column_name}` mixes multiple date formats."
+                    )
+                    question = (
+                        f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` mixes date formats such as "
+                        f"`{example_values[0]}` and `{example_values[1]}`. Should I normalize this whole column to one consistent date format before continuing?"
+                    )
+                    issues.append(
+                        cls._make_issue(
+                            issue_type="format_inconsistency",
+                            description=description,
+                            question=question,
+                            details_markdown=cls._build_markdown_preview(df, row_indices, [column_name]),
+                            preview_kind="row_pair",
+                            metadata={
+                                "sheet_key": sheet_key,
+                                "column": column_name,
+                                "format_kinds": list(format_examples.keys())[:2],
+                            },
+                        )
+                    )
+                    if len(issues) >= 1:
+                        return issues
+                    continue
+
             working = pd.DataFrame({
                 "raw": df[column_name].tolist(),
-                "normalized": [cls._normalize_cell_text(value) for value in df[column_name].tolist()],
+                "canonical": [cls._canonical_inconsistency_key(column_name, value) for value in df[column_name].tolist()],
                 "row_index": list(range(len(df))),
             })
-            working = working[(working["normalized"] != "") & (working["raw"].map(lambda value: not cls._is_missing_value(value)))]
+            working = working[(working["canonical"] != "") & (working["raw"].map(lambda value: not cls._is_missing_value(value)))]
             if working.empty:
                 continue
 
-            for normalized_value, group in working.groupby("normalized"):
+            for canonical_value, group in working.groupby("canonical"):
                 raw_variants = []
                 row_indices = []
                 for _, record in group.iterrows():
-                    raw_text = str(record["raw"])
+                    raw_text = cls._normalize_cell_text(record["raw"])
                     if raw_text not in raw_variants:
                         raw_variants.append(raw_text)
                         row_indices.append(int(record["row_index"]))
@@ -995,7 +1318,7 @@ class DiagnoseRouter:
 
                 display_variants = [cls._normalize_cell_text(value) or str(value) for value in raw_variants[:2]]
                 description = (
-                    f"In sheet `{sheet_key}`, column `{column_name}` uses inconsistent textual formats for the same value `{normalized_value}`."
+                    f"In sheet `{sheet_key}`, column `{column_name}` uses inconsistent textual formats for the same logical value `{canonical_value}`."
                 )
                 question = (
                     f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` uses both `{display_variants[0]}` and `{display_variants[1]}` for what looks like the same value. "
@@ -1011,7 +1334,7 @@ class DiagnoseRouter:
                         metadata={
                             "sheet_key": sheet_key,
                             "column": column_name,
-                            "normalized_value": normalized_value,
+                            "normalized_value": canonical_value,
                         },
                     )
                 )
@@ -1039,11 +1362,62 @@ class DiagnoseRouter:
             normalized_column = cls._normalize_header_name(column_name)
             if normalized_column not in question_lower and not any(
                 marker in question_lower
-                for marker in ("calculate", "average", "total", "sum", "duration", "hours", "minutes", "schedule", "scheduling")
+                for marker in (
+                    "calculate", "average", "total", "sum", "duration", "hours", "minutes",
+                    "schedule", "scheduling", "rate", "percent", "percentage", "ctr", "cvr",
+                    "report", "reporting", "benchmark", "analysis", "inconsistency",
+                )
             ):
                 continue
             if "preferred" in normalized_column:
                 continue
+
+            numeric_series = cls._coerce_numeric_series(df[column_name])
+            numeric_valid = numeric_series.dropna()
+            if (
+                len(numeric_valid) >= 4
+                and any(token in normalized_column for token in ("pct", "percent", "percentage", "ctr", "cvr", "rate"))
+            ):
+                fraction_rows = [
+                    int(row_index)
+                    for row_index, value in numeric_series.items()
+                    if not pd.isna(value) and 0 < float(value) < 0.1
+                ]
+                percent_rows = [
+                    int(row_index)
+                    for row_index, value in numeric_series.items()
+                    if not pd.isna(value) and float(value) >= 1
+                ]
+                if fraction_rows and len(percent_rows) >= 2:
+                    issue_row = fraction_rows[0]
+                    comparison_row = percent_rows[0] if percent_rows[0] != issue_row else percent_rows[1]
+                    issue_value = cls._normalize_cell_text(df.iloc[issue_row][column_name])
+                    comparison_value = cls._normalize_cell_text(df.iloc[comparison_row][column_name])
+                    description = (
+                        f"In sheet `{sheet_key}`, column `{column_name}` appears to mix raw fraction values with percentage-scale values."
+                    )
+                    question = (
+                        f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` mixes values like "
+                        f"`{comparison_value}` and `{issue_value}`. This looks like some rows may use percentage scale while others use raw fractions. "
+                        "Should I convert the fraction-style values to the same percentage scale before continuing?"
+                    )
+                    issues.append(
+                        cls._make_issue(
+                            issue_type="unit_or_time_format",
+                            description=description,
+                            question=question,
+                            details_markdown=cls._build_markdown_preview(df, [comparison_row, issue_row], [column_name]),
+                            preview_kind="cell_issue",
+                            metadata={
+                                "sheet_key": sheet_key,
+                                "column": column_name,
+                                "formats": ["percentage_scale", "raw_fraction"],
+                            },
+                        )
+                    )
+                    if len(issues) >= 1:
+                        break
+
             values = []
             for row_index, raw_value in enumerate(df[column_name].tolist()):
                 text = cls._normalize_cell_text(raw_value)
@@ -1160,6 +1534,8 @@ class DiagnoseRouter:
             return []
 
         for key_col in key_columns:
+            if cls._has_more_granular_unique_key(df, key_col):
+                continue
             working = df.copy()
             working["__key__"] = working[key_col].map(cls._normalize_cell_text)
             working["__row_index__"] = list(range(len(working)))
@@ -1192,6 +1568,28 @@ class DiagnoseRouter:
                     continue
                 if len(differing_columns) == 1 and cls._is_entity_descriptor_header(differing_columns[0]):
                     continue
+                event_columns = [
+                    column_name for column_name in differing_columns
+                    if cls._is_event_granularity_column(df, column_name)
+                ]
+                if event_columns:
+                    non_event_differences = [
+                        column_name for column_name in differing_columns
+                        if column_name not in event_columns
+                    ]
+                    if not non_event_differences or all(
+                        cls._is_measure_like_column(df, column_name) for column_name in non_event_differences
+                    ):
+                        continue
+                if any(cls._is_period_like_column(df[column_name], column_name) for column_name in differing_columns):
+                    non_period_differences = [
+                        column_name for column_name in differing_columns
+                        if not cls._is_period_like_column(df[column_name], column_name)
+                    ]
+                    if not non_period_differences or all(
+                        cls._is_measure_like_column(df, column_name) for column_name in non_period_differences
+                    ):
+                        continue
                 description = (
                     f"In sheet `{sheet_key}`, key `{key_col} = {duplicate_key}` appears in multiple rows with conflicting values."
                 )
@@ -1224,8 +1622,104 @@ class DiagnoseRouter:
         return issues
 
     @classmethod
+    def _detect_semantic_anomaly_issues(
+        cls,
+        sheet_key: str,
+        df: pd.DataFrame,
+        user_question: str,
+    ) -> List[Dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+
+        file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
+        candidate_columns = list(dict.fromkeys(
+            [
+                col for col in cls._relevant_columns(df, user_question)
+                if cls._is_metric_like_column(col)
+            ] + [
+                str(col) for col in getattr(df, "columns", [])
+                if cls._is_metric_like_column(str(col))
+            ]
+        ))
+
+        issues: List[Dict[str, Any]] = []
+        for column_name in candidate_columns[:6]:
+            series = cls._coerce_numeric_series(df[column_name])
+            valid = series.dropna()
+            if len(valid) < 4:
+                continue
+
+            lower_bound, upper_bound = cls._semantic_numeric_bounds(column_name)
+            median = float(valid.median())
+            positive = valid[valid > 0]
+            positive_median = float(positive.median()) if not positive.empty else None
+            requires_non_negative = cls._requires_non_negative_metric(column_name)
+            suspicious_rows: list[int] = []
+
+            for row_index, numeric_value in series.items():
+                if pd.isna(numeric_value):
+                    continue
+                value = float(numeric_value)
+                suspicious = False
+                if lower_bound is not None and value < lower_bound:
+                    suspicious = True
+                if upper_bound is not None and value > upper_bound:
+                    suspicious = True
+                if not suspicious and positive_median is not None and positive_median > 0:
+                    if value > positive_median * 5 and value > median * 3:
+                        suspicious = True
+                    if requires_non_negative and value < 0:
+                        suspicious = True
+                    if requires_non_negative and 0 < value < positive_median * 0.02 and positive_median >= 50:
+                        suspicious = True
+                if suspicious:
+                    suspicious_rows.append(int(row_index))
+
+            if not suspicious_rows:
+                continue
+
+            row_index = suspicious_rows[0]
+            excel_row = cls._excel_row_number(df, row_index)
+            context_label = cls._row_context_label(df, row_index, column_name)
+            raw_value = cls._normalize_cell_text(df.iloc[row_index][column_name])
+            description = (
+                f"In sheet `{sheet_key}`, column `{column_name}` contains a value that looks implausible at Excel row {excel_row}."
+            )
+            question = (
+                f"I noticed that in `{file_name}` / `{sheet_name}`, column `{column_name}` has value `{raw_value}` at Excel row {excel_row}"
+            )
+            if context_label:
+                question += f" ({context_label})"
+            question += (
+                ". This value looks inconsistent with the rest of the table or outside a plausible domain range. "
+                "Should I treat it as a data error and correct/normalize it before continuing?"
+            )
+            preview_rows = [row_index - 1, row_index] if row_index > 0 else [row_index]
+            issues.append(
+                cls._make_issue(
+                    issue_type="semantic_anomaly",
+                    description=description,
+                    question=question,
+                    details_markdown=cls._build_markdown_preview(df, preview_rows, [column_name]),
+                    preview_kind="cell_issue",
+                    metadata={
+                        "sheet_key": sheet_key,
+                        "column": column_name,
+                        "row_index": row_index,
+                        "excel_row": excel_row,
+                        "value": raw_value,
+                    },
+                )
+            )
+            if len(issues) >= 1:
+                return issues
+        return issues
+
+    @classmethod
     def _detect_blocking_data_issues(cls, workbook_view, user_question: str) -> List[Dict[str, Any]]:
         if cls._is_self_reporting_issue_task(user_question):
+            return []
+        if should_skip_diagnose(user_question):
             return []
 
         coerced = cls._coerce_workbook_view(workbook_view)
@@ -1254,6 +1748,7 @@ class DiagnoseRouter:
 
         detectors = (
             (cls._detect_missing_value_issues, True),
+            (cls._detect_semantic_anomaly_issues, True),
             (cls._detect_unit_or_time_format_issues, True),
             (cls._detect_format_inconsistency_issues, True),
             (cls._detect_duplicate_conflicting_row_issues, True),

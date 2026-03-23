@@ -1,0 +1,7 @@
+{
+  "issue_type": "semantic_anomaly",
+  "table": "table3.csv",
+  "location": "row=3,column=Min_Salary_USD",
+  "description": "Senior-level Min_Salary_USD is $1,050, which is implausibly low given Mid-level minimum is $72,000 and Senior Max_Salary_USD is $158,000. The correct value is $105,000 — two trailing zeros were dropped during entry.",
+  "business_context": "HR salary band management. An incorrect minimum salary for Senior level would cause automated offer letters and equity eligibility calculations to apply wrong compensation thresholds."
+}

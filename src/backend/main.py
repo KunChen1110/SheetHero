@@ -1,12 +1,14 @@
 import argparse
 import json
 import re
+import runpy
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .config.settings import Config
+from .diagnose_benchmark import run_diagnose_benchmark
 from .service.sheethero_service import SheetHeroService
 from .service.stream_dialogue_driver import StreamDialogueDriver
 
@@ -288,6 +290,52 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
         _execute_turn(service, buffer)
 
 
+def _handle_diagnose_benchmark_command(line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!DiagnosebenchmarkTest", add_help=False)
+    parser.add_argument(
+        "split",
+        nargs="?",
+        choices=["small", "median", "all"],
+        default="small",
+    )
+    parser.add_argument("--limit", type=int, default=0)
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print(
+            "Error: usage `!DiagnosebenchmarkTest` or "
+            "`!DiagnosebenchmarkTest small|median|all [--limit N]`"
+        )
+        return
+
+    split_map = {
+        "small": "dataset_small",
+        "median": "dataset_median",
+        "all": "all",
+    }
+    resolved_split = split_map[args.split]
+    print(f"[diagnose benchmark] running split={resolved_split}...")
+    result = run_diagnose_benchmark(split=resolved_split, limit=args.limit)
+    print(f"[diagnose benchmark] report={result['report_path']}")
+    print(
+        "[diagnose benchmark] "
+        f"cases={result['cases_evaluated']}, "
+        f"loose_matches={result['matched']}/{result['expected_total']}"
+    )
+
+
+def _handle_family_synthetic_command() -> None:
+    root = Path(__file__).resolve().parents[2]
+    script_path = root / "test" / "utils" / "run_family_synthetic_regression.py"
+    print("[family synthetic] running abstract family regression...")
+    try:
+        runpy.run_path(str(script_path), run_name="__main__")
+        print("[family synthetic] passed")
+        return
+    except Exception as exc:
+        print(f"[family synthetic] failed: {exc}")
+
+
 def main() -> None:
     root = Path(__file__).resolve().parents[2]
     default_output_dir = root / "artifacts" / "output"
@@ -306,6 +354,11 @@ def main() -> None:
     print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
     print("Type `!llm --show` to view active model endpoint settings.")
     print("Type `!llm --switch--offline <model_full_name>` to switch to local LLM.")
+    print("Type `!DiagnosebenchmarkTest` to run the small diagnose benchmark.")
+    print("Type `!DiagnosebenchmarkTest median` to run the medium diagnose benchmark.")
+    print("Type `!DiagnosebenchmarkTest all` to run all diagnose benchmark cases.")
+    print("Type `!DiagnosebenchmarkTest --limit N` to run only the first N benchmark cases.")
+    print("Type `!FamilySyntheticTest` to run the abstract family synthetic regression.")
     _print_llm_config(config)
 
     while True:
@@ -327,6 +380,13 @@ def main() -> None:
             _handle_dataset_command(service, buffer, line)
             continue
 
+        if line.lower().startswith("!diagnosebenchmarktest"):
+            _handle_diagnose_benchmark_command(line)
+            continue
+
+        if line.lower().startswith("!familysynthetictest"):
+            _handle_family_synthetic_command()
+            continue
 
         if line.startswith("!llm"):
             _handle_llm_command(service, line)
