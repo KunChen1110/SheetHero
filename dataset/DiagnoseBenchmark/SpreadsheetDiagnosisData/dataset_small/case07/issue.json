@@ -1,0 +1,23 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=3,column=Return_Reason",
+      "row=5,column=Return_Reason",
+      "row=7,column=Return_Reason"
+    ],
+    "description": "Return_Reason is missing for returns R003 (Headphones), R005 (USB-C Hub), and R007 (Tablet). Reason is mandatory for quality control tracking and supplier chargebacks.",
+    "business_context": "E-commerce returns management. Missing reasons prevent defect rate reporting and supplier accountability claims."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "semantic_anomaly",
+    "locations": [
+      "row=3,column=Return_Qty",
+      "row=6,column=Return_Qty"
+    ],
+    "description": "Return_Qty exceeds Units_Sold: Headphones has Return_Qty=312 but only 85 units sold (Return_Rate=366%); Winter Jacket has Return_Qty=178 but only 55 sold (Return_Rate=323%). Likely correct: 3 and 7 respectively — digits were repeated or shifted.",
+    "business_context": "Weekly returns analytics. Return quantities exceeding sales volume are physically impossible and would corrupt inventory reconciliation."
+  }
+]

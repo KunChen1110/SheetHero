@@ -1,0 +1,8 @@
+JobLevel,Min_Salary_USD,Mid_Salary_USD,Max_Salary_USD,Bonus_Target_Pct,Equity_Eligible
+Junior,45000,60000,78000,8,False
+Mid,72000,92000,115000,12,True
+Senior,1050,130000,158000,18,True
+Lead,130000,158000,190000,22,True
+Manager,145000,175000,210000,28,True
+Director,180000,220000,270000,35,True
+VP,230000,290000,380000,45,True

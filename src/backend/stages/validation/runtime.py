@@ -8,6 +8,7 @@ from typing import Any, Dict
 from openpyxl import load_workbook
 
 from ...log.logger_registry import LoggerRegistry
+from ...task_families import detect_task_family, get_task_family_validation_mode
 from ..base.runtime import StageRuntime
 from ...prompt.prompt_builder import PromptBuilder
 from .history import ValidationHistory
@@ -28,6 +29,19 @@ class ValidationRuntime(StageRuntime):
         self.llm_client = ValidationLLMClient(client, deployment)
         self.parser = ValidationResponseParser()
         self.prompt_builder = PromptBuilder(profile=prompt_profile)
+
+    @staticmethod
+    def _large_workbook_threshold_bytes() -> int:
+        return int(os.getenv("SHEETHERO_LARGE_WORKBOOK_THRESHOLD_BYTES", "10000000"))
+
+    @classmethod
+    def _is_large_workbook(cls, output_path: str) -> bool:
+        if not output_path or not os.path.exists(output_path):
+            return False
+        try:
+            return os.path.getsize(output_path) >= cls._large_workbook_threshold_bytes()
+        except OSError:
+            return False
 
     @staticmethod
     def _render_validation_result(validation_result: Dict[str, Any]) -> str:
@@ -57,6 +71,258 @@ class ValidationRuntime(StageRuntime):
         if ".xlsx" in s or ".xls" in s or s.startswith("/") or "\\" in s or s.startswith("C:"):
             return True
         return False
+
+    @classmethod
+    def _resolve_contract_expectations(
+        cls,
+        user_question: str,
+        need_detail: bool | None,
+        need_summary: bool | None,
+        need_highlight: bool | None,
+    ) -> tuple[bool | None, bool | None, bool | None]:
+        family = detect_task_family(user_question)
+        if family is None:
+            return need_detail, need_summary, need_highlight
+        if need_detail is None:
+            need_detail = family.requires_detailed_table
+        if need_summary is None:
+            need_summary = family.requires_summary_metrics
+        if need_highlight is None:
+            need_highlight = family.requires_highlight
+        return need_detail, need_summary, need_highlight
+
+    @staticmethod
+    def _load_first_table_rows(output_path: str) -> tuple[list[str], list[list[Any]], str] | None:
+        if not output_path or not os.path.exists(output_path):
+            return None
+        try:
+            workbook = load_workbook(output_path, data_only=True)
+        except Exception:
+            return None
+        for sheet in workbook.worksheets:
+            header_row_idx = None
+            header: list[str] = []
+            for row_idx in range(1, min(sheet.max_row, 20) + 1):
+                row_values = [
+                    sheet.cell(row=row_idx, column=col_idx).value
+                    for col_idx in range(1, min(sheet.max_column, 20) + 1)
+                ]
+                non_empty = [str(v).strip() for v in row_values if v not in (None, "")]
+                if len(non_empty) >= 2:
+                    header_row_idx = row_idx
+                    header = [str(v).strip() if v not in (None, "") else "" for v in row_values]
+                    break
+            if header_row_idx is None:
+                continue
+            rows: list[list[Any]] = []
+            for row_idx in range(header_row_idx + 1, sheet.max_row + 1):
+                row_values = [
+                    sheet.cell(row=row_idx, column=col_idx).value
+                    for col_idx in range(1, min(sheet.max_column, 20) + 1)
+                ]
+                if not any(v not in (None, "") for v in row_values):
+                    if rows:
+                        break
+                    continue
+                rows.append(row_values)
+            return header, rows, sheet.title
+        return None
+
+    @classmethod
+    def _inspect_saved_temporal_aggregation_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Temporal aggregation output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 2:
+            issues.append("Temporal aggregation output must contain at least two columns.")
+            return issues
+        if normalized[0] != "Period":
+            issues.append("Temporal aggregation output should start with a `Period` column.")
+        metric_label = normalized[1]
+        if not any(metric_label.startswith(prefix) for prefix in ("Average ", "Total ", "Count ", "Median ", "Minimum ", "Maximum ")):
+            issues.append("Temporal aggregation output metric column label is missing the aggregate prefix.")
+        if not rows:
+            issues.append("Temporal aggregation output does not contain any data rows.")
+            return issues
+        first_period = str(rows[0][0]).strip() if rows[0] and rows[0][0] is not None else ""
+        if not first_period:
+            issues.append("Temporal aggregation output has an empty period label in the first data row.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_grouped_aggregation_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Grouped aggregation output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 2:
+            issues.append("Grouped aggregation output must contain at least two columns.")
+            return issues
+        metric_label = normalized[-1]
+        if not any(metric_label.startswith(prefix) for prefix in ("Average ", "Total ", "Count ", "Median ", "Minimum ", "Maximum ")):
+            issues.append("Grouped aggregation output metric column label is missing the aggregate prefix.")
+        if not rows:
+            issues.append("Grouped aggregation output does not contain any data rows.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_relational_join_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Relational join output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 2:
+            issues.append("Relational join output must contain at least two columns.")
+        if not rows:
+            issues.append("Relational join output does not contain any data rows.")
+            return issues
+        non_empty_column_count = sum(1 for value in rows[0] if value not in (None, ""))
+        if non_empty_column_count < 2:
+            issues.append("Relational join output first data row is not populated across multiple columns.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_allocation_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Allocation output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 3:
+            issues.append("Allocation output must contain entity columns, resource columns, and status.")
+            return issues
+        if "Allocation Status" not in normalized:
+            issues.append("Allocation output should include an `Allocation Status` column.")
+        if "Allocated Quantity" not in normalized:
+            issues.append("Allocation output should include an `Allocated Quantity` column.")
+        if not rows:
+            issues.append("Allocation output does not contain any data rows.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_dependency_schedule_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Dependency-schedule output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if "Start Time" not in normalized or "End Time" not in normalized:
+            issues.append("Dependency-schedule output should include `Start Time` and `End Time` columns.")
+        if "Task ID" not in normalized:
+            issues.append("Dependency-schedule output should include a `Task ID` column.")
+        if not rows:
+            issues.append("Dependency-schedule output does not contain any scheduled task rows.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_assignment_schedule_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Assignment-schedule output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 3:
+            issues.append("Assignment-schedule output must contain multiple schedule columns.")
+            return issues
+        scheduling_markers = ("day", "time", "slot", "room", "session")
+        entity_markers = ("student", "candidate", "participant", "attendee", "member", "name", "id")
+        if not any(any(marker in column.lower() for marker in scheduling_markers) for column in normalized):
+            issues.append("Assignment-schedule output should include at least one scheduling/location column.")
+        if not any(any(marker in column.lower() for marker in entity_markers) for column in normalized):
+            issues.append("Assignment-schedule output should include at least one entity-identifying column.")
+        if not rows:
+            issues.append("Assignment-schedule output does not contain any assigned rows.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_region_growth_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Region-growth output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 3:
+            issues.append("Region-growth output must contain region, average, and growth columns.")
+            return issues
+        if normalized[0] != "Region":
+            issues.append("Region-growth output should start with a `Region` column.")
+        if not any("Avg Penetration" in value for value in normalized[1:]):
+            issues.append("Region-growth output is missing an average-penetration column.")
+        if not any(value.startswith("Growth (") for value in normalized[1:]):
+            issues.append("Region-growth output is missing a growth column.")
+        if not rows:
+            issues.append("Region-growth output does not contain any data rows.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_regression_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Regression output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if normalized[:2] != ["Factor", "Weight"]:
+            issues.append("Regression output should start with `Factor` and `Weight` columns.")
+        if not rows:
+            issues.append("Regression output does not contain any coefficient rows.")
+            return issues
+        first_factor = str(rows[0][0]).strip() if rows[0] and rows[0][0] is not None else ""
+        if not first_factor:
+            issues.append("Regression output has an empty factor label in the first data row.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_correlation_workbook(cls, output_path: str) -> list[str]:
+        issues: list[str] = []
+        loaded = cls._load_first_table_rows(output_path)
+        if loaded is None:
+            return ["Correlation output workbook does not contain a readable result table."]
+        header, rows, _sheet_name = loaded
+        normalized = [str(value).strip() for value in header if str(value).strip()]
+        if len(normalized) < 2:
+            issues.append("Correlation output must contain at least two numeric columns.")
+        if len(rows) < 2:
+            issues.append("Correlation output does not contain enough matrix rows.")
+            return issues
+        first_row = rows[0]
+        non_empty = [value for value in first_row if value not in (None, "")]
+        if len(non_empty) < 2:
+            issues.append("Correlation output first matrix row is not populated.")
+        return issues
+
+    @classmethod
+    def _inspect_saved_comparative_multi_sheet_workbook(cls, output_path: str) -> list[str]:
+        issues = cls._inspect_saved_generic_workbook(
+            output_path,
+            need_detail=True,
+            need_summary=False,
+        )
+        if issues:
+            return issues
+        try:
+            workbook = load_workbook(output_path, data_only=True)
+        except Exception as exc:
+            return [f"Unable to open saved workbook: {exc}"]
+        required_sheets = {"AvgByStoreType", "HolidayVsNonHoliday"}
+        missing = sorted(required_sheets.difference(workbook.sheetnames))
+        if missing:
+            issues.append(
+                "Comparative multi-sheet output is missing required sheet(s): "
+                + ", ".join(missing)
+            )
+        return issues
 
     @classmethod
     def _inspect_saved_generic_workbook(
@@ -414,7 +680,7 @@ class ValidationRuntime(StageRuntime):
     @staticmethod
     def _is_room_inconsistency_request(user_question: str) -> bool:
         q = (user_question or "").lower()
-        return "room identifiers" in q or ("room" in q and "inconsistenc" in q) or "c80" in q or "c 80" in q
+        return "room identifiers" in q or "room identifier" in q or "c80" in q or "c 80" in q
 
     @classmethod
     def _inspect_saved_region_growth_workbook(cls, output_path: str) -> list[str]:
@@ -800,6 +1066,13 @@ class ValidationRuntime(StageRuntime):
         need_detail = self._parse_output_contract_flag(understanding_output, "requires_detailed_table")
         need_highlight = self._parse_output_contract_flag(understanding_output, "requires_highlight")
         need_summary = self._parse_output_contract_flag(understanding_output, "requires_summary_metrics")
+        need_detail, need_summary, need_highlight = self._resolve_contract_expectations(
+            user_question,
+            need_detail,
+            need_summary,
+            need_highlight,
+        )
+        family = detect_task_family(user_question)
 
         # Fast deterministic failure path: no successful sandbox execution means
         # there is nothing meaningful for the validation LLM to assess.
@@ -899,9 +1172,14 @@ class ValidationRuntime(StageRuntime):
         ):
             deterministic_issues = []
             latest_rows = self._extract_rows_written(latest_result)
+            latest_column_counts = self._extract_written_column_counts(latest_result)
             if need_detail is True and latest_rows and max(latest_rows) < 2:
                 deterministic_issues.append(
                     "Saved workbook write evidence does not show a header plus at least one data row."
+                )
+            if need_detail is True and latest_column_counts and max(latest_column_counts) < 2:
+                deterministic_issues.append(
+                    "Saved workbook write evidence does not show a multi-column output table."
                 )
             if (
                 need_highlight is True
@@ -912,30 +1190,87 @@ class ValidationRuntime(StageRuntime):
                     "Output contract requires highlight, but no highlight evidence was found."
                 )
             if self._is_region_growth_chart_request(user_question):
-                if "chart saved to sheet" not in latest_result.lower():
+                if "chart saved to" not in latest_result.lower():
                     deterministic_issues.append(
                         "Region-growth output requires an embedded chart, but no chart-save evidence was found."
                     )
                 deterministic_issues.extend(
                     self._inspect_saved_region_growth_workbook(final_answer)
                 )
-            deterministic_issues.extend(
-                self._inspect_saved_generic_workbook(
-                    final_answer,
-                    need_detail=need_detail,
-                    need_summary=need_summary,
-                )
+            use_lightweight_validation = (
+                self._is_large_workbook(final_answer)
+                and need_summary is not True
+                and need_highlight is not True
+                and not self._is_region_growth_chart_request(user_question)
             )
+            if use_lightweight_validation:
+                if not os.path.exists(final_answer):
+                    deterministic_issues.append(f"Saved output file not found: {final_answer}")
+            else:
+                deterministic_issues.extend(
+                    self._inspect_saved_generic_workbook(
+                        final_answer,
+                        need_detail=need_detail,
+                        need_summary=need_summary,
+                    )
+                )
+            if family is not None:
+                validation_mode = get_task_family_validation_mode(family.name)
+                if validation_mode == "temporal_aggregation":
+                    deterministic_issues.extend(
+                        self._inspect_saved_temporal_aggregation_workbook(final_answer)
+                    )
+                elif validation_mode == "grouped_aggregation":
+                    deterministic_issues.extend(
+                        self._inspect_saved_grouped_aggregation_workbook(final_answer)
+                    )
+                elif validation_mode == "relational_join":
+                    deterministic_issues.extend(
+                        self._inspect_saved_relational_join_workbook(final_answer)
+                    )
+                elif validation_mode == "allocation":
+                    deterministic_issues.extend(
+                        self._inspect_saved_allocation_workbook(final_answer)
+                    )
+                elif validation_mode == "dependency_schedule":
+                    deterministic_issues.extend(
+                        self._inspect_saved_dependency_schedule_workbook(final_answer)
+                    )
+                elif validation_mode == "relational_assignment":
+                    deterministic_issues.extend(
+                        self._inspect_saved_assignment_schedule_workbook(final_answer)
+                    )
+                elif validation_mode == "temporal_growth":
+                    deterministic_issues.extend(
+                        self._inspect_saved_region_growth_workbook(final_answer)
+                    )
+                elif validation_mode == "regression":
+                    deterministic_issues.extend(
+                        self._inspect_saved_regression_workbook(final_answer)
+                    )
+                elif validation_mode == "correlation":
+                    deterministic_issues.extend(
+                        self._inspect_saved_correlation_workbook(final_answer)
+                    )
+                elif validation_mode == "comparative_multi_sheet":
+                    deterministic_issues.extend(
+                        self._inspect_saved_comparative_multi_sheet_workbook(final_answer)
+                    )
             if not deterministic_issues:
+                assessment = (
+                    "Saved workbook passed lightweight structural validation based on runtime write evidence; "
+                    "the full workbook scan was skipped because the output file exceeded the large-file threshold."
+                    if use_lightweight_validation
+                    else
+                    "Saved workbook passed structural output-contract checks; "
+                    "no validation-LLM retry was needed."
+                )
                 validation_result = {
                     "validation_passed": True,
                     "confidence_score": 1.0,
                     "issues_found": ["None identified."],
                     "improvement_feedback": "No improvement needed - saved workbook passed deterministic validation.",
-                    "final_assessment": (
-                        "Saved workbook passed structural output-contract checks; "
-                        "no validation-LLM retry was needed."
-                    ),
+                    "final_assessment": assessment,
                     "verified_answer": final_answer,
                     "requires_reexecution": False,
                 }
@@ -952,7 +1287,10 @@ class ValidationRuntime(StageRuntime):
             and self._looks_like_file_path(final_answer)
             and ("Workbook saved to:" in all_results or "SAVED_FILE:" in all_results)
         ):
-            deterministic_issues = self._collect_schedule_code_issues(all_code)
+            family_fast_path = execution_result.get("_family_fast_path")
+            deterministic_issues = []
+            if family_fast_path != "dependency_constrained_schedule":
+                deterministic_issues.extend(self._collect_schedule_code_issues(all_code))
             deterministic_issues.extend(self._inspect_saved_schedule_workbook(final_answer))
             if not deterministic_issues:
                 validation_result = {

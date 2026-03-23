@@ -1,0 +1,7 @@
+{
+  "issue_type": "semantic_anomaly",
+  "table": "table3.csv",
+  "location": "row=12,column=Years_Experience",
+  "description": "Agent AGT212 (Rachel Green) has Years_Experience=142, which is impossible for a human professional (maximum plausible value ≈ 45 years). The likely correct value is 14 — an extra digit '2' was appended during entry.",
+  "business_context": "Real estate agency database. Erroneous experience value skews agent seniority rankings, commission tier assignments, and client-matching algorithms."
+}

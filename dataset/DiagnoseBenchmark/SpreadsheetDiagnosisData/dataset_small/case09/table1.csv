@@ -1,0 +1,7 @@
+FieldID,Farm,Crop,Season,Area_ha,Yield_tonnes_per_ha,Rainfall_mm,Fertiliser_kg_per_ha
+F01,Greenfield Farm,Wheat,2023 Spring,120,5.8,380,220
+F02,Sunridge Farm,Maize,2023 Spring,85,8.2,420,310
+F03,Valley Farm,Wheat,2023 Spring,200,-3.4,340,190
+F04,Hillside Farm,Barley,2023 Spring,60,4.9,360,200
+F05,Lakewood Farm,Maize,2023 Spring,95,-6.1,410,290
+F06,Riverside Farm,Barley,2023 Spring,75,4.2,350,185

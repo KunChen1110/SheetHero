@@ -1,0 +1,23 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=3,column=Revenue_USD",
+      "row=5,column=Revenue_USD",
+      "row=6,column=Revenue_USD"
+    ],
+    "description": "Revenue_USD is missing for Wed/Fri/Sat. Expected values: ~$1012 (110×9.20), ~$1392 (145×9.60), ~$1816 (178×10.20).",
+    "business_context": "Coffee shop daily sales. Missing revenue prevents weekly P&L calculation and staff scheduling optimisation."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "inconsistency",
+    "locations": [
+      "row=2,column=Payment_Method_Primary",
+      "row=4,column=Payment_Method_Primary"
+    ],
+    "description": "Payment_Method_Primary uses mixed capitalisation: rows 2 and 4 have 'cash' and 'CASH' instead of standard 'Cash'. GROUP BY will split Cash into three buckets.",
+    "business_context": "Payment mix reporting. Inconsistent labels corrupt daily payment channel analysis."
+  }
+]
