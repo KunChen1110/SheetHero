@@ -1,0 +1,7 @@
+{
+  "issue_type": "missing",
+  "table": "table1.csv",
+  "location": "row=15,column=Sales_USD",
+  "description": "Sales_USD is missing for RecordID=15 (Central region, Sports, 2023). Based on Units_Sold=447 and Discount_Pct=1.1, the expected value is approximately $42,700 (reverse-engineered from Net_Sales_USD=42,456).",
+  "business_context": "Retail chain monthly sales tracking. Missing revenue blocks regional P&L reporting and target-vs-actual dashboards."
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=3,column=kWh_Consumed",
+      "row=5,column=kWh_Consumed",
+      "row=7,column=kWh_Consumed"
+    ],
+    "description": "kWh_Consumed missing for Jan 10, 12, 14. Expected values can be derived from consecutive Meter_Reading_kWh differences: Jan10≈144.3, Jan12≈142.3, Jan14≈143.1 kWh.",
+    "business_context": "Smart meter billing system. Missing daily consumption values prevent monthly invoice generation and peak demand analysis."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "semantic_anomaly",
+    "locations": [
+      "row=3,column=Total_kWh",
+      "row=6,column=Total_kWh"
+    ],
+    "description": "Monthly Total_kWh is negative: Warehouse C = -1820.4 kWh, Data Center F = -9240.6 kWh. Energy consumption cannot be negative for a consuming facility. Likely a sign error during data entry; correct values: 1820.4 and 9240.6.",
+    "business_context": "Building energy management. Negative consumption corrupts carbon footprint reporting, cost allocation, and utility benchmarking."
+  }
+]

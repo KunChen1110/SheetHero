@@ -1,0 +1,11 @@
+Neighborhood,City,Avg_Price_USD,Crime_Index,School_Rating,Walk_Score,Transit_Score,Median_Income_USD
+Downtown,New York,2150000,42,8.2,95,98,89000
+Midtown,New York,1850000,38,7.9,92,97,85000
+Uptown,Los Angeles,1450000,45,7.5,72,65,76000
+Suburbs,Chicago,520000,28,8.8,48,42,68000
+Waterfront,Miami,3200000,35,7.2,85,70,95000
+Arts District,Los Angeles,980000,50,7.0,88,75,72000
+Financial District,San Francisco,2800000,40,7.8,96,99,110000
+University Area,Boston,880000,33,9.2,85,88,78000
+Historic Quarter,New Orleans,650000,55,7.1,78,62,62000
+Tech Hub,Seattle,1350000,30,8.5,82,80,102000

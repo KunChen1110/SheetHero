@@ -1,27 +1,22 @@
-.idea/workspace.xml
-.idea/inspectionProfiles/Project_Default.xml
-.venv
-.vscode
-*.xml
+.DS_Store
+
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
 venv/
 .venv/
 env/
 .env/
-.DS_Store
-# local env
-.venv/
-# artifacts
-artifacts/loggers/
+
+# IDE / editor
 .idea/
+.vscode/
 
-# local python env
-.venv/
+# Runtime artifacts
+artifacts/
 
-# logs / artifacts
-artifacts/loggers/
-artifacts/test/
-artifacts/test_report/
-
-# IDE
-.idea/
+# Local example lock files
+*.~lock*

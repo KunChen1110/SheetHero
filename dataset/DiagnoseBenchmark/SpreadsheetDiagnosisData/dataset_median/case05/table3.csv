@@ -1,0 +1,11 @@
+Product,Category,Brand,Price_USD,Avg_Rating,Reviews_Count,Stock_Units,Launch_Year
+Laptop,Computing,TechPro,1299.99,4.3,1842,350,2022
+Smartphone,Mobile,NexGen,899.99,4.5,3201,820,2023
+Headphones,Audio,SoundWave,249.99,4.4,2156,610,2022
+Tablet,Computing,TechPro,649.99,4.2,987,280,2021
+Smartwatch,Wearable,FitTech,399.99,4.1,1543,450,2023
+Camera,Photography,OptiView,799.99,4.6,654,190,2022
+Speaker,Audio,SoundWave,179.99,4.3,2341,720,2021
+Monitor,Computing,ClearVision,549.99,4.4,891,240,2022
+Keyboard,Accessories,TypeMaster,129.99,4.5,3102,980,2020
+Mouse,Accessories,TypeMaster,79.99,4.4,4215,1200,2020
