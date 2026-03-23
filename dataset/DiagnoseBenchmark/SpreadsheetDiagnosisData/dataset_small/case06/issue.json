@@ -1,0 +1,24 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "inconsistency",
+    "locations": [
+      "row=2,column=Status",
+      "row=4,column=Status",
+      "row=6,column=Status"
+    ],
+    "description": "Status uses mixed capitalisation: rows 2 and 6 have 'present' (all lower), row 4 has 'PRESENT' (all upper). Standard is Title Case 'Present'/'Absent'. Attendance rate calculation will miss these three employees.",
+    "business_context": "HR attendance system. Inconsistent labels cause attendance rate reports to under-count present employees."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=2,column=Hours_Worked",
+      "row=4,column=Hours_Worked",
+      "row=5,column=Hours_Worked"
+    ],
+    "description": "Hours_Worked missing for E02 (Bob Davis), E04 (David Lee), and E05 (Eva Wilson). Expected: E02≈40h, E04≈41.5h (includes 1.5h overtime), E05≈40.5h.",
+    "business_context": "Payroll system. Missing hours block salary calculation for the week."
+  }
+]

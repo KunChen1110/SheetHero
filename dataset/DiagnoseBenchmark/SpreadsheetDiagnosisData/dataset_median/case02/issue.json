@@ -1,0 +1,7 @@
+{
+  "issue_type": "inconsistency",
+  "table": "table2.csv",
+  "location": "row=6,column=Development_Status; row=14,column=Development_Status",
+  "description": "Development_Status uses inconsistent capitalisation: row 6 (Mexico) has 'developing' and row 14 (Russia) has 'DEVELOPING', while all other rows use Title Case 'Developing' or 'Developed'. GROUP BY queries will produce split counts for the same category.",
+  "business_context": "Government demographic database. Inconsistent category labels corrupt HDI-tier aggregation and cross-country development comparisons."
+}

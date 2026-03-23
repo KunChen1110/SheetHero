@@ -1,0 +1,8 @@
+StudentID,Name,Math_Score,English_Score,Science_Score,Avg_Score,Pass_Fail
+S001,Alice Chen,88,92,85,88.3,Pass
+S002,Bob Martinez,76,81,79,78.7,Pass
+S003,Carol White,91,88,93,90.7,Pass
+S004,David Kim,62,70,68,66.7,Pass
+S005,Eva Johnson,55,149,61,88.3,Pass
+S006,Frank Brown,83,87,90,86.7,Pass
+S007,Grace Lee,78,174,80,110.7,Pass

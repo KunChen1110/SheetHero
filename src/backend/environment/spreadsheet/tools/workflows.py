@@ -281,6 +281,71 @@ def infer_common_key(tables: Sequence[Dict[str, Any]]) -> str:
     return actual_lookup[preferred[0]]
 
 
+def infer_common_keys(
+    tables: Sequence[Dict[str, Any]],
+    preferred_headers: Sequence[str] | None = None,
+    max_keys: int = 2,
+) -> list[str]:
+    """Infer a small composite key from headers shared by all selected tables."""
+    if not tables:
+        raise ValueError("No tables available to infer common keys.")
+
+    header_lists = [list(table.get("header", [])) for table in tables]
+    if not all(header_lists):
+        raise ValueError("All tables must have headers to infer common keys.")
+
+    common_normalized = {_normalize_header_name(col) for col in header_lists[0]}
+    for header_list in header_lists[1:]:
+        common_normalized &= {_normalize_header_name(col) for col in header_list}
+
+    if not common_normalized:
+        raise ValueError("No common headers found across the selected tables.")
+
+    actual_lookup: Dict[str, str] = {}
+    for col in header_lists[0]:
+        normalized = _normalize_header_name(col)
+        if normalized in common_normalized and normalized not in actual_lookup:
+            actual_lookup[normalized] = str(col)
+
+    preferred_normalized = [
+        _normalize_header_name(col)
+        for col in (preferred_headers or [])
+        if _normalize_header_name(col) in common_normalized
+    ]
+
+    def _score_key(normalized: str) -> tuple[int, int, str]:
+        score = 0
+        if normalized in preferred_normalized:
+            score += 200
+        if any(marker in normalized for marker in ("id", "code", "number", "key")):
+            score += 90
+        if any(marker in normalized for marker in ("term", "semester", "quarter", "year", "month", "date", "day", "time", "slot")):
+            score += 70
+        if any(marker in normalized for marker in ("section", "class", "group", "course", "program", "room", "session", "campus")):
+            score += 55
+        if any(marker in normalized for marker in ("name", "title", "status", "email", "phone", "address", "note", "description")):
+            score -= 30
+        return (score, -len(normalized), normalized)
+
+    ordered = sorted(common_normalized, key=_score_key, reverse=True)
+    selected: list[str] = []
+    for normalized in preferred_normalized:
+        if normalized not in selected:
+            selected.append(normalized)
+    for normalized in ordered:
+        if normalized not in selected:
+            selected.append(normalized)
+        if len(selected) >= max_keys:
+            break
+
+    resolved = [actual_lookup[key] for key in selected[:max_keys] if key in actual_lookup]
+    if len(resolved) < 2:
+        raise ValueError(
+            f"Unable to infer a stable composite key. common_headers={sorted(actual_lookup.values())}"
+        )
+    return resolved
+
+
 def concat_tables_with_same_headers(
     tables: Sequence[Dict[str, Any]],
     sort_by: Sequence[str] | None = None,
@@ -290,19 +355,29 @@ def concat_tables_with_same_headers(
     if not tables:
         raise ValueError("No tables provided for concatenation.")
 
-    first_header = [_normalize_header_name(col) for col in tables[0].get("header", [])]
+    def _resolve_header(table: Dict[str, Any]) -> list[str]:
+        header = list(table.get("header", []) or [])
+        if header:
+            return header
+        df = table.get("df")
+        if isinstance(df, pd.DataFrame):
+            return [str(col) for col in df.columns]
+        return []
+
+    first_header_actual = _resolve_header(tables[0])
+    first_header = [_normalize_header_name(col) for col in first_header_actual]
     if not first_header:
         raise ValueError("Tables must include headers for concatenation.")
 
     dataframes: list[pd.DataFrame] = []
     sources: list[str] = []
     for index, table in enumerate(tables, start=1):
-        header = table.get("header", [])
+        header = _resolve_header(table)
         normalized_header = [_normalize_header_name(col) for col in header]
         if normalized_header != first_header:
             raise ValueError(
                 f"Table {index} does not share the same schema. "
-                f"expected={tables[0].get('header', [])}, actual={header}"
+                f"expected={first_header_actual}, actual={header}"
             )
         df = table.get("df")
         if not isinstance(df, pd.DataFrame):
@@ -379,6 +454,155 @@ def merge_tables_on_key(
         "row_count": int(len(merged_df)),
         "column_count": int(len(merged_df.columns)),
         "sources": merge_sources,
+    }
+
+
+def merge_tables_on_keys(
+    tables: Sequence[Dict[str, Any]],
+    key_headers: Sequence[str],
+    how: str = "inner",
+    dedupe_keep: str = "first",
+) -> Dict[str, Any]:
+    """Horizontally merge selected tables on a verified composite key."""
+    if not tables:
+        raise ValueError("No tables provided for merge.")
+    if len(key_headers) < 2:
+        raise ValueError("At least two key headers are required for a composite-key merge.")
+
+    merged_df: pd.DataFrame | None = None
+    actual_key_names: list[str] | None = None
+    merge_sources: list[str] = []
+
+    for index, table in enumerate(tables, start=1):
+        df = table.get("df")
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Each table must include a pandas DataFrame under `df`.")
+        table_key_names = [_resolve_column_name(df.columns, key_header) for key_header in key_headers]
+        table_df = df.copy()
+        for key_name in table_key_names:
+            table_df[key_name] = table_df[key_name].map(_normalize_cell_text)
+        non_empty_mask = pd.Series(True, index=table_df.index)
+        for key_name in table_key_names:
+            non_empty_mask &= table_df[key_name] != ""
+        table_df = table_df[non_empty_mask]
+        table_df = table_df.drop_duplicates(subset=table_key_names, keep=dedupe_keep)
+        non_key_cols = [col for col in table_df.columns if col not in table_key_names]
+        rename_map = {}
+        if merged_df is not None:
+            existing_norm = {_normalize_header_name(col) for col in merged_df.columns}
+            for col in non_key_cols:
+                if _normalize_header_name(col) in existing_norm:
+                    rename_map[col] = f"{col}_{index}"
+        if rename_map:
+            table_df = table_df.rename(columns=rename_map)
+
+        if merged_df is None:
+            merged_df = table_df
+            actual_key_names = list(table_key_names)
+        else:
+            merged_df = merged_df.merge(table_df, left_on=actual_key_names, right_on=table_key_names, how=how)
+            for left_key, right_key in zip(actual_key_names, table_key_names):
+                if right_key != left_key and right_key in merged_df.columns:
+                    merged_df = merged_df.drop(columns=[right_key])
+        merge_sources.append(str(table.get("file_name") or table.get("sheet_name") or f"table_{index}"))
+
+    if merged_df is None or actual_key_names is None:
+        raise ValueError("Merge produced no result.")
+
+    detail_data = [merged_df.columns.tolist()] + merged_df.fillna("").values.tolist()
+    return {
+        "key_columns": actual_key_names,
+        "merged_df": merged_df,
+        "output_df": merged_df,
+        "detail_data": detail_data,
+        "row_count": int(len(merged_df)),
+        "column_count": int(len(merged_df.columns)),
+        "sources": merge_sources,
+    }
+
+
+def build_relational_join_enrichment_report(
+    world: SpreadsheetWorld,
+    range_ref: str = "A1:Z200000",
+    key_header: str | None = None,
+    how: str = "inner",
+) -> Dict[str, Any]:
+    """Join multiple related tables on a shared key and return one enriched table.
+
+    This is a generic relational family helper for situations where multiple
+    files/sheets describe the same entities from different perspectives and the
+    desired output is a single denormalized table.
+    """
+    tables = load_all_tables(
+        world,
+        range_ref=range_ref,
+        require_primary_key=False,
+        stop_at_note_row=True,
+    )
+    if len(tables) < 2:
+        raise ValueError("At least two related tables are required for relational join enrichment.")
+
+    actual_key_header = key_header or infer_common_key(tables)
+    merge_result = merge_tables_on_key(
+        tables,
+        key_header=actual_key_header,
+        how=how,
+    )
+    output_df = merge_result["output_df"].copy()
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "summary": {
+            "Key Column": merge_result["key_column"],
+            "Source Tables": ", ".join(merge_result["sources"]),
+            "Rows Used": int(len(output_df)),
+        },
+        "metadata": {
+            "key_column": merge_result["key_column"],
+            "how": how,
+            "sources": merge_result["sources"],
+        },
+    }
+
+
+def build_multi_key_relational_join_report(
+    world: SpreadsheetWorld,
+    range_ref: str = "A1:Z200000",
+    key_headers: Sequence[str] | None = None,
+    how: str = "inner",
+) -> Dict[str, Any]:
+    """Join multiple related tables on a composite key and return one enriched table."""
+    tables = load_all_tables(
+        world,
+        range_ref=range_ref,
+        require_primary_key=False,
+        stop_at_note_row=True,
+    )
+    if len(tables) < 2:
+        raise ValueError("At least two related tables are required for multi-key relational join.")
+
+    actual_key_headers = list(key_headers) if key_headers else infer_common_keys(tables, max_keys=2)
+    merge_result = merge_tables_on_keys(
+        tables,
+        key_headers=actual_key_headers,
+        how=how,
+    )
+    output_df = merge_result["output_df"].copy()
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "summary": {
+            "Key Columns": ", ".join(merge_result["key_columns"]),
+            "Source Tables": ", ".join(merge_result["sources"]),
+            "Rows Used": int(len(output_df)),
+        },
+        "metadata": {
+            "key_columns": merge_result["key_columns"],
+            "how": how,
+            "sources": merge_result["sources"],
+        },
     }
 
 
@@ -609,6 +833,459 @@ def build_room_format_report(
     }
 
 
+def build_relational_assignment_schedule_report(
+    world: SpreadsheetWorld,
+    range_ref: str = "A1:Z200",
+) -> Dict[str, Any]:
+    """Build an assignment-aware schedule by joining assigned entities to resource/session slots."""
+    tables = load_all_tables(
+        world,
+        range_ref=range_ref,
+        require_primary_key=False,
+        stop_at_note_row=True,
+    )
+    if len(tables) < 2:
+        raise ValueError("Assignment schedule workflow expects at least two related tables.")
+
+    assignment_prefix_markers = (
+        "assigned tutor",
+        "assigned professor",
+        "assigned teacher",
+        "assigned advisor",
+        "assigned mentor",
+        "assigned supervisor",
+        "assigned room",
+        "assigned seat",
+        "assigned lab",
+        "assigned group",
+        "assigned session",
+    )
+    resource_markers = (
+        "tutor",
+        "professor",
+        "teacher",
+        "advisor",
+        "mentor",
+        "supervisor",
+        "room",
+        "seat",
+        "lab",
+        "group",
+        "session",
+    )
+    schedule_markers = (
+        "day",
+        "date",
+        "time slot",
+        "time",
+        "room",
+        "location",
+        "building",
+        "seat",
+        "lab",
+        "session",
+        "group",
+    )
+
+    def _find_assignment_column(columns: Sequence[Any]) -> str | None:
+        for column in columns:
+            normalized = _normalize_header_name(column)
+            if any(marker in normalized for marker in assignment_prefix_markers):
+                return str(column)
+        return None
+
+    def _canonical_resource_key(column_name: str) -> str:
+        normalized = _normalize_header_name(column_name)
+        normalized = normalized.replace("assigned", "").strip()
+        for marker in resource_markers:
+            if marker in normalized:
+                return marker
+        return normalized
+
+    def _find_entity_column(columns: Sequence[Any], assigned_col: str) -> str | None:
+        preferred = (
+            "student name",
+            "name",
+            "student",
+            "candidate",
+            "participant",
+            "attendee",
+            "entity name",
+            "student id",
+            "person id",
+            "entity id",
+        )
+        for candidate in preferred:
+            for column in columns:
+                if str(column) == assigned_col:
+                    continue
+                normalized = _normalize_header_name(column)
+                if candidate == normalized or candidate in normalized:
+                    return str(column)
+        for column in columns:
+            if str(column) == assigned_col:
+                continue
+            normalized = _normalize_header_name(column)
+            if not any(marker in normalized for marker in schedule_markers):
+                return str(column)
+        return None
+
+    assignment_table = None
+    assignment_col = None
+    entity_col = None
+    canonical_resource = None
+    for table in tables:
+        candidate_assigned = _find_assignment_column(table["df"].columns)
+        if not candidate_assigned:
+            continue
+        candidate_entity = _find_entity_column(table["df"].columns, candidate_assigned)
+        if not candidate_entity:
+            continue
+        assignment_table = table
+        assignment_col = candidate_assigned
+        entity_col = candidate_entity
+        canonical_resource = _canonical_resource_key(candidate_assigned)
+        break
+
+    if assignment_table is None or assignment_col is None or entity_col is None or not canonical_resource:
+        raise ValueError("Could not identify an assignment table with assigned-resource and entity columns.")
+
+    schedule_table = None
+    resource_col = None
+    schedule_cols: list[str] = []
+    for table in tables:
+        if table is assignment_table:
+            continue
+        columns = [str(column) for column in table["df"].columns]
+        candidate_resource = None
+        for column in columns:
+            normalized = _normalize_header_name(column)
+            if canonical_resource in normalized:
+                candidate_resource = column
+                break
+        if not candidate_resource:
+            continue
+        candidate_schedule_cols = [
+            column for column in columns
+            if column != candidate_resource
+            and any(marker in _normalize_header_name(column) for marker in schedule_markers)
+        ]
+        if not candidate_schedule_cols and len(columns) <= 1:
+            continue
+        schedule_table = table
+        resource_col = candidate_resource
+        schedule_cols = candidate_schedule_cols
+        break
+
+    if schedule_table is None or resource_col is None:
+        raise ValueError("Could not identify a scheduling/resource table that matches the assignment table.")
+
+    assignment_df = assignment_table["df"].copy()
+    schedule_df = schedule_table["df"].copy()
+
+    assignment_df[entity_col] = assignment_df[entity_col].map(_normalize_cell_text)
+    assignment_df[assignment_col] = assignment_df[assignment_col].map(_normalize_cell_text)
+    schedule_df[resource_col] = schedule_df[resource_col].map(_normalize_cell_text)
+    for column in schedule_cols:
+        schedule_df[column] = schedule_df[column].map(_normalize_cell_text)
+
+    assignment_df = assignment_df[
+        assignment_df[entity_col].astype(bool)
+        & assignment_df[assignment_col].astype(bool)
+    ].copy()
+    schedule_df = schedule_df[schedule_df[resource_col].astype(bool)].copy()
+
+    grouped_entities = (
+        assignment_df.groupby(assignment_col, sort=False)[entity_col]
+        .apply(lambda values: ", ".join(value for value in values if _normalize_cell_text(value)))
+        .reset_index()
+        .rename(columns={assignment_col: resource_col})
+    )
+
+    selected_schedule_cols = [resource_col] + [column for column in schedule_cols if column != resource_col]
+    output_df = schedule_df[selected_schedule_cols].copy()
+    output_df = output_df.merge(grouped_entities, on=resource_col, how="left")
+    output_df[entity_col] = output_df[entity_col].fillna("")
+    sort_cols = [resource_col] + [column for column in schedule_cols if column in output_df.columns]
+    output_df = output_df.sort_values(by=sort_cols, kind="stable").reset_index(drop=True)
+
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "row_count": int(len(output_df)),
+        "entity_count": int(assignment_df[entity_col].nunique()),
+        "resource_count": int(output_df[resource_col].nunique()),
+        "metadata": {
+            "entity_column": entity_col,
+            "assignment_column": assignment_col,
+            "resource_column": resource_col,
+        },
+    }
+
+
+def build_tutor_meeting_schedule_report(
+    world: SpreadsheetWorld,
+    range_ref: str = "A1:Z200",
+) -> Dict[str, Any]:
+    """Backward-compatible wrapper for the more generic relational assignment helper."""
+    return build_relational_assignment_schedule_report(world, range_ref=range_ref)
+
+
+def build_capacity_constrained_allocation_report(
+    world: SpreadsheetWorld,
+    range_ref: str = "A1:Z200000",
+) -> Dict[str, Any]:
+    """Assign entities to resources with capacities using a deterministic greedy policy."""
+    tables = load_all_tables(
+        world,
+        range_ref=range_ref,
+        require_primary_key=False,
+        stop_at_note_row=True,
+    )
+    if len(tables) < 2:
+        raise ValueError("Capacity-constrained allocation requires at least two tables.")
+
+    capacity_markers = (
+        "capacity",
+        "capacities",
+        "available seats",
+        "seat count",
+        "seat limit",
+        "slot count",
+        "slots",
+        "max students",
+        "max participants",
+        "max capacity",
+    )
+    resource_markers = (
+        "resource",
+        "room",
+        "group",
+        "section",
+        "lab",
+        "seat",
+        "session",
+        "professor",
+        "advisor",
+        "mentor",
+        "supervisor",
+    )
+    entity_markers = (
+        "student",
+        "candidate",
+        "participant",
+        "attendee",
+        "applicant",
+        "member",
+        "name",
+        "id",
+    )
+    demand_markers = (
+        "demand",
+        "quantity",
+        "required seats",
+        "required slots",
+        "students",
+        "participants",
+        "attendees",
+    )
+
+    def _find_capacity_column(columns: Sequence[Any]) -> str | None:
+        candidates: list[tuple[int, str]] = []
+        for column in columns:
+            normalized = _normalize_header_name(column)
+            score = 0
+            if any(marker in normalized for marker in capacity_markers):
+                score += 100
+            if any(marker in normalized for marker in ("capacity", "slot", "seat")):
+                score += 40
+            if score > 0:
+                candidates.append((score, str(column)))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        return candidates[0][1]
+
+    def _find_resource_column(columns: Sequence[Any], capacity_col: str) -> str | None:
+        candidates: list[tuple[int, str]] = []
+        for column in columns:
+            column_str = str(column)
+            if column_str == capacity_col:
+                continue
+            normalized = _normalize_header_name(column)
+            score = 0
+            if any(marker in normalized for marker in resource_markers):
+                score += 80
+            if any(marker in normalized for marker in ("id", "name", "number", "code")):
+                score += 15
+            if score > 0:
+                candidates.append((score, column_str))
+        if not candidates:
+            fallback = [str(column) for column in columns if str(column) != capacity_col]
+            return fallback[0] if fallback else None
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        return candidates[0][1]
+
+    def _find_entity_column(columns: Sequence[Any], forbidden: Sequence[str]) -> str | None:
+        forbidden_set = {str(col) for col in forbidden}
+        candidates: list[tuple[int, str]] = []
+        for column in columns:
+            column_str = str(column)
+            if column_str in forbidden_set:
+                continue
+            normalized = _normalize_header_name(column)
+            score = 0
+            if any(marker in normalized for marker in entity_markers):
+                score += 80
+            if any(marker in normalized for marker in ("student", "candidate", "participant", "applicant")):
+                score += 30
+            if score > 0:
+                candidates.append((score, column_str))
+        if not candidates:
+            fallback = [str(column) for column in columns if str(column) not in forbidden_set]
+            return fallback[0] if fallback else None
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        return candidates[0][1]
+
+    def _find_demand_column(columns: Sequence[Any], forbidden: Sequence[str]) -> str | None:
+        forbidden_set = {str(col) for col in forbidden}
+        candidates: list[tuple[int, str]] = []
+        for column in columns:
+            column_str = str(column)
+            if column_str in forbidden_set:
+                continue
+            normalized = _normalize_header_name(column)
+            score = 0
+            if any(marker in normalized for marker in demand_markers):
+                score += 80
+            if score > 0:
+                candidates.append((score, column_str))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        return candidates[0][1]
+
+    resource_table = None
+    resource_col = None
+    capacity_col = None
+    for table in tables:
+        candidate_capacity = _find_capacity_column(table["df"].columns)
+        if not candidate_capacity:
+            continue
+        candidate_resource = _find_resource_column(table["df"].columns, candidate_capacity)
+        if not candidate_resource:
+            continue
+        resource_table = table
+        resource_col = candidate_resource
+        capacity_col = candidate_capacity
+        break
+
+    if resource_table is None or resource_col is None or capacity_col is None:
+        raise ValueError("Could not identify a resource table with a capacity column.")
+
+    entity_table = None
+    entity_col = None
+    demand_col = None
+    for table in tables:
+        if table is resource_table:
+            continue
+        candidate_entity = _find_entity_column(table["df"].columns, [])
+        if not candidate_entity:
+            continue
+        candidate_demand = _find_demand_column(table["df"].columns, [candidate_entity])
+        entity_table = table
+        entity_col = candidate_entity
+        demand_col = candidate_demand
+        break
+
+    if entity_table is None or entity_col is None:
+        raise ValueError("Could not identify an entity table to allocate.")
+
+    resource_df = resource_table["df"].copy()
+    entity_df = entity_table["df"].copy()
+    resource_df[resource_col] = resource_df[resource_col].map(_normalize_cell_text)
+    resource_df[capacity_col] = pd.to_numeric(resource_df[capacity_col], errors="coerce").fillna(0)
+    resource_df = resource_df[(resource_df[resource_col] != "") & (resource_df[capacity_col] > 0)].copy()
+    if resource_df.empty:
+        raise ValueError("No resources with positive capacity were found.")
+
+    entity_df[entity_col] = entity_df[entity_col].map(_normalize_cell_text)
+    entity_df = entity_df[entity_df[entity_col] != ""].copy()
+    if entity_df.empty:
+        raise ValueError("No allocatable entities were found.")
+
+    if demand_col and demand_col in entity_df.columns:
+        entity_df[demand_col] = pd.to_numeric(entity_df[demand_col], errors="coerce").fillna(1)
+    else:
+        demand_col = None
+
+    remaining = [int(max(0, round(float(value)))) for value in resource_df[capacity_col].tolist()]
+    resource_records = resource_df.to_dict("records")
+    resource_metadata_cols = [col for col in resource_df.columns if col != capacity_col]
+    resource_output_cols = []
+    rename_map: Dict[str, str] = {}
+    for col in resource_metadata_cols:
+        col_str = str(col)
+        if col_str in entity_df.columns:
+            rename_map[col_str] = f"{col_str} (Resource)"
+            resource_output_cols.append(rename_map[col_str])
+        else:
+            resource_output_cols.append(col_str)
+
+    output_rows: list[dict[str, Any]] = []
+    assigned_count = 0
+    unassigned_count = 0
+    used_resource_values: set[str] = set()
+
+    for _, row in entity_df.iterrows():
+        demand_value = 1
+        if demand_col:
+            demand_value = int(max(1, round(float(row[demand_col]))))
+        chosen_idx = None
+        for idx, remaining_capacity in enumerate(remaining):
+            if remaining_capacity >= demand_value:
+                chosen_idx = idx
+                break
+
+        output_row = {str(column): row[column] for column in entity_df.columns}
+        if chosen_idx is None:
+            for col in resource_output_cols:
+                output_row[col] = ""
+            output_row["Allocation Status"] = "Unassigned"
+            output_row["Allocated Quantity"] = demand_value
+            unassigned_count += 1
+        else:
+            remaining[chosen_idx] -= demand_value
+            resource_record = resource_records[chosen_idx]
+            for col in resource_metadata_cols:
+                output_col = rename_map.get(str(col), str(col))
+                output_row[output_col] = resource_record[col]
+            output_row["Allocation Status"] = "Assigned"
+            output_row["Allocated Quantity"] = demand_value
+            assigned_count += 1
+            used_resource_values.add(_normalize_cell_text(resource_record[resource_col]))
+        output_rows.append(output_row)
+
+    output_df = pd.DataFrame(output_rows)
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "summary": {
+            "Assigned Entities": int(assigned_count),
+            "Unassigned Entities": int(unassigned_count),
+            "Resources Used": int(len({value for value in used_resource_values if value})),
+        },
+        "metadata": {
+            "entity_column": entity_col,
+            "resource_column": resource_col,
+            "capacity_column": capacity_col,
+            "demand_column": demand_col or "",
+        },
+    }
+
+
 def summarize_numeric_column(
     df: pd.DataFrame,
     value_col: str,
@@ -616,7 +1293,27 @@ def summarize_numeric_column(
     summary_labels: Dict[str, str] | None = None,
 ) -> Dict[str, Any]:
     """Summarize a numeric column and compute Output row numbers for max-value highlights."""
-    actual_value_col = _resolve_column_name(df.columns, value_col)
+    def _infer_value_col() -> str:
+        candidate_scores: list[tuple[int, str]] = []
+        for candidate in df.columns:
+            numeric_series = pd.to_numeric(df[candidate], errors="coerce")
+            non_null_count = int(numeric_series.notna().sum())
+            if non_null_count <= 0:
+                continue
+            candidate_scores.append((non_null_count, str(candidate)))
+        if not candidate_scores:
+            raise ValueError("Could not infer a numeric column for summary.")
+        candidate_scores.sort(key=lambda item: (-item[0], item[1]))
+        return candidate_scores[0][1]
+
+    requested_value_col = str(value_col or "").strip()
+    if requested_value_col in {"", "...", "value", "amount", "metric"}:
+        actual_value_col = _infer_value_col()
+    else:
+        try:
+            actual_value_col = _resolve_column_name(df.columns, requested_value_col)
+        except ValueError:
+            actual_value_col = _infer_value_col()
     numeric_series = pd.to_numeric(df[actual_value_col], errors="coerce")
     if numeric_series.dropna().empty:
         raise ValueError(f"Column `{actual_value_col}` has no numeric values.")
@@ -814,6 +1511,458 @@ def build_group_summary(
     }
 
 
+def build_grouped_aggregation_ranking_report(
+    world: SpreadsheetWorld,
+    file_path: str | None = None,
+    sheet_name: str | None = None,
+    range_ref: str = "A1:Z200000",
+    group_cols: Sequence[str] | str | None = None,
+    value_col: str | None = None,
+    aggregate: str = "mean",
+    top_n: int | None = None,
+    sort_desc: bool = True,
+    round_digits: int = 4,
+) -> Dict[str, Any]:
+    """Build a grouped aggregation report from one or more tabular sources.
+
+    This helper is intentionally abstract: it supports typical grouped report
+    patterns such as average score by course, total spending by category, or
+    count of records by department. When columns are not explicitly supplied it
+    attempts a deterministic inference of the most plausible grouping and value
+    columns from the available tables.
+    """
+
+    def _normalize_group_cols(value: Sequence[str] | str | None) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    def _is_datetime_like(series: pd.Series, column_name: str) -> bool:
+        header = _normalize_header_name(column_name)
+        if not any(token in header for token in ("date", "time", "year", "month", "quarter", "day")):
+            return False
+        text_values = [value for value in series.map(_normalize_cell_text).tolist() if value][:20]
+        if not text_values:
+            return False
+        if not any(any(ch.isdigit() for ch in value) and any(sep in value for sep in ("-", "/", ":")) for value in text_values):
+            return False
+        parsed = pd.to_datetime(series, errors="coerce")
+        return int(parsed.notna().sum()) >= max(2, int(len(series) * 0.6))
+
+    def _numeric_candidate_score(frame: pd.DataFrame, column: str) -> float:
+        text_header = _normalize_header_name(column)
+        if any(marker in text_header for marker in ("id", "code", "index", "year", "month", "quarter", "date", "time")):
+            return float("-inf")
+        numeric_series = frame[column].map(_parse_numeric_text)
+        non_null = int(numeric_series.notna().sum())
+        if non_null <= 0:
+            return float("-inf")
+        score = float(non_null * 10)
+        if any(marker in text_header for marker in ("score", "grade", "rating", "amount", "spending", "expense", "cost", "price", "salary", "revenue", "sales", "hours", "count", "quantity", "capacity", "utilisation", "utilization")):
+            score += 40.0
+        unique_count = int(numeric_series.dropna().nunique())
+        if unique_count >= 3:
+            score += 10.0
+        return score
+
+    def _group_candidate_score(frame: pd.DataFrame, column: str) -> float:
+        text_header = _normalize_header_name(column)
+        if any(marker in text_header for marker in ("id", "code", "email", "phone", "note", "comment", "description", "address")):
+            return float("-inf")
+        series = frame[column]
+        if _is_datetime_like(series, column):
+            return float("-inf")
+        text_series = series.map(_normalize_cell_text)
+        non_empty = [value for value in text_series.tolist() if value]
+        if len(non_empty) < 2:
+            return float("-inf")
+        unique_count = len(set(non_empty))
+        if unique_count < 2:
+            return float("-inf")
+        unique_ratio = unique_count / max(len(non_empty), 1)
+        score = float(len(non_empty) * 5)
+        if 0.05 <= unique_ratio <= 0.6:
+            score += 25.0
+        elif unique_ratio < 0.85:
+            score += 10.0
+        if any(marker in text_header for marker in ("category", "group", "type", "department", "course", "subject", "program", "semester", "term", "class", "region", "room", "status", "level", "faculty", "professor", "instructor", "tutor")):
+            score += 40.0
+        return score
+
+    def _choose_table_and_columns(tables: Sequence[Dict[str, Any]]) -> tuple[list[Dict[str, Any]], list[str], str]:
+        requested_group_cols = _normalize_group_cols(group_cols)
+        aggregate_name = (aggregate or "mean").strip().lower()
+        best_match: tuple[float, int, list[str], str, Dict[str, Any]] | None = None
+
+        for table in tables:
+            df = table["df"].copy()
+            if df.empty:
+                continue
+            try:
+                actual_group_cols = (
+                    [_resolve_column_name(df.columns, col) for col in requested_group_cols]
+                    if requested_group_cols else []
+                )
+            except ValueError:
+                continue
+
+            if not actual_group_cols:
+                scored_groups = [
+                    (_group_candidate_score(df, str(column)), str(column))
+                    for column in df.columns
+                ]
+                scored_groups = [item for item in scored_groups if item[0] != float("-inf")]
+                if not scored_groups:
+                    continue
+                scored_groups.sort(key=lambda item: (-item[0], item[1]))
+                actual_group_cols = [scored_groups[0][1]]
+
+            if value_col:
+                try:
+                    actual_value_col = _resolve_column_name(df.columns, value_col)
+                except ValueError:
+                    continue
+                value_score = _numeric_candidate_score(df, actual_value_col)
+            else:
+                scored_values = [
+                    (_numeric_candidate_score(df, str(column)), str(column))
+                    for column in df.columns
+                    if str(column) not in actual_group_cols
+                ]
+                scored_values = [item for item in scored_values if item[0] != float("-inf")]
+                if not scored_values:
+                    continue
+                scored_values.sort(key=lambda item: (-item[0], item[1]))
+                value_score, actual_value_col = scored_values[0]
+
+            group_score = sum(_group_candidate_score(df, column) for column in actual_group_cols)
+            total_score = group_score + value_score
+            if best_match is None or total_score > best_match[0]:
+                best_match = (
+                    total_score,
+                    len(df),
+                    list(actual_group_cols),
+                    actual_value_col,
+                    table,
+                )
+
+        if best_match is None:
+            raise ValueError("Could not find a suitable grouped aggregation table and column combination.")
+
+        _, _, actual_group_cols, actual_value_col, base_table = best_match
+        base_signature = tuple(_normalize_header_name(col) for col in base_table["df"].columns.tolist())
+        compatible_tables: list[Dict[str, Any]] = []
+        for table in tables:
+            df = table["df"].copy()
+            signature = tuple(_normalize_header_name(col) for col in df.columns.tolist())
+            if signature != base_signature:
+                continue
+            try:
+                [_resolve_column_name(df.columns, col) for col in actual_group_cols]
+                _resolve_column_name(df.columns, actual_value_col)
+            except ValueError:
+                continue
+            compatible_tables.append(table)
+        if not compatible_tables:
+            compatible_tables = [base_table]
+        return compatible_tables, actual_group_cols, actual_value_col
+
+    requested_tables: list[Dict[str, Any]] = []
+    if file_path:
+        wb = get_workbook(world, file_path)
+        target_sheet = sheet_name or wb.sheetnames[0]
+        table = read_table_multi(
+            world,
+            file_path,
+            target_sheet,
+            range_ref,
+            require_primary_key=False,
+            stop_at_note_row=True,
+        )
+        header = table.get("header", [])
+        if not header:
+            raise ValueError(f"No usable table found in {os.path.basename(file_path)}.")
+        requested_tables = [{
+            "file_path": file_path,
+            "file_name": os.path.basename(file_path),
+            "sheet_name": target_sheet,
+            "df": pd.DataFrame(table["rows"], columns=header),
+        }]
+    else:
+        requested_tables = load_all_tables(
+            world,
+            range_ref=range_ref,
+            require_primary_key=False,
+            stop_at_note_row=True,
+        )
+    if not requested_tables:
+        raise ValueError("No tables available for grouped aggregation.")
+
+    compatible_tables, actual_group_cols, actual_value_col = _choose_table_and_columns(requested_tables)
+
+    normalized_frames: list[pd.DataFrame] = []
+    source_names: list[str] = []
+    for table in compatible_tables:
+        df = table["df"].copy()
+        resolved_groups = [_resolve_column_name(df.columns, col) for col in actual_group_cols]
+        resolved_value = _resolve_column_name(df.columns, actual_value_col)
+        working = df[resolved_groups + [resolved_value]].copy()
+        working[resolved_value] = working[resolved_value].map(_parse_numeric_text)
+        working = working.dropna(subset=[resolved_value]).reset_index(drop=True)
+        if working.empty:
+            continue
+        normalized_frames.append(working)
+        source_names.append(table["file_name"])
+    if not normalized_frames:
+        raise ValueError("No valid rows remained after preparing grouped aggregation data.")
+
+    combined = pd.concat(normalized_frames, ignore_index=True)
+    aggregate_aliases = {
+        "average": "mean",
+        "avg": "mean",
+        "mean": "mean",
+        "sum": "sum",
+        "total": "sum",
+        "count": "count",
+        "median": "median",
+        "min": "min",
+        "minimum": "min",
+        "max": "max",
+        "maximum": "max",
+    }
+    aggregate_func = aggregate_aliases.get((aggregate or "mean").strip().lower())
+    if not aggregate_func:
+        raise ValueError(f"Unsupported aggregate `{aggregate}`.")
+    value_header_map = {
+        "mean": f"Average {actual_value_col}",
+        "sum": f"Total {actual_value_col}",
+        "count": f"Count of {actual_value_col}",
+        "median": f"Median {actual_value_col}",
+        "min": f"Minimum {actual_value_col}",
+        "max": f"Maximum {actual_value_col}",
+    }
+    report = build_group_summary(
+        combined,
+        group_cols=actual_group_cols,
+        aggregations={value_header_map[aggregate_func]: (actual_value_col, aggregate_func)},
+        sort_by=[value_header_map[aggregate_func]],
+        ascending=not sort_desc,
+        round_digits=round_digits,
+    )
+    output_df = report["output_df"].copy()
+    if top_n is not None and int(top_n) > 0:
+        output_df = output_df.head(int(top_n)).reset_index(drop=True)
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "summary": {
+            "Source": ", ".join(sorted(set(source_names))),
+            "Group Columns": ", ".join(actual_group_cols),
+            "Value Column": actual_value_col,
+            "Rows Used": int(len(combined)),
+        },
+        "metadata": {
+            "group_cols": actual_group_cols,
+            "value_col": actual_value_col,
+            "aggregate": aggregate_func,
+            "top_n": int(top_n) if top_n is not None else None,
+        },
+    }
+
+
+def build_time_series_aggregation_report(
+    world: SpreadsheetWorld,
+    file_path: str | None = None,
+    sheet_name: str | None = None,
+    range_ref: str = "A1:Z200000",
+    date_col: str = "Date",
+    value_col: str | None = None,
+    period: str = "month",
+    aggregate: str = "mean",
+    window_years: int | None = None,
+    period_mode: str = "year_month",
+    sort_desc: bool = True,
+) -> Dict[str, Any]:
+    """Aggregate one time series column over a requested temporal grain."""
+    def _infer_value_column(frame: pd.DataFrame, actual_date_col_name: str) -> str:
+        candidate_scores: list[tuple[int, str]] = []
+        for candidate in frame.columns:
+            if str(candidate) == actual_date_col_name:
+                continue
+            numeric_series = frame[candidate].map(_parse_numeric_text)
+            non_null_count = int(numeric_series.notna().sum())
+            if non_null_count <= 0:
+                continue
+            candidate_scores.append((non_null_count, str(candidate)))
+        if not candidate_scores:
+            raise ValueError("Could not infer a numeric value column for time-series aggregation.")
+        candidate_scores.sort(key=lambda item: (-item[0], item[1]))
+        return candidate_scores[0][1]
+
+    def _resolve_value_column(frame: pd.DataFrame, actual_date_col_name: str) -> str:
+        if value_col:
+            try:
+                return _resolve_column_name(frame.columns, value_col)
+            except ValueError:
+                inferred = _infer_value_column(frame, actual_date_col_name)
+                return inferred
+        return _infer_value_column(frame, actual_date_col_name)
+
+    if file_path:
+        wb = get_workbook(world, file_path)
+        target_sheet = sheet_name or wb.sheetnames[0]
+        table = read_table_multi(
+            world,
+            file_path,
+            target_sheet,
+            range_ref,
+            require_primary_key=False,
+            stop_at_note_row=True,
+        )
+        header = table.get("header", [])
+        if not header:
+            raise ValueError(f"No usable table found in {os.path.basename(file_path)}.")
+        source_frames = [(os.path.basename(file_path), pd.DataFrame(table["rows"], columns=header))]
+    else:
+        tables = load_all_tables(
+            world,
+            range_ref=range_ref,
+            require_primary_key=False,
+            stop_at_note_row=True,
+        )
+        if not tables:
+            raise ValueError("No tables available for time-series aggregation.")
+        source_frames = [(table["file_name"], table["df"].copy()) for table in tables]
+
+    normalized_frames: list[pd.DataFrame] = []
+    source_names: list[str] = []
+    actual_date_col = None
+    actual_value_col = None
+    for source_name, df in source_frames:
+        if df.empty:
+            continue
+        try:
+            frame_date_col = _resolve_column_name(df.columns, date_col)
+        except ValueError:
+            continue
+        frame_value_col = _resolve_value_column(df, frame_date_col)
+        working_frame = df[[frame_date_col, frame_value_col]].copy()
+        working_frame[frame_date_col] = pd.to_datetime(working_frame[frame_date_col], errors="coerce")
+        working_frame[frame_value_col] = working_frame[frame_value_col].map(_parse_numeric_text)
+        working_frame = working_frame.dropna(subset=[frame_date_col, frame_value_col]).reset_index(drop=True)
+        if working_frame.empty:
+            continue
+        working_frame.columns = ["_date", "_value"]
+        normalized_frames.append(working_frame)
+        source_names.append(source_name)
+        if actual_date_col is None:
+            actual_date_col = frame_date_col
+        if actual_value_col is None:
+            actual_value_col = frame_value_col
+
+    if not normalized_frames:
+        raise ValueError("No valid rows remained after parsing the requested time-series columns.")
+
+    working = pd.concat(normalized_frames, ignore_index=True)
+    working.columns = [actual_date_col or date_col, actual_value_col or (value_col or "Value")]
+    if working.empty:
+        raise ValueError(
+            f"No valid rows remained after parsing `{actual_date_col}` and `{actual_value_col}`."
+        )
+
+    latest_date = working[actual_date_col].max()
+    if window_years is not None and window_years > 0:
+        cutoff = latest_date - pd.DateOffset(years=int(window_years))
+        working = working.loc[working[actual_date_col] >= cutoff].reset_index(drop=True)
+        if working.empty:
+            raise ValueError("No rows remained after applying the requested time window.")
+
+    aggregate_name = (aggregate or "mean").strip().lower()
+    aggregate_aliases = {
+        "average": "mean",
+        "avg": "mean",
+        "mean": "mean",
+        "sum": "sum",
+        "total": "sum",
+        "count": "count",
+        "median": "median",
+        "min": "min",
+        "minimum": "min",
+        "max": "max",
+        "maximum": "max",
+    }
+    aggregate_func = aggregate_aliases.get(aggregate_name)
+    if not aggregate_func:
+        raise ValueError(f"Unsupported aggregate `{aggregate}`.")
+
+    period_name = (period or "month").strip().lower()
+    period_mode_name = (period_mode or "year_month").strip().lower()
+    if period_name == "month":
+        if period_mode_name == "month_of_year":
+            working["_period_sort"] = working[actual_date_col].dt.month
+            working["_period_label"] = working[actual_date_col].dt.strftime("%B")
+        else:
+            period_values = working[actual_date_col].dt.to_period("M")
+            working["_period_sort"] = period_values.astype(str)
+            working["_period_label"] = period_values.astype(str)
+    elif period_name == "quarter":
+        if period_mode_name == "quarter_of_year":
+            working["_period_sort"] = working[actual_date_col].dt.quarter
+            working["_period_label"] = "Q" + working[actual_date_col].dt.quarter.astype(str)
+        else:
+            period_values = working[actual_date_col].dt.to_period("Q")
+            working["_period_sort"] = period_values.astype(str)
+            working["_period_label"] = period_values.astype(str)
+    elif period_name == "year":
+        working["_period_sort"] = working[actual_date_col].dt.year
+        working["_period_label"] = working["_period_sort"].astype(str)
+    else:
+        raise ValueError(f"Unsupported period `{period}`.")
+
+    grouped = (
+        working.groupby(["_period_sort", "_period_label"], dropna=False)[actual_value_col]
+        .agg(aggregate_func)
+        .reset_index()
+    )
+    sort_col = "_period_sort"
+    label_col = "Period"
+    value_header_map = {
+        "mean": f"Average {actual_value_col}",
+        "sum": f"Total {actual_value_col}",
+        "count": f"Count of {actual_value_col}",
+        "median": f"Median {actual_value_col}",
+        "min": f"Minimum {actual_value_col}",
+        "max": f"Maximum {actual_value_col}",
+    }
+    value_col_name = value_header_map[aggregate_func]
+    grouped.columns = [sort_col, label_col, value_col_name]
+    grouped = grouped.sort_values(by=value_col_name, ascending=not sort_desc, kind="stable").reset_index(drop=True)
+    grouped[value_col_name] = grouped[value_col_name].round(4)
+    output_df = grouped[[label_col, value_col_name]]
+    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    window_label = f"latest {int(window_years)} years" if window_years else "full available period"
+    return {
+        "output_df": output_df,
+        "detail_data": detail_data,
+        "summary": {
+            "Source": ", ".join(source_names),
+            "Window": window_label,
+            "Latest Date": str(latest_date.date()),
+            "Rows Used": int(len(working)),
+        },
+        "metadata": {
+            "date_col": actual_date_col,
+            "value_col": actual_value_col,
+            "period": period_name,
+            "period_mode": period_mode_name,
+            "aggregate": aggregate_func,
+        },
+    }
+
+
 def _parse_numeric_text(value: Any) -> float:
     text = _normalize_cell_text(value)
     if not text:
@@ -821,7 +1970,10 @@ def _parse_numeric_text(value: Any) -> float:
     cleaned = text.replace(",", "").replace("$", "").replace("%", "").strip()
     if cleaned == "":
         return float("nan")
-    return float(cleaned)
+    try:
+        return float(cleaned)
+    except ValueError:
+        return float("nan")
 
 
 def _format_dashboard_metric(metric_name: str, value: float) -> str:
@@ -2193,15 +3345,31 @@ __all__ = [
     "load_all_tables",
     "find_table_by_headers",
     "infer_common_key",
+    "infer_common_keys",
     "concat_tables_with_same_headers",
+    "build_relational_join_enrichment_report",
+    "build_multi_key_relational_join_report",
     "merge_tables_on_key",
+    "merge_tables_on_keys",
     "fill_missing_from_reference",
+    "build_missing_data_report",
+    "build_room_format_report",
+    "build_capacity_constrained_allocation_report",
+    "build_tutor_meeting_schedule_report",
     "summarize_numeric_column",
     "build_group_summary",
+    "build_grouped_aggregation_ranking_report",
+    "build_time_series_aggregation_report",
     "compute_feature_correlations",
     "build_correlation_matrix_table",
     "fit_linear_regression_weights",
     "build_region_growth_analysis",
+    "build_market_share_shipment_report",
+    "build_cash_flow_efficiency_report",
+    "build_diabetes_region_report",
+    "build_mobile_reviews_summary_report",
+    "build_store_feature_analysis_report",
+    "build_ecommerce_merge_report",
     "build_financial_dashboard_report",
     "build_candidate_screening_report",
     "build_inventory_eoq_report",

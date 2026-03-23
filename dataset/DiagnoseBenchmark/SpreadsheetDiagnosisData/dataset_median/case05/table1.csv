@@ -1,0 +1,26 @@
+ResponseID,CustomerID,Product,Purchase_Date,Satisfaction_Level,NPS_Score,Delivery_Rating,Product_Quality_Rating,Support_Rating,Would_Recommend
+1,C10001,Laptop,2023-11-25,Very Satisfied,9,1,5,4,Yes
+2,C10002,Smartphone,2023-10-26,Neutral,3,3,2,2,No
+3,C10003,Headphones,2023-11-25,Very Dissatisfied,4,2,1,1,No
+4,C10004,Tablet,2023-01-19,Neutral,7,3,2,1,Yes
+5,C10005,Smartwatch,2023-12-14,Neutral,5,2,2,2,No
+6,C10006,Camera,2023-09-17,satisfied,5,3,2,3,No
+7,C10007,Speaker,2023-12-28,Dissatisfied,4,3,1,4,No
+8,C10008,Monitor,2023-04-28,Very Satisfied,2,4,5,3,No
+9,C10009,Keyboard,2023-01-09,Very Satisfied,6,5,1,4,No
+10,C10010,Mouse,2023-12-22,Neutral,10,3,5,4,Yes
+11,C10011,Laptop,2023-11-08,Neutral,1,4,1,5,No
+12,C10012,Smartphone,2023-10-08,Very Dissatisfied,5,1,4,3,No
+13,C10013,Headphones,2023-03-02,SATISFIED,1,1,3,4,No
+14,C10014,Tablet,2023-04-18,Very Satisfied,1,2,4,4,No
+15,C10015,Smartwatch,2023-12-23,Neutral,10,5,4,5,Yes
+16,C10016,Camera,2023-11-04,Satisfied,6,4,5,4,No
+17,C10017,Speaker,2023-12-12,Neutral,0,2,4,4,No
+18,C10018,Monitor,2023-02-22,Satisfied,5,3,5,3,No
+19,C10019,Keyboard,2023-05-07,Very satisfied,6,1,4,1,No
+20,C10020,Mouse,2023-11-20,Satisfied,10,1,1,3,Yes
+21,C10021,Laptop,2023-10-07,Satisfied,2,1,5,2,No
+22,C10022,Smartphone,2023-04-11,Very Dissatisfied,3,2,5,1,No
+23,C10023,Headphones,2023-03-18,Neutral,2,3,2,1,No
+24,C10024,Tablet,2023-01-12,Very Satisfied,2,2,5,3,No
+25,C10025,Smartwatch,2023-05-02,Very Satisfied,2,2,4,5,No
