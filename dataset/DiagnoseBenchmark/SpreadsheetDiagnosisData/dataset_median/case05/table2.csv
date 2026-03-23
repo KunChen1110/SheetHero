@@ -1,0 +1,26 @@
+CustomerID,Age,Gender,Country,City,Loyalty_Tier,Member_Since_Year,Channel
+C10001,25,Non-binary,USA,Berlin,Platinum,2020,Web
+C10002,46,Non-binary,UK,Paris,Bronze,2023,In-Store
+C10003,47,Non-binary,USA,New York,Platinum,2021,Phone
+C10004,61,Male,Germany,Sydney,Platinum,2016,Web
+C10005,38,Non-binary,UK,New York,Silver,2019,In-Store
+C10006,42,Non-binary,France,Toronto,Platinum,2023,Phone
+C10007,24,Non-binary,USA,Sydney,Silver,2021,Phone
+C10008,32,Female,Canada,Berlin,Platinum,2021,Web
+C10009,38,Female,Canada,Sydney,Gold,2020,Mobile App
+C10010,61,Female,USA,New York,Bronze,2016,Phone
+C10011,24,Non-binary,Australia,Toronto,Silver,2023,Web
+C10012,55,Non-binary,France,Toronto,Bronze,2021,In-Store
+C10013,60,Female,Australia,New York,Gold,2019,In-Store
+C10014,24,Non-binary,France,London,Silver,2022,Mobile App
+C10015,24,Female,France,Toronto,Bronze,2019,Mobile App
+C10016,69,Female,France,Paris,Bronze,2019,Web
+C10017,29,Female,Australia,Toronto,Gold,2020,Web
+C10018,29,Male,France,Sydney,Platinum,2016,Mobile App
+C10019,65,Non-binary,USA,New York,Silver,2021,Phone
+C10020,47,Female,UK,Toronto,Gold,2020,Web
+C10021,21,Male,UK,Paris,Bronze,2016,In-Store
+C10022,46,Non-binary,Germany,Berlin,Platinum,2021,In-Store
+C10023,31,Non-binary,USA,Toronto,Platinum,2016,In-Store
+C10024,61,Non-binary,France,Berlin,Gold,2015,Mobile App
+C10025,43,Non-binary,USA,New York,Silver,2019,Mobile App

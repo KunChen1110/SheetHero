@@ -1,0 +1,7 @@
+ApptID,PatientID,Doctor,Department,Appointment_Date,Duration_min,Status,Fee_USD
+A001,P101,Dr. Adams,Cardiology,2024-02-10,30,Completed,150
+A002,P102,Dr. Brown,Neurology,12/02/2024,45,Completed,200
+A003,P103,Dr. Chen,Orthopedics,2024-02-14,30,Completed,130
+A004,P104,Dr. Davis,General,17/02/2024,20,Completed,90
+A005,P105,Dr. Evans,Cardiology,2024-02-19,30,Completed,150
+A006,P106,Dr. Foster,Oncology,22/02/2024,60,Completed,350

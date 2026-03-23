@@ -1,0 +1,6 @@
+TicketID,Agent,First_Response_hrs,Resolution_Time_hrs,CSAT_Score,Escalated
+T001,Alice,0.5,4.2,4.8,False
+T002,Bob,1.2,,3.9,False
+T003,Alice,0.8,2.1,5.0,False
+T004,Carol,2.5,,,True
+T005,Bob,0.3,1.5,4.5,False

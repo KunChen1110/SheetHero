@@ -1,0 +1,7 @@
+{
+  "issue_type": "missing",
+  "table": "table1.csv",
+  "location": "row=14,column=Stock_Qty",
+  "description": "Stock_Qty is missing for ProductID='P014' (Denim Jeans, StyleCo). Without stock quantity, the inventory management system cannot determine whether the item can fulfil pending orders or trigger replenishment alerts.",
+  "business_context": "E-commerce product catalog. Stock_Qty is required for order fulfilment checks; missing values cause the system to treat the product as unavailable and suppress it from the storefront."
+}

@@ -1,0 +1,6 @@
+BusinessUnit,Division,Founded_Year,HQ_Country,Product_Type,Target_Market,Employees_Total,Active
+Cloud Services,Technology,2012,USA,SaaS,Enterprise,2400,True
+Hardware,Technology,2005,USA,Physical,Enterprise+Consumer,1800,True
+Software Licensing,Technology,2008,USA,License,SMB+Enterprise,950,True
+Professional Services,Consulting,2010,USA,Service,Enterprise,1200,True
+Consumer Products,Retail,2015,USA,Mixed,Consumer,600,True
