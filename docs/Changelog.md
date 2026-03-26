@@ -380,3 +380,18 @@
 
 - Fixed synthetic regression coverage gaps
   - Added end-to-end synthetic validation for newly introduced abstract families, including multi-key joins, temporal growth reporting, and capacity-constrained allocation.
+
+## 26/3/2026
+### --- Changed ---
+- Upgraded the recommended local LLM path to `qwen3:8b`
+  - Added `qwen3:8b` to backend frontend-editable deployment choices in `src/backend/config/frontend_schema.py`.
+  - Updated CLI offline switch prompt text in `src/backend/main.py` so the default local-model example now points to `qwen3:8b`.
+
+### --- Added ---
+- Added `v4.1` version documentation in `docs/VersionHistory.md`
+  - Documented the local-model upgrade as a validated runtime iteration after the family-based architecture introduced in `v4.0`.
+  - Recorded benchmark- and CLI-based regression validation as part of the version narrative.
+
+### --- Fixed ---
+- Extended natural-language detector coverage for `reference_guided_completion`
+  - Prompts such as “Fill any missing data ... using information from file ...” now correctly route into the deterministic completion family instead of falling back to free-form model handling.
