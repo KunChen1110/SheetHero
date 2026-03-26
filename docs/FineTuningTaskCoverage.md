@@ -1,133 +1,236 @@
 # Fine-Tuning Task Coverage
 
-This file summarizes which dataset tasks are currently suitable for generating
-fine-tuning data from the backend pipeline.
+This document summarizes the current backend coverage that is suitable for fine-tuning data construction.
 
-Principle:
-- Only include tasks that have a successful end-to-end logger under the current
-  helper-first / bounded execution design.
-- Prefer tasks that are stable enough to represent reusable execution patterns,
-  not just one-off lucky runs.
-- Image-heavy tasks are excluded from the recommended set for now.
+The current system is no longer best described as a collection of task-specific handlers. After the `v4.0` backend work, the project is better understood as a **family-based spreadsheet pipeline** with:
+- benchmark-driven diagnose and QA improvement
+- helper-first deterministic execution for covered workflow families
+- synthetic family regression for abstract spreadsheet capabilities
 
-Last updated: 10/3/2026
+Therefore, this document now organizes fine-tuning coverage in three layers:
+1. dataset task coverage
+2. diagnose / QA coverage
+3. abstract family coverage
 
-## Recommended Stable Tasks
+Last updated: 26/3/2026
 
-These tasks have successful execution logs and are suitable as the current
-recommended fine-tuning coverage set.
+---
 
-| Task | Title | Capability Family | Output Type | Latest Successful Evidence |
-|------|-------|-------------------|-------------|----------------------------|
-| 01 | Budget calculating | multi-file merge + aggregation + highlight | spreadsheet | `artifacts/loggers/sheethero_tc01_input01_20260310_003605.md` |
-| 02 | Meeting schdeuling | multi-file join + normalization + schedule table | spreadsheet | `artifacts/loggers/sheethero_tc02_input01_20260309_144853.md` |
-| 03 | Internet Penetration Rate Analysis (visualization) | messy multi-row header cleaning + ranking + chart | spreadsheet | `artifacts/loggers/sheethero_tc03_input01_20260309_181822.md` |
-| 04 | Task scheduling table | DAG scheduling + duration summary | spreadsheet | `artifacts/loggers/sheethero_tc04_input01_20260309_142236.md` |
-| 05 | Indian Smartphone shipment and market share | timeline overlap + aligned multiplication report | spreadsheet | `artifacts/loggers/sheethero_tc05_input01_20260309_215507.md` |
-| 07 | Ice-cream sales vs temperature, rain, price | regression coefficient estimation | spreadsheet | `artifacts/loggers/sheethero_tc07_input01_20260309_125713.md` |
-| 08 | Iris datasets | filtered correlation matrix | spreadsheet | `artifacts/loggers/sheethero_tc08_input01_20260309_190645.md` |
-| 09 | Business Analysis of Coca cola company | ratio computation + yearly summary table | spreadsheet | `artifacts/loggers/sheethero_tc09_input01_20260309_222528.md` |
-| 10 | Cycle detection in graphs | multi-file graph analysis | spreadsheet | `artifacts/loggers/sheethero_tc10_input01_20260309_195814.md` |
-| 11 | Inventory Management problem | EOQ / reorder point / sensitivity report | spreadsheet | `artifacts/loggers/sheethero_tc11_input01_20260309_203940.md` |
-| 12 | Multi-Source Financial Performance Dashboard | multi-source financial dashboard | spreadsheet | `artifacts/loggers/sheethero_tc12_input01_20260309_201935.md` |
-| 13 | Global Diabetes Population Analysis | multi-source healthcare aggregation | spreadsheet | `artifacts/loggers/sheethero_tc13_input01_20260309_223016.md` |
-| 14 | Global Mobile Reviews Analysis | grouped review summary | spreadsheet | `artifacts/loggers/sheethero_tc14_input01_20260309_224156.md` |
-| 17 | Store Feature Analysis | grouped numeric analysis across multiple sheets | spreadsheet | `artifacts/loggers/sheethero_tc17_input01_20260309_230702.md` |
-| 20 | Hospital Resource Utilization Analysis | multi-source utilisation analysis + conditional highlight | spreadsheet | `artifacts/loggers/sheethero_tc20_input01_20260309_210811.md` |
-| 21 | Interviewee screening | large multi-file candidate ranking | spreadsheet | `artifacts/loggers/sheethero_tc21_input01_20260309_202941.md` |
-| 22 | Missing Data (Simple) | text-only missing-data scan report | text | `artifacts/loggers/sheethero_tc22_input01_20260309_212908.md` |
-| 23 | Fill Missing Data from Another File (Simple) | reference-based fill / imputation | spreadsheet | `artifacts/loggers/sheethero_tc23_input01_20260309_164131.md` |
-| 24 | Merge Two Files (Simple) | simple merge | spreadsheet | `artifacts/loggers/sheethero_tc24_input01_20260309_161719.md` |
-| 25 | Merge Three Files (Simple) | simple multi-file merge | spreadsheet | `artifacts/loggers/sheethero_tc25_input01_20260309_164447.md` |
-| 26 | Merge Four Files (Simple) | simple multi-file merge | spreadsheet | `artifacts/loggers/sheethero_tc26_input01_20260309_164808.md` |
-| 27 | Room Syntax Difference (Simple) | text-only inconsistency report | text | `artifacts/loggers/sheethero_tc27_input01_20260309_213341.md` |
+## Fine-Tuning Principle
 
-## Recommended Capability Coverage for Fine-Tuning
+A candidate training example should satisfy at least one of these goals:
+- reinforce a stable spreadsheet workflow family
+- reinforce diagnose / QA behavior for imperfect spreadsheet inputs
+- reinforce helper-first execution and grounded parameter selection
 
-If the goal is to fine-tune execution behavior rather than memorize individual
-testcases, the current stable set covers these reusable task families:
+It should **not** mainly teach the model to memorize a benchmark task ID or a one-off filename pattern.
 
-1. Multi-file merge and reconciliation
-   - Tasks: 01, 02, 23, 24, 25, 26
+---
 
-2. Aggregation / summary / ranking reports
-   - Tasks: 01, 09, 11, 12, 13, 14, 17, 20, 21
+## 1. Recommended Dataset Task Coverage
 
-3. Structured algorithmic tasks
-   - Tasks: 04, 10
+These dataset tasks remain useful as supervised fine-tuning anchors because they map cleanly onto reusable spreadsheet capability families.
 
-4. Statistical / ML-style table generation
-   - Tasks: 07, 08
+| Task | Title | Current Role in Fine-Tuning | Covered Family / Pattern |
+| --- | --- | --- | --- |
+| 01 | Budget calculating | high-value anchor | schema-aligned merge + aggregation + summary metrics + highlight |
+| 02 | Meeting scheduling | high-value anchor | relational assignment schedule / multi-table entity alignment |
+| 03 | Internet Penetration Rate Analysis | useful advanced anchor | temporal growth visual report |
+| 04 | Task scheduling table | high-value anchor | dependency-constrained schedule |
+| 05 | Indian Smartphone shipment and market share | useful anchor | temporal alignment / derived efficiency style workflow |
+| 07 | Ice-cream sales analysis | high-value anchor | tabular regression analysis |
+| 08 | Iris datasets | high-value anchor | pairwise correlation matrix |
+| 09 | Coca-Cola business analysis | useful anchor | ratio / summary reporting |
+| 10 | Cycle detection in graphs | high-value anchor | graph consistency scan |
+| 11 | Inventory Management problem | useful anchor | parameter-driven policy report |
+| 12 | Multi-Source Financial Performance Dashboard | high-value anchor | multi-source metric dashboard |
+| 13 | Global Diabetes Population Analysis | useful anchor | grouped aggregation / multi-source summary |
+| 14 | Global Mobile Reviews Analysis | useful anchor | grouped metric summary |
+| 17 | Store Feature Analysis | useful anchor | comparative multi-sheet summary / grouped analysis |
+| 20 | Hospital Resource Utilization Analysis | high-value anchor | capacity / utilisation report |
+| 21 | Interviewee screening | useful advanced anchor | entity ranking report |
+| 22 | Missing Data (Simple) | high-value diagnose anchor | missing-data text scan |
+| 23 | Fill Missing Data from Another File (Simple) | high-value anchor | reference-guided completion |
+| 24 | Merge Two Files (Simple) | high-value anchor | relational join enrichment |
+| 25 | Merge Three Files (Simple) | useful anchor | relational join enrichment |
+| 26 | Merge Four Files (Simple) | useful anchor | relational join enrichment |
+| 27 | Room Syntax Difference (Simple) | high-value diagnose anchor | identifier-format scan |
 
-5. Messy schema / header cleaning
-   - Tasks: 03, 23, 27
+### Notes
+- These tasks are now most valuable when used as **family examples**, not as isolated benchmark IDs.
+- For training construction, prompts should be slightly paraphrased and file names should be varied so the model learns the workflow family rather than the task label.
 
-6. Text-only diagnostic outputs
-   - Tasks: 22, 27
+---
 
-## Suggested First Fine-Tuning Set
+## 2. New Diagnose / QA Coverage
 
-If only a smaller high-confidence subset is needed at first, use:
+The backend now includes a dedicated diagnose benchmark:
+- `dataset/DiagnoseBenchmark/SpreadsheetDiagnosisData`
+- CLI command: `!DiagnosebenchmarkTest`
 
+This benchmark is especially valuable for fine-tuning or distillation of:
+- diagnose triggering
+- issue-family classification
+- concrete QA wording
+- preview-aware clarification behavior
+
+### Recommended Diagnose / QA Training Targets
+The current diagnose system covers these issue families well enough to be treated as reusable supervision targets:
+- `missing_value`
+- `missing_key_column`
+- `format_inconsistency`
+- `unit_or_time_format`
+- `row_alignment`
+- `semantic_anomaly`
+- `duplicate_conflicting_rows`
+- `missing_period_endpoint`
+
+### Best Use of Diagnose Benchmark Data
+Use diagnose benchmark cases to train or distill:
+- when to ask a clarification question
+- how to describe the issue concretely
+- how to reference file / sheet / row / column clearly
+- how to attach a readable context preview
+
+Do **not** use them mainly to teach final spreadsheet execution logic.
+
+---
+
+## 3. Abstract Family Coverage
+
+The most important change in the current system is that backend logic has shifted from task-oriented branching to family-oriented handling.
+
+The following abstract spreadsheet families are now the strongest fine-tuning targets because they correspond to reusable backend policies rather than one-off benchmark behavior.
+
+### High-Priority Execution Families
+- `schema_aligned_merge_summary`
+- `reference_guided_completion`
+- `grouped_aggregation_ranking`
+- `temporal_aggregation_ranking`
+- `relational_join_enrichment`
+- `composite_key_relational_join`
+- `dependency_constrained_schedule`
+- `relational_assignment_schedule`
+- `capacity_constrained_allocation`
+- `tabular_regression_analysis`
+- `pairwise_correlation_matrix`
+- `temporal_growth_visual_report`
+
+### High-Priority Text / Diagnose Families
+- `missing_data_scan`
+- `identifier_format_scan`
+- related diagnose / QA issue families from the benchmark set
+
+### Useful Report / Summary Families
+- `multi_source_metric_dashboard`
+- `entity_ranking_report`
+- `parameter_driven_policy_report`
+- `capacity_utilisation_report`
+- `grouped_metric_summary`
+- `comparative_multi_sheet_summary`
+- `relational_flattening_report`
+
+---
+
+## 4. Recommended Fine-Tuning Construction Strategy
+
+The most effective current strategy is **not** to build one large flat dataset of all task logs.
+
+Instead, construct training data in layers.
+
+### Layer A: Diagnose / QA examples
+Source:
+- diagnose benchmark
+- stable QA task logs
+
+Target behavior:
+- detect issues
+- ask concrete questions
+- preserve structured clarification logic
+
+### Layer B: Family-routing and grounded planning examples
+Source:
+- representative task logs
+- synthetic family regression prompts
+- paraphrased versions of current benchmark tasks
+
+Target behavior:
+- recognize the correct spreadsheet family
+- select the right helper-first path
+- avoid drifting into unrelated pandas logic
+
+### Layer C: Helper-first execution examples
+Source:
+- high-confidence stable task runs
+- deterministic family outputs
+
+Target behavior:
+- call the right helper
+- ground parameters in visible schema
+- produce output that matches the family contract
+
+---
+
+## 5. Current Best First Fine-Tuning Set
+
+If only a smaller high-confidence subset is needed first, the recommended set is:
+
+### Diagnose / QA subset
+- diagnose benchmark small + median splits
+- Task 22
+- Task 27
+- selected QA-heavy portions of Task 01, Task 02, Task 04
+
+### Execution family subset
 - Task 01
-- Task 03
+- Task 02
 - Task 04
 - Task 07
 - Task 08
 - Task 10
 - Task 12
-- Task 17
-- Task 21
+- Task 20
 - Task 23
 - Task 24
-- Task 27
+- Task 25
+- Task 26
 
-Reason:
-- These tasks cover the main helper-first execution families.
-- They include both spreadsheet-output tasks and text-output tasks.
-- They include single-file, multi-file, algorithmic, statistical, and
-  cleaning-oriented workflows.
+### Why this subset
+- It covers merge, fill, schedule, join, regression, correlation, dashboard, and diagnostic text output.
+- It covers both spreadsheet-output and text-output behaviors.
+- It aligns well with the current deterministic family-based backend rather than older ad hoc execution behavior.
 
-## Not Recommended for the First Fine-Tuning Batch
+---
 
-These tasks are not in the current recommended training set:
+## 6. Not the Best First Fine-Tuning Targets
 
-### Task 06
-- Has historical successful logs.
-- Not recently re-validated after the latest large execution/runtime refactor.
-- Use only after a fresh end-to-end confirmation.
+These are not necessarily bad tasks, but they are not the strongest first-batch training targets.
 
-### Task 15
-- Helper path and output logic were checked during development.
-- A fresh clean CLI confirmation was not completed in the final stabilization
-  window.
-- Treat as pending verification before using it as fine-tuning ground truth.
+### Image-heavy / visualization-heavy tasks
+- Tasks whose main success criteria depend heavily on charts or visual layout should be secondary.
+- Use them after core family execution behavior is stable.
 
-### Task 16, Task 18, Task 19
-- Image / visualization-heavy tasks.
-- Excluded from the current recommended set because the current effort focused
-  on non-image execution stability.
+### One-off historical logs from older runtime designs
+- Avoid using logs that came from earlier pre-family, pre-bounded, or pre-deterministic versions of the backend.
+- The current goal should be to reinforce the **current** backend contract, not older behavior.
 
-## Important Note for Fine-Tuning Data Construction
+### Cleanup-only artifact outputs
+- Old task artifacts and obsolete outputs are not useful training signals.
+- Prefer freshly validated logs or deterministic family examples.
 
-The goal should be to fine-tune on stable execution patterns, not on
-testcase-specific hardcoding.
+---
 
-The current backend is strongest when the model follows these patterns:
-- use helper-first execution paths
-- ground all logic in visible workbook schema
-- avoid forbidden raw file I/O APIs
-- produce either:
-  - a structured spreadsheet output, or
-  - a deterministic text answer when the task is diagnostic only
+## 7. Current Conclusion
 
-For that reason, the recommended fine-tuning examples should preserve:
-- the original user request
-- the grounded plan / understanding signal
-- the execution code or structured execution decision
-- the final expected spreadsheet/text result
+At the current project stage, the most valuable fine-tuning coverage is no longer simply “which benchmark tasks passed”.
 
-They should not preserve:
-- testcase-specific filename guessing
-- deprecated execution paths
-- older runtime behaviors that were later removed during stabilization
+The stronger view is:
+- benchmark tasks provide anchor examples
+- diagnose benchmark provides structured QA supervision
+- synthetic family regression defines abstract capability coverage
+
+This means the current fine-tuning story should be presented as:
+
+> the project now supports fine-tuning and distillation around reusable spreadsheet workflow families, concrete diagnose/QA behavior, and grounded helper-first execution, rather than only around fixed benchmark tasks.
+
+That is much more aligned with the current backend design and with the direction established in `v4.0`.
