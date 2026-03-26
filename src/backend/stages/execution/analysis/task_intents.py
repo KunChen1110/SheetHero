@@ -270,6 +270,7 @@ def is_fill_missing_request(user_question: str) -> bool:
         "fill missing",
         "fill the missing",
         "fill missing values",
+        "fill missing data",
         "complete missing",
         "populate missing",
         "use the reference",
@@ -286,6 +287,10 @@ def is_fill_missing_request(user_question: str) -> bool:
         "another table",
         "shared",
         "lookup",
+        "information from file",
+        "information from another file",
+        "using information from file",
+        "using information from another file",
     )
     return any(marker in q for marker in reference_markers)
 
