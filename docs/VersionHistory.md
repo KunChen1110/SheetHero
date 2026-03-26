@@ -9,7 +9,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 - `v1.x`: early usable backend and first major structural refactor
 - `v2.x`: data-quality handling and conversational pipeline integration
 - `v3.x`: local/offline LLM support and execution-stage hardening
-- `v4.x`: benchmark-driven diagnose improvement and family-based generalization
+- `v4.x`: benchmark-driven diagnose improvement, family-based generalization, and local-model upgrade validation
 
 ## Version Summary
 | Version | Date | Tag Commit | Main Theme |
@@ -20,6 +20,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 | `v3.0` | 2026-02-22 | `f2029e6a` | Local/offline LLM pipeline with bounded execution |
 | `v3.1` | 2026-03-10 | `3d53f617` | Execution architecture hardening and deterministic short answers |
 | `v4.0` | 2026-03-23 | `485d6da8` | Family-based spreadsheet pipeline with benchmark-driven validation |
+| `v4.1` | 2026-03-26 | `pending release commit` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
 
 ---
 
@@ -197,6 +198,36 @@ This version marks the most important architectural transition in the current pr
 
 ---
 
+## v4.1
+**Date:** 2026-03-26  
+**Tag:** `v4.1`  
+**Commit:** `pending release commit`
+
+### Stage Position
+This version marks the first validated local-model upgrade after the family-based architecture had already become stable.
+
+### Main Characteristics
+- Upgraded the recommended local LLM path from the previous `qwen2.5-coder:7b-instruct` workflow to `qwen3:8b`.
+- Kept the backend architecture unchanged and treated the model replacement as a controlled engineering upgrade rather than a new architecture rewrite.
+- Revalidated the upgraded local model against:
+  - diagnose benchmark
+  - family synthetic regression
+  - representative CLI tasks
+- Expanded natural-language detector coverage for reference-guided completion so the upgraded local model can more reliably route prompts like “fill any missing data ... using information from file ...” into the deterministic family path.
+
+### Engineering Improvements Achieved
+- Improved the practicality of local deployment by moving to a newer near-7B model without changing the surrounding backend architecture.
+- Confirmed that the upgraded model still works with the benchmark-driven diagnose/QA path.
+- Confirmed that the upgraded model still works with the abstract family-based regression layer.
+- Reduced the chance that natural prompt wording falls out of the `reference_guided_completion` family and drops back to free-form model handling.
+
+### Main Engineering Focus At This Stage
+- Upgrade the local model in a controlled way instead of changing it blindly.
+- Preserve benchmark and family-regression pass rates while improving the local-model baseline.
+- Keep the system architecture stable and treat model replacement as a validated runtime improvement.
+
+---
+
 ## Overall Evolution
 Across these versions, the backend evolved through four main stages:
 
@@ -211,5 +242,8 @@ Across these versions, the backend evolved through four main stages:
 
 4. **Family-based generalization**  
    The backend moved away from task-specific branching and toward abstract spreadsheet capability families supported by deterministic execution and dedicated regression testing.
+
+5. **Validated local-model refresh**  
+   After the family-based backend became stable, the local-model baseline was upgraded and revalidated using both benchmark and family-level CLI checks.
 
 This progression is the main engineering story of the backend and reflects how the system changed from an early task-solving prototype into a more systematic spreadsheet-processing platform.
