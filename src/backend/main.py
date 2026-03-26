@@ -70,7 +70,7 @@ def _handle_llm_command(service: SheetHeroService, line: str) -> None:
     if has_update:
         model_name = args.switch_offline
         if model_name == "__PROMPT__":
-            model_name = input("Model full name (e.g. qwen2.5-coder:7b-instruct): ").strip()
+            model_name = input("Model full name (e.g. qwen3:8b): ").strip()
         else:
             model_name = (model_name or "").strip()
 
