@@ -14,6 +14,7 @@ FRONTEND_DEPLOYMENT_CHOICES = [
     "gpt-4-32k",
     "gpt-4",
     "gpt-4o",
+    "qwen3:8b",
     "qwen2.5:7b-instruct",
     "qwen2.5-coder:7b-instruct",
     "qwen2.5-coder:14b-instruct",
