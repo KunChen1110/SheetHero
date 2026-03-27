@@ -1,77 +1,106 @@
 # SheetHero
 
----
-<img src="assets/excel_icon.png" alt="Excel Icon" width="64" height="64" align="left" style="margin-right: 20px;">
+<p align="center">
+  <img src="assets/logo.png" alt="SheetHero Logo" width="400"/>
+</p>
 
-SheetHero is a **tool to assist users in processing Excel data** using **natural language commands** created by **Team 29**.  
-The system uses a **Large Language Model (LLM)** to interpret the user’s prompt and translate it into a sequence of **atomic data manipulation commands** that can be executed automatically.
+<p align="center">
+  <strong>Natural Language Processing Interface for Automated Excel Data Manipulation</strong><br/>
+  <em>COMP2002 Group Project — Team 29</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React"/>
+  <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS"/>
+</p>
+
+---
+
+## Overview
+
+SheetHero is a desktop application that enables users to perform complex Excel data operations through natural language instructions. The system passes user-defined prompts to a Large Language Model (LLM), which interprets the intent and decomposes it into a sequence of atomic data manipulation commands executed programmatically against the target spreadsheet files.
+
+This approach removes the need for users to write scripts or possess domain knowledge of spreadsheet formula syntax, lowering the barrier to structured data analysis and transformation.
+
+---
 
 ## Features
 
+| Feature                 | Description                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| **File Ingestion**      | Upload `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, and `.csv` files via drag-and-drop or file picker          |
+| **Multi-file Merging**  | Consolidate data from multiple spreadsheets, including files with differing schemas                   |
+| **Analytical Querying** | Submit natural language queries across multiple files; receive justified, model-generated conclusions |
+| **Model Configuration** | Customise the underlying LLM deployment, iteration limits, and API endpoint                           |
+| **Execution Logging**   | Auto-generated Markdown logs documenting the agent's reasoning and decision trace per operation       |
+
 ---
-- `Upload` Excel file formats, which can be done via:
-  - `Drag & Drop` files/folders into the software.
-  - `Select` files/folders locally.
-- `Merge` content from several Excel files, including ones of different formats.
-- `Analyse` data from several Excel files, and make a justified conclusion.
-- `Configure` the model to user preference, (requires OpenAi API key) including:
-  - The `Deployment` choices of the model. (e.g., `gpt-4o-mini` and more)
-  - The `Max Turns` of the model, defining the max number of iterations SheetHero can perform
-  - The `Base URL`, optional custom url. Otherwise, uses [https://api.openai.com/v1](https://api.openai.com/v1)
-- Support for `.xlsx`,`.xlsm` `*.xltx` `*xltm` and `.csv` file extensions.
-- This program also provides auto-generated and detailed logs of the agents thought-process.
-  - These logs are generated after an analysis, provided via buttons inside the prompting-process.
 
 ## Preview
 
-SheetHero provides an interactive and easy-to-use guided user interface to support its AI-powered tools, 
+### File Upload
+
+> Users may add files via drag-and-drop or manual selection. An optional custom export directory may be specified for all generated outputs.
+
+<p align="center">
+  <img src="assets/Preview/preview_upload.gif" alt="Upload interface — drag-and-drop or file picker with configurable output directory" width="680"/>
+  <br/><em>Figure 1 — File upload and export directory configuration</em>
+</p>
 
 ---
-### Upload
 
-Use drag & drop or manual selection to add files.
-The export directory can also be customised for storing generated outputs.
+### Model Configuration
 
-![Gif of upload preview](assets/Preview/preview_upload.gif)
+> Before invoking the agent, users supply an OpenAI-compatible API key and optionally override the base URL, select a model deployment, and set a maximum turn limit to bound execution.
 
-### Configure
+<p align="center">
+  <img src="assets/Preview/preview_config.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="680"/>
+  <br/><em>Figure 2 — Model configuration panel</em>
+</p>
 
-Enter your OpenAI API key and configure:
-- **Base URL** (optional)
-- **Model Deployment**
-- **Max Turns**
+---
 
-![Screenshot of config preview](assets/Preview/preview_config.png)
+### Natural Language Prompting
 
-### Prompt
+> Users submit a plain-language instruction describing the desired transformation or analysis. SheetHero interprets the request, executes the appropriate operations, and surfaces the output file alongside an optional verbose log.
 
-Ask SheetHero to perform any analysis or transformation on the selected files.
-After processing, you can open the output or inspect the verbose log directly.
+<p align="center">
+  <img src="assets/Preview/preview_prompt.gif" alt="Prompt interface showing query input, agent execution, and output/log access" width="680"/>
+  <br/><em>Figure 3 — Prompt submission and agent execution</em>
+</p>
 
-![Gif of prompt preview](assets/Preview/preview_prompt.gif)
+---
 
+### Execution Log
 
-### Log Generation
+> Upon completion, SheetHero produces a structured `.md` log file capturing the agent's internal reasoning chain, tool calls, and intermediate decisions. This supports auditability and debugging of complex multi-step operations.
 
-SheetHero generates a structured `.md` file documenting the agent’s reasoning, decisions, and execution process.
+<p align="center">
+  <img src="assets/Preview/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
+  <br/><em>Figure 4 — Auto-generated execution log</em>
+</p>
 
-![Screenshot of upload preview 1](assets/Preview/preview_log.png)
-
-
+---
 
 ## Installation
 
----
-TO-DO remove dev branch on release
+### Prerequisites
 
-### Clone the repository
-```
-git clone --branch dev https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git
+- Python 3.9 or later
+- An OpenAI-compatible API key
+
+### Clone the Repository
+
+```bash
+git clone --branch main https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git
 cd team29_project
 ```
 
 ### Linux / macOS
-```
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -79,14 +108,39 @@ python main.py
 ```
 
 ### Windows
-```
+
+```bash
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
 
-## Changelog
+---
+
+## Configuration Reference
+
+| Parameter          | Required | Description                                                  |
+| ------------------ | -------- | ------------------------------------------------------------ |
+| `API Key`          | Yes      | OpenAI-compatible API key for model access                   |
+| `Base URL`         | No       | Custom API endpoint; defaults to `https://api.openai.com/v1` |
+| `Model Deployment` | Yes      | Target model identifier (e.g. `gpt-4o-mini`)                 |
+| `Max Turns`        | Yes      | Maximum number of agent iterations per request               |
 
 ---
-Changelog with all documented changes to the software is available [here](docs/Changelog.md)
+
+## Supported File Formats
+
+| Extension | Format                       |
+| --------- | ---------------------------- |
+| `.xlsx`   | Excel Workbook               |
+| `.xlsm`   | Excel Macro-Enabled Workbook |
+| `.xltx`   | Excel Template               |
+| `.xltm`   | Excel Macro-Enabled Template |
+| `.csv`    | Comma-Separated Values       |
+
+---
+
+## Changelog
+
+A full changelog of documented modifications is available in [`docs/Changelog.md`](docs/Changelog.md).
