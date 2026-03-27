@@ -42,10 +42,10 @@ This approach removes the need for users to write scripts or possess domain know
 
 ### File Upload
 
-> Users may add files via drag-and-drop or manual selection. An optional custom export directory may be specified for all generated outputs.
+> Users may add files via manual selection. An optional custom export directory may be specified for all generated outputs.
 
 <p align="center">
-  <img src="assets/Preview/preview_upload.gif" alt="Upload interface — drag-and-drop or file picker with configurable output directory" width="680"/>
+  <img src="assets/Preview/preview_file_upload.png" alt="Upload interface, file picker with configurable output directory" width="300"/>
   <br/><em>Figure 1 — File upload and export directory configuration</em>
 </p>
 
@@ -56,7 +56,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Before invoking the agent, users supply an OpenAI-compatible API key and optionally override the base URL, select a model deployment, and set a maximum turn limit to bound execution.
 
 <p align="center">
-  <img src="assets/Preview/preview_config.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="680"/>
+  <img src="assets/Preview/preview_settings.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="300"/>
   <br/><em>Figure 2 — Model configuration panel</em>
 </p>
 
@@ -67,7 +67,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Users submit a plain-language instruction describing the desired transformation or analysis. SheetHero interprets the request, executes the appropriate operations, and surfaces the output file alongside an optional verbose log.
 
 <p align="center">
-  <img src="assets/Preview/preview_prompt.gif" alt="Prompt interface showing query input, agent execution, and output/log access" width="680"/>
+  <img src="assets/Preview/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
   <br/><em>Figure 3 — Prompt submission and agent execution</em>
 </p>
 
@@ -109,7 +109,7 @@ python main.py
 
 ### Windows
 
-```bash
+```batch
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
