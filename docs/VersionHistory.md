@@ -9,7 +9,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 - `v1.x`: early usable backend and first major structural refactor
 - `v2.x`: data-quality handling and conversational pipeline integration
 - `v3.x`: local/offline LLM support and execution-stage hardening
-- `v4.x`: benchmark-driven diagnose improvement, family-based generalization, and local-model upgrade validation
+- `v4.x`: benchmark-driven diagnose improvement, family-based generalization, local-model upgrade validation, and output-mode polish
 
 ## Version Summary
 | Version | Date | Tag Commit | Main Theme |
@@ -20,7 +20,8 @@ The versioning here is not intended to describe every small commit or bug fix. I
 | `v3.0` | 2026-02-22 | `f2029e6a` | Local/offline LLM pipeline with bounded execution |
 | `v3.1` | 2026-03-10 | `3d53f617` | Execution architecture hardening and deterministic short answers |
 | `v4.0` | 2026-03-23 | `485d6da8` | Family-based spreadsheet pipeline with benchmark-driven validation |
-| `v4.1` | 2026-03-26 | `pending release commit` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
+| `v4.1` | 2026-03-26 | `88da932e` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
+| `v4.2` | 2026-03-27 | `pending release commit` | Text-only output mode and execution/validation modular cleanup |
 
 ---
 
@@ -201,7 +202,7 @@ This version marks the most important architectural transition in the current pr
 ## v4.1
 **Date:** 2026-03-26  
 **Tag:** `v4.1`  
-**Commit:** `pending release commit`
+**Commit:** `88da932e`
 
 ### Stage Position
 This version marks the first validated local-model upgrade after the family-based architecture had already become stable.
@@ -228,6 +229,40 @@ This version marks the first validated local-model upgrade after the family-base
 
 ---
 
+## v4.2
+**Date:** 2026-03-27  
+**Tag:** `v4.2`  
+**Commit:** `pending release commit`
+
+### Stage Position
+This version marks the first output-mode polish release after the local-model upgrade. The main goal of this iteration is to make the backend more usable for frontend integration while continuing the execution/validation modularization work.
+
+### Main Characteristics
+- Added a real backend-controlled `text` output mode while keeping `file` mode as the default.
+- Added structured response metadata so the frontend can distinguish file outputs from text-only outputs without guessing from message strings.
+- Ensured deterministic text-mode families no longer save workbooks to disk before rendering text previews.
+- Reorganized execution and validation into clearer submodules:
+  - execution family strategy files grouped under `stages/execution/family/`
+  - validation reorganized into `core/`, `checks/`, and `inspectors/`
+- Removed several leftover facades and migration-era wrappers after the family-based architecture became stable.
+
+### Engineering Improvements Achieved
+- The frontend can now cleanly decide whether to show a file button by reading:
+  - `result_kind`
+  - `has_output_file`
+  - `output_path`
+  - `truncated`
+- Text-only mode is now appropriate for scalar answers and preview-oriented spreadsheet results without forcing the user to open a generated workbook.
+- The backend no longer relies on “always generate file, then hide it later” for covered deterministic text-mode paths.
+- Execution and validation are easier to maintain because their main runtime files now act as orchestration layers rather than large mixed-logic modules.
+
+### Main Engineering Focus At This Stage
+- Improve product-facing output behavior without breaking the file-first spreadsheet workflow.
+- Make frontend/backend integration cleaner through explicit result typing.
+- Continue replacing transitional monolithic runtime logic with clearer execution and validation submodules.
+
+---
+
 ## Overall Evolution
 Across these versions, the backend evolved through four main stages:
 
@@ -245,5 +280,8 @@ Across these versions, the backend evolved through four main stages:
 
 5. **Validated local-model refresh**  
    After the family-based backend became stable, the local-model baseline was upgraded and revalidated using both benchmark and family-level CLI checks.
+
+6. **Output-mode and integration polish**  
+   After the local-model upgrade, the backend gained an explicit text-only result mode and clearer frontend-facing response metadata, while execution and validation were further modularized for maintainability.
 
 This progression is the main engineering story of the backend and reflects how the system changed from an early task-solving prototype into a more systematic spreadsheet-processing platform.
