@@ -1,6 +1,6 @@
 """Conversation history formatting for validation prompts."""
 
-from ..base.history_formatter import BaseHistoryFormatter
+from ...base.history_formatter import BaseHistoryFormatter
 
 
 class ValidationHistory(BaseHistoryFormatter):

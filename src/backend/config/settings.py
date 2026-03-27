@@ -18,7 +18,7 @@ class Config:
     total_token_budget: int = 5000
 
     # === Output ===
-    output_mode: str = "text"  # "text" or "file"
+    output_mode: str = "file"  # "text" or "file"
     output_file: Optional[str] = None
 
     # === Timeouts and Retries ===
@@ -75,6 +75,7 @@ class ConfigFactory:
             deployment=config.deployment,
             max_turns=config.max_turns,
             enable_diagnose=config.enable_diagnose,
+            output_mode=config.output_mode,
         )
 
     @staticmethod
