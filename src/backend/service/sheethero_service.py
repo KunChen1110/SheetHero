@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import csv
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+
+from openpyxl import load_workbook
 
 from ..agent import SheetHero
 from ..config.settings import Config
@@ -20,6 +24,10 @@ class DialogueMemory:
 
 class SheetHeroService:
     """Dialogue-level service: each new user task creates a new session."""
+
+    _TEXT_PREVIEW_MAX_ROWS = 20
+    _TEXT_PREVIEW_MAX_COLS = 8
+    _TEXT_PREVIEW_MAX_CELL_LEN = 40
 
     def __init__(self, config: Config, load_excel: bool = True) -> None:
         self.config = config
@@ -108,6 +116,14 @@ class SheetHeroService:
             self._session.ui_thought_cursor = len(self._session.ui_thoughts)
             if new_thoughts:
                 response["ui_thoughts"] = new_thoughts
+        if response.get("type") == "final":
+            self._apply_text_output_mode(response)
+            result_meta = self._build_result_meta(response)
+            if result_meta:
+                response.update(result_meta)
+                result = response.get("result")
+                if isinstance(result, dict):
+                    result["result_meta"] = result_meta
         if response.get("type") == "final" and not response.get("message"):
             response["message"] = self._extract_message(response)
         self._cache_session_memory()
@@ -160,6 +176,9 @@ class SheetHeroService:
     def _extract_message(response: Dict[str, object]) -> str:
         result = response.get("result")
         if isinstance(result, dict):
+            rendered_text = result.get("rendered_text")
+            if rendered_text is not None:
+                return str(rendered_text)
             short_answer = result.get("short_answer")
             if short_answer is not None:
                 return str(short_answer)
@@ -167,3 +186,190 @@ class SheetHeroService:
             if final_answer is not None:
                 return str(final_answer)
         return ""
+
+    @staticmethod
+    def _looks_like_file_path(value: object) -> bool:
+        text = str(value or "").strip().lower()
+        return text.endswith((".xlsx", ".xls", ".csv"))
+
+    @classmethod
+    def _compact_cell(cls, value: object) -> str:
+        text = " ".join(str(value if value is not None else "").split())
+        if len(text) > cls._TEXT_PREVIEW_MAX_CELL_LEN:
+            return text[: cls._TEXT_PREVIEW_MAX_CELL_LEN - 1] + "…"
+        return text
+
+    @classmethod
+    def _render_tabular_preview(cls, rows: list[list[object]]) -> tuple[str, bool, int, int]:
+        non_empty_rows = [row for row in rows if any(cell not in (None, "") for cell in row)]
+        if not non_empty_rows:
+            return "", False, 0, 0
+
+        body_rows = non_empty_rows[1:]
+        truncated = len(body_rows) > cls._TEXT_PREVIEW_MAX_ROWS
+        preview_body = body_rows[: cls._TEXT_PREVIEW_MAX_ROWS]
+
+        def _effective_width(row: list[object]) -> int:
+            width = 0
+            for idx, cell in enumerate(row, start=1):
+                if cell not in (None, ""):
+                    width = idx
+            return width
+
+        observed_rows = [non_empty_rows[0]] + preview_body
+        effective_width = max((_effective_width(row) for row in observed_rows), default=0)
+        visible_cols = min(max(effective_width, 1), cls._TEXT_PREVIEW_MAX_COLS)
+
+        header = [cls._compact_cell(cell) for cell in non_empty_rows[0][:visible_cols]]
+        col_truncated = effective_width > cls._TEXT_PREVIEW_MAX_COLS
+
+        lines = [" | ".join(header + (["..."] if col_truncated else []))]
+        for row in preview_body:
+            compact_row = [cls._compact_cell(cell) for cell in row[:visible_cols]]
+            if col_truncated:
+                compact_row.append("...")
+            lines.append(" | ".join(compact_row))
+
+        return "\n".join(lines), truncated or col_truncated, len(preview_body), len(body_rows)
+
+    @classmethod
+    def _extract_output_rows(cls, output_path: str) -> tuple[list[list[object]], str]:
+        lowered = output_path.lower()
+        if lowered.endswith(".csv"):
+            with open(output_path, "r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.reader(handle)
+                rows = [row for row in reader]
+            return rows, "Output"
+
+        workbook = load_workbook(output_path, data_only=True)
+        for sheet in workbook.worksheets:
+            rows: list[list[object]] = []
+            for row in sheet.iter_rows(values_only=True):
+                row_values = list(row)
+                if any(cell not in (None, "") for cell in row_values):
+                    rows.append(row_values)
+            if rows:
+                return rows, sheet.title
+        return [], ""
+
+    @classmethod
+    def _build_text_rendering_from_file(cls, output_path: str) -> Optional[Dict[str, object]]:
+        if not output_path or not os.path.exists(output_path):
+            return None
+        try:
+            rows, sheet_name = cls._extract_output_rows(output_path)
+        except Exception:
+            return None
+
+        preview_text, truncated, preview_rows, total_rows = cls._render_tabular_preview(rows)
+        if not preview_text:
+            return None
+
+        intro = f"Text preview of generated output ({sheet_name or 'Output'}):"
+        note = ""
+        if truncated:
+            note = (
+                f"\n\nPreview truncated to the first {cls._TEXT_PREVIEW_MAX_ROWS} rows"
+                f" and {cls._TEXT_PREVIEW_MAX_COLS} columns where needed. "
+                "Please enable file mode for the full output."
+            )
+        return {
+            "rendered_text": f"{intro}\n{preview_text}{note}",
+            "truncated": truncated,
+            "preview_rows": preview_rows,
+            "total_rows": total_rows,
+        }
+
+    def _apply_text_output_mode(self, response: Dict[str, object]) -> None:
+        if (self.config.output_mode or "text").strip().lower() != "text":
+            return
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return
+
+        final_answer = result.get("final_answer")
+        if not self._looks_like_file_path(final_answer):
+            existing_rendered = result.get("rendered_text")
+            if existing_rendered is not None:
+                result["rendered_text"] = existing_rendered
+                result["truncated"] = bool(result.get("truncated", False))
+                result["preview_rows"] = result.get("preview_rows")
+                result["total_rows"] = result.get("total_rows")
+            else:
+                result["rendered_text"] = result.get("short_answer") or final_answer or ""
+                result["truncated"] = False
+                result["preview_rows"] = None
+                result["total_rows"] = None
+            return
+
+        output_path = str(final_answer).strip()
+        rendered = self._build_text_rendering_from_file(output_path)
+        fallback = (
+            (result.get("short_answer") or "").strip()
+            or "Structured output was generated. Please enable file mode for the full result."
+        )
+
+        if rendered is None:
+            rendered_text = fallback
+            truncated = False
+            preview_rows = None
+            total_rows = None
+        else:
+            rendered_text = str(rendered["rendered_text"])
+            truncated = bool(rendered["truncated"])
+            preview_rows = rendered["preview_rows"]
+            total_rows = rendered["total_rows"]
+
+        result["raw_final_answer"] = output_path
+        result["final_answer"] = rendered_text
+        result["short_answer"] = None
+        result["rendered_text"] = rendered_text
+        result["truncated"] = truncated
+        result["preview_rows"] = preview_rows
+        result["total_rows"] = total_rows
+
+        if not bool(result.get("edited_existing_file")) and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+
+    @classmethod
+    def _build_result_meta(cls, response: Dict[str, object]) -> Dict[str, object]:
+        if response.get("type") != "final":
+            return {}
+
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return {}
+
+        final_answer = result.get("final_answer")
+        raw_final_answer = result.get("raw_final_answer")
+        source_answer = raw_final_answer if raw_final_answer is not None else final_answer
+        text_mode = result.get("rendered_text") is not None or (not cls._looks_like_file_path(source_answer))
+
+        if not text_mode and cls._looks_like_file_path(source_answer):
+            output_path = str(source_answer).strip()
+            has_output_file = bool(output_path) and os.path.exists(output_path)
+            edited_existing_file = bool(result.get("edited_existing_file"))
+            return {
+                "result_kind": "file",
+                "has_output_file": has_output_file,
+                "file_created": has_output_file and not edited_existing_file,
+                "output_path": output_path if has_output_file else None,
+                "output_dir": os.path.dirname(output_path) if has_output_file else None,
+                "truncated": False,
+                "preview_rows": None,
+                "total_rows": None,
+            }
+
+        return {
+            "result_kind": "text",
+            "has_output_file": False,
+            "file_created": False,
+            "output_path": None,
+            "output_dir": None,
+            "truncated": bool(result.get("truncated", False)),
+            "preview_rows": result.get("preview_rows"),
+            "total_rows": result.get("total_rows"),
+        }
