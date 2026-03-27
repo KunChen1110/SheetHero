@@ -3,35 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from .prompt_texts import (_UNDERSTANDING_PROMPT,
-                           _QUALITY_DIAG_PROMPT,
-                           _UNDERSTANDING_CONTEXT_MATCH_PROMPT,
-                           _DIAGNOSE_CODE_PROMPT,
-                           _DIAGNOSE_PROMPT,
-                           _DIAGNOSE_PRIORITIZE_PROMPT,
-                           _DIAGNOSE_ROUTER_PROMPT,
-                           _ENHANCED_UNDERSTANDING_PROMPT,
-                           _EXECUTION_HELPER_SECTIONS_PART1,
-                           _EXECUTION_SYSTEM_INTRO,
-                           _EXECUTION_HELPER_SECTIONS_PART2,
-                           _EXECUTION_USER_PROMPT,
-                           _QA_PROMPT,
-                           _QA_QUESTION_PROMPT,
-                           _QA_ACTIONS_PROMPT,
-                           _QA_MATCH_PROMPT,
-                           _QA_INSTRUCTION_PROMPT,
-                           _QA_DECISION_PROMPT,
-                           _VALIDATION_PROMPT,
-                           _EXECUTION_USER_PROMPT,
-                           _CLEANING_CODE_PROMPT,
-                           _INTERACT_NEEDS_SPREADSHEET_PROMPT,
-                           _INTERACT_CONTEXT_MATCH_PROMPT,
-                           _INTERACT_CONTEXT_SUMMARY_PROMPT)
+from .prompt_texts_online import (
+    _UNDERSTANDING_PROMPT,
+    _QUALITY_DIAG_PROMPT,
+    _UNDERSTANDING_CONTEXT_MATCH_PROMPT,
+    _DIAGNOSE_CODE_PROMPT,
+    _DIAGNOSE_PROMPT,
+    _DIAGNOSE_PRIORITIZE_PROMPT,
+    _DIAGNOSE_ROUTER_PROMPT,
+    _ENHANCED_UNDERSTANDING_PROMPT,
+    _EXECUTION_HELPER_SECTIONS_PART1,
+    _EXECUTION_SYSTEM_INTRO,
+    _EXECUTION_HELPER_SECTIONS_PART2,
+    _EXECUTION_USER_PROMPT,
+    _QA_PROMPT,
+    _QA_QUESTION_PROMPT,
+    _QA_ACTIONS_PROMPT,
+    _QA_MATCH_PROMPT,
+    _QA_INSTRUCTION_PROMPT,
+    _QA_DECISION_PROMPT,
+    _VALIDATION_PROMPT,
+    _CLEANING_CODE_PROMPT,
+    _INTERACT_NEEDS_SPREADSHEET_PROMPT,
+    _INTERACT_CONTEXT_MATCH_PROMPT,
+    _INTERACT_CONTEXT_SUMMARY_PROMPT,
+)
+from .prompt_texts_offline import (
+    _UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE,
+)
 
 
 @dataclass(frozen=True)
 class UnderstandingPrompts:
     prompt: str = _UNDERSTANDING_PROMPT
+    verify_before_infer_offline: str = _UNDERSTANDING_VERIFY_BEFORE_INFER_OFFLINE
     enhanced_prompt: str = _ENHANCED_UNDERSTANDING_PROMPT
     quality_prompt: str = _QUALITY_DIAG_PROMPT
     diagnose_code_prompt: str = _DIAGNOSE_CODE_PROMPT

@@ -1,15 +1,18 @@
 import argparse
 import json
+import re
+import runpy
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .config.settings import Config
+from .diagnose_benchmark import run_diagnose_benchmark
 from .service.sheethero_service import SheetHeroService
 from .service.stream_dialogue_driver import StreamDialogueDriver
 
-
+# CLI backend debug mode: python3 -m src.backend.main
 @dataclass
 class InputBuffer:
     excel_paths: list[str] = field(default_factory=list)
@@ -21,6 +24,65 @@ class InputBuffer:
 
     def ready(self) -> bool:
         return self.prompt is not None
+
+
+def _mask_key(api_key: str | None) -> str:
+    key = (api_key or "").strip()
+    if not key:
+        return "(empty)"
+    if len(key) <= 8:
+        return "***"
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def _print_llm_config(config: Config) -> None:
+    base_url = (config.base_url or "").strip() or "(OpenAI default)"
+    print(
+        "[llm config] "
+        f"deployment={config.deployment}, "
+        f"base_url={base_url}, "
+        f"api_key={_mask_key(config.api_key)}"
+    )
+
+
+def _handle_llm_command(service: SheetHeroService, line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!llm", add_help=False)
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("--switch--offline", dest="switch_offline",
+                        nargs="?", const="__PROMPT__", default=None)
+
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print(
+            "Error: usage `!llm --show` or "
+            "`!llm --switch--offline <model_full_name>`"
+        )
+        return
+
+    has_update = args.switch_offline is not None
+    if args.show:
+        _print_llm_config(service.config)
+    if not args.show and not has_update:
+        print("Error: usage `!llm --show` or `!llm --switch--offline <model_full_name>`")
+        return
+
+    if has_update:
+        model_name = args.switch_offline
+        if model_name == "__PROMPT__":
+            model_name = input("Model full name (e.g. qwen3:8b): ").strip()
+        else:
+            model_name = (model_name or "").strip()
+
+        if not model_name:
+            print("Error: model full name is required.")
+            return
+
+        service.config.api_key = ""
+        service.config.base_url = "http://localhost:11434/v1"
+        service.config.deployment = model_name
+        print("[llm switched] offline mode enabled.")
+        _print_llm_config(service.config)
 
 
 def _handle_path(buffer: InputBuffer, line: str) -> None:
@@ -122,7 +184,11 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
 
             if event_type == "clarification":
                 question = event.get("message") or "Please clarify your request."
-                user_reply = input(f"Agent: {question}\nYou: ")
+                details = str(event.get("details_markdown") or "").strip()
+                if details:
+                    user_reply = input(f"Agent: {question}\n\n{details}\nYou: ")
+                else:
+                    user_reply = input(f"Agent: {question}\nYou: ")
                 stream = driver.reply(user_reply)
                 break  # restart loop with new stream
 
@@ -138,16 +204,49 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
             return
 
 
+def _build_task_output_filename(task: dict[str, Any], index: int) -> str:
+    task_id = str(task.get("task_id") or f"task{index}")
+    normalized = re.sub(r"[^A-Za-z0-9_-]+", "", task_id).lower()
+    if not normalized:
+        normalized = f"task{index}"
+    return f"{normalized}_output.xlsx"
+
+
+def _resolve_dataset_output_path(
+    root: Path,
+    task: dict[str, Any],
+    index: int,
+    output_path_arg: str | None,
+) -> Path:
+    default_output_dir = root / "artifacts" / "output"
+    filename = _build_task_output_filename(task, index)
+
+    if output_path_arg is None or output_path_arg.strip() == "":
+        return (default_output_dir / filename).resolve()
+
+    candidate = Path(output_path_arg).expanduser()
+    if not candidate.is_absolute():
+        candidate = default_output_dir / candidate
+
+    if candidate.suffix.lower() == ".xlsx":
+        return candidate.resolve()
+    return (candidate / filename).resolve()
+
+
 
 def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line: str) -> None:
     parser = argparse.ArgumentParser(prog="!dataset", add_help=False)
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--index", type=int)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--output_path", type=str, default=None)
     try:
         args = parser.parse_args(shlex.split(line)[1:])
     except SystemExit:
-        print("Error: usage `!dataset --list` or `!dataset --index N [--prepare]`")
+        print(
+            "Error: usage `!dataset --list` or "
+            "`!dataset --index N [--prepare] [--output_path PATH]`"
+        )
         return
 
     if args.list:
@@ -169,8 +268,72 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
         print(f"Error: {e}")
         return
 
+    if loaded:
+        try:
+            tasks, _ = _load_tasks()
+            task = tasks[args.index - 1]
+            root = Path(__file__).resolve().parents[2]
+            resolved_output = _resolve_dataset_output_path(
+                root=root,
+                task=task,
+                index=args.index,
+                output_path_arg=args.output_path
+            )
+            service.config.output_mode = "file"
+            service.config.output_file = str(resolved_output)
+            print(f"[output path set] {resolved_output}")
+        except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
+            print(f"Error: failed to resolve output path: {e}")
+            return
+
     if loaded and not args.prepare and buffer.ready():
         _execute_turn(service, buffer)
+
+
+def _handle_diagnose_benchmark_command(line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!DiagnosebenchmarkTest", add_help=False)
+    parser.add_argument(
+        "split",
+        nargs="?",
+        choices=["small", "median", "all"],
+        default="small",
+    )
+    parser.add_argument("--limit", type=int, default=0)
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print(
+            "Error: usage `!DiagnosebenchmarkTest` or "
+            "`!DiagnosebenchmarkTest small|median|all [--limit N]`"
+        )
+        return
+
+    split_map = {
+        "small": "dataset_small",
+        "median": "dataset_median",
+        "all": "all",
+    }
+    resolved_split = split_map[args.split]
+    print(f"[diagnose benchmark] running split={resolved_split}...")
+    result = run_diagnose_benchmark(split=resolved_split, limit=args.limit)
+    print(f"[diagnose benchmark] report={result['report_path']}")
+    print(
+        "[diagnose benchmark] "
+        f"cases={result['cases_evaluated']}, "
+        f"loose_matches={result['matched']}/{result['expected_total']}"
+    )
+
+
+def _handle_family_synthetic_command() -> None:
+    root = Path(__file__).resolve().parents[2]
+    script_path = root / "test" / "utils" / "run_family_synthetic_regression.py"
+    print("[family synthetic] running abstract family regression...")
+    try:
+        runpy.run_path(str(script_path), run_name="__main__")
+        print("[family synthetic] passed")
+        return
+    except Exception as exc:
+        print(f"[family synthetic] failed: {exc}")
 
 
 def main() -> None:
@@ -188,7 +351,15 @@ def main() -> None:
     print("Type `exit` to quit.")
     print("Type `run` to execute the current turn.")
     print("Type `!dataset --list` to list dataset tasks.")
-    print("Type `!dataset --index N` to load and run a dataset task.")
+    print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
+    print("Type `!llm --show` to view active model endpoint settings.")
+    print("Type `!llm --switch--offline <model_full_name>` to switch to local LLM.")
+    print("Type `!DiagnosebenchmarkTest` to run the small diagnose benchmark.")
+    print("Type `!DiagnosebenchmarkTest median` to run the medium diagnose benchmark.")
+    print("Type `!DiagnosebenchmarkTest all` to run all diagnose benchmark cases.")
+    print("Type `!DiagnosebenchmarkTest --limit N` to run only the first N benchmark cases.")
+    print("Type `!FamilySyntheticTest` to run the abstract family synthetic regression.")
+    _print_llm_config(config)
 
     while True:
         line = input(">>> ").strip()
@@ -207,6 +378,18 @@ def main() -> None:
 
         if line.startswith("!dataset"):
             _handle_dataset_command(service, buffer, line)
+            continue
+
+        if line.lower().startswith("!diagnosebenchmarktest"):
+            _handle_diagnose_benchmark_command(line)
+            continue
+
+        if line.lower().startswith("!familysynthetictest"):
+            _handle_family_synthetic_command()
+            continue
+
+        if line.startswith("!llm"):
+            _handle_llm_command(service, line)
             continue
 
         if line == "run":
