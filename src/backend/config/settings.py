@@ -1,6 +1,8 @@
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
+from .frontend_schema import build_frontend_defaults, build_frontend_schema
+
 
 @dataclass
 class Config:
@@ -10,7 +12,8 @@ class Config:
     deployment: str = "gpt-4o-mini"
 
     # === Processing Configuration ===
-    max_turns: int = 3
+    max_turns: int = 9
+    enable_diagnose: bool = True
     max_qa_rounds: int = 30
     total_token_budget: int = 5000
 
@@ -20,7 +23,7 @@ class Config:
 
     # === Timeouts and Retries ===
     max_retries: int = 3
-    timeout: int = 30
+    timeout: int = 120  # seconds per LLM request (Ollama/local can be slow; avoid infinite hang)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert this config instance to dictionary for UI rendering."""
@@ -64,3 +67,29 @@ class ConfigFactory:
     @staticmethod
     def get_default_settings_dict() -> Dict[str, Any]:
         return Config().to_dict()
+
+    @staticmethod
+    def get_frontend_defaults() -> Dict[str, Any]:
+        config = Config()
+        return build_frontend_defaults(
+            deployment=config.deployment,
+            max_turns=config.max_turns,
+            enable_diagnose=config.enable_diagnose,
+        )
+
+    @staticmethod
+    def get_frontend_schema() -> Dict[str, Dict[str, Any]]:
+        defaults = ConfigFactory.get_frontend_defaults()
+        config = Config()
+        return build_frontend_schema(
+            defaults,
+            timeout=config.timeout,
+            max_qa_rounds=config.max_qa_rounds,
+            total_token_budget=config.total_token_budget,
+            max_retries=config.max_retries,
+        )
+
+    @staticmethod
+    def get_frontend_editable_keys() -> list[str]:
+        schema = ConfigFactory.get_frontend_schema()
+        return [key for key, meta in schema.items() if meta.get("frontend_editable")]

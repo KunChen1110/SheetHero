@@ -15,6 +15,7 @@ class SheetHeroSession:
 
     # temporary understanding from the agent
     understanding: Optional[str] = None
+    spreadsheet_summary: Optional[str] = None
 
     # understanding of context (stable)
     context_understanding: Optional[str] = None
@@ -29,7 +30,6 @@ class SheetHeroSession:
     ui_thought_cursor: int = 0
     pending_execution_result: Optional[Dict[str, Any]] = None
     pending_execution_context: Optional[str] = None
-
-    def get_active_workbooks(self) -> Optional[Dict[str, Any]]:
-        """Return task-bound workbook facts."""
-        return self.current_workbooks
+    execution_validation_cycles: int = 0
+    consecutive_no_success_execution_cycles: int = 0
+    qa_policy_notes: list[str] = field(default_factory=list)

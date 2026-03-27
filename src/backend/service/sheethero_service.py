@@ -147,7 +147,7 @@ class SheetHeroService:
         context = (self._session.context_understanding or "").strip()
         if context:
             self._memory.last_context_understanding = context
-        active = self._session.get_active_workbooks()
+        active = self._session.current_workbooks
         if active:
             self._memory.last_workbooks = active
 
@@ -160,6 +160,9 @@ class SheetHeroService:
     def _extract_message(response: Dict[str, object]) -> str:
         result = response.get("result")
         if isinstance(result, dict):
+            short_answer = result.get("short_answer")
+            if short_answer is not None:
+                return str(short_answer)
             final_answer = result.get("final_answer")
             if final_answer is not None:
                 return str(final_answer)

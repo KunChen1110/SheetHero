@@ -1,5 +1,6 @@
 """Orchestration loop for iterative SheetHero execution."""
 
+import os
 import time
 from typing import Any, Dict
 
@@ -13,12 +14,40 @@ logger = LoggerRegistry.setup_logger(__name__)
 class AgentRunner:
     """Runs the Understanding -> Execution -> Validation loop."""
 
-    def __init__(self, max_turns: int, progress_logger=None, token_budget: int = 50000):
+    def __init__(
+        self,
+        max_turns: int,
+        progress_logger=None,
+        token_budget: int = 50000,
+        max_iterations: int | None = None,
+        execution_turn_budget: int | None = None,
+    ):
         self.max_turns = max_turns
         self.progress_logger = progress_logger
         self.token_budget = token_budget
+        env_max_iterations = os.getenv("SHEETHERO_MAX_EXEC_VALIDATE_CYCLES")
+        env_turn_budget = os.getenv("SHEETHERO_EXECUTION_TURN_BUDGET")
+        if max_iterations is None:
+            if env_max_iterations:
+                try:
+                    max_iterations = int(env_max_iterations)
+                except ValueError:
+                    max_iterations = None
+            if max_iterations is None:
+                max_iterations = min(max_turns, 4)
+        if execution_turn_budget is None:
+            if env_turn_budget:
+                try:
+                    execution_turn_budget = int(env_turn_budget)
+                except ValueError:
+                    execution_turn_budget = None
+            if execution_turn_budget is None:
+                execution_turn_budget = min(max_turns, 5)
+        self.max_iterations = max(1, int(max_iterations))
+        self.execution_turn_budget = max(1, int(execution_turn_budget))
 
-    def run(self, user_question: str, understanding_module, execution_module, validation_module) -> Dict[str, Any]:
+    def run(self, user_question: str, understanding_module, execution_module, validation_module,
+            final_response_module=None) -> Dict[str, Any]:
         logger.info("Starting iterative three-stage analysis")
         if self.progress_logger:
             self.progress_logger.log(
@@ -61,14 +90,15 @@ class AgentRunner:
 
             overall_success = False
             final_answer = ""
+            short_answer = ""
             confidence_score = 0.0
             validation_passed = False
 
-            for iteration in range(self.max_turns):
-                logger.info(f"Starting iteration {iteration + 1}/{self.max_turns}")
+            for iteration in range(self.max_iterations):
+                logger.info(f"Starting iteration {iteration + 1}/{self.max_iterations}")
                 if self.progress_logger:
                     self.progress_logger.log(
-                        f"\n🔄 [ITERATION {iteration + 1}/{self.max_turns}] EXECUTE-VALIDATE CYCLE",
+                        f"\n🔄 [ITERATION {iteration + 1}/{self.max_iterations}] EXECUTE-VALIDATE CYCLE",
                         to_terminal=False
                     )
                     self.progress_logger.log("=" * 60, to_terminal=False)
@@ -91,7 +121,8 @@ class AgentRunner:
                     last_validation = all_validation_results[-1]
                     enhanced_understanding = understanding_module.enhance(
                         understanding_output,
-                        last_validation
+                        last_validation,
+                        user_question=user_question,
                     )
                 else:
                     enhanced_understanding = understanding_output
@@ -99,7 +130,7 @@ class AgentRunner:
                 execution_result = execution_module.run(
                     understanding_output=enhanced_understanding,
                     user_question=user_question,
-                    max_turns=self.max_turns
+                    max_turns=self.execution_turn_budget
                 )
                 execution_duration = time.time() - execution_start_time
                 all_execution_results.append(execution_result)
@@ -161,6 +192,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = validation_result.get('verified_answer', execution_result['answer'])
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = True
                     confidence_score = validation_result['confidence_score']
                     validation_passed = True
@@ -174,6 +211,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = execution_result['answer']
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = False
                     confidence_score = validation_result['confidence_score']
                     validation_passed = False
@@ -195,7 +238,7 @@ class AgentRunner:
                             f"\n**Improvement Feedback:**\n```\n{validation_result['improvement_feedback']}\n```\n"
                         )
 
-                if iteration == self.max_turns - 1:
+                if iteration == self.max_iterations - 1:
                     logger.warning("Reached maximum iterations without validation")
                     if self.progress_logger:
                         self.progress_logger.log(
@@ -203,6 +246,12 @@ class AgentRunner:
                             to_terminal=False
                         )
                     final_answer = execution_result['answer']
+                    short_answer = final_response_module.run(
+                        user_question=user_question,
+                        final_answer=final_answer,
+                        validation_result=validation_result,
+                        execution_result=execution_result,
+                    ) if final_response_module else final_answer
                     overall_success = False
                     confidence_score = validation_result['confidence_score']
                     validation_passed = False
@@ -212,6 +261,7 @@ class AgentRunner:
                 all_validation_results=all_validation_results,
                 overall_start_time=overall_start_time,
                 final_answer=final_answer,
+                short_answer=short_answer,
                 overall_success=overall_success,
                 confidence_score=confidence_score,
                 validation_passed=validation_passed,
