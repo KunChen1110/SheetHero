@@ -1,7 +1,7 @@
 # SheetHero
 
 <p align="center">
-  <img src="assets/logo.png" alt="SheetHero Logo" width="400"/>
+  <img src="assets/README/logo.png" alt="SheetHero Logo" width="400"/>
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Users may add files via manual selection. An optional custom export directory may be specified for all generated outputs.
 
 <p align="center">
-  <img src="assets/Preview/preview_file_upload.png" alt="Upload interface, file picker with configurable output directory" width="300"/>
+  <img src="assets/README/preview_file_upload.png" alt="Upload interface, file picker with configurable output directory" width="300"/>
   <br/><em>Figure 1 — File upload and export directory configuration</em>
 </p>
 
@@ -56,7 +56,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Before invoking the agent, users supply an OpenAI-compatible API key and optionally override the base URL, select a model deployment, and set a maximum turn limit to bound execution.
 
 <p align="center">
-  <img src="assets/Preview/preview_settings.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="300"/>
+  <img src="assets/README/preview_settings.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="300"/>
   <br/><em>Figure 2 — Model configuration panel</em>
 </p>
 
@@ -67,7 +67,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Users submit a plain-language instruction describing the desired transformation or analysis. SheetHero interprets the request, executes the appropriate operations, and surfaces the output file alongside an optional verbose log.
 
 <p align="center">
-  <img src="assets/Preview/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
+  <img src="assets/README/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
   <br/><em>Figure 3 — Prompt submission and agent execution</em>
 </p>
 
@@ -78,7 +78,7 @@ This approach removes the need for users to write scripts or possess domain know
 > Upon completion, SheetHero produces a structured `.md` log file capturing the agent's internal reasoning chain, tool calls, and intermediate decisions. This supports auditability and debugging of complex multi-step operations.
 
 <p align="center">
-  <img src="assets/Preview/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
+  <img src="assets/README/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
   <br/><em>Figure 4 — Auto-generated execution log</em>
 </p>
 
