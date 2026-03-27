@@ -4,8 +4,8 @@ import json
 import re
 from typing import Any, Dict
 
-from ...log.logger_registry import LoggerRegistry
-from ..base.response_parser import BaseResponseParser
+from ....log.logger_registry import LoggerRegistry
+from ...base.response_parser import BaseResponseParser
 
 logger = LoggerRegistry.setup_logger(__name__)
 

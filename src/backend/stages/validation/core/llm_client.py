@@ -4,8 +4,8 @@ import os
 import time
 import random
 
-from ...log.logger_registry import LoggerRegistry
-from ..base.llm_client import BaseLLMClient
+from ....log.logger_registry import LoggerRegistry
+from ...base.llm_client import BaseLLMClient
 
 logger = LoggerRegistry.setup_logger(__name__)
 

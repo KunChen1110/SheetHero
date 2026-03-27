@@ -34,7 +34,6 @@ from ..spreadsheet.tools import (
     build_room_format_report,
     build_capacity_constrained_allocation_report,
     build_relational_assignment_schedule_report,
-    build_tutor_meeting_schedule_report,
     summarize_numeric_column,
     build_region_growth_analysis,
     build_market_share_shipment_report,
@@ -198,9 +197,6 @@ class SpreadsheetNamespace:
                 w, range_ref=range_ref
             ),
             build_relational_assignment_schedule_report=lambda range_ref="A1:Z200": build_relational_assignment_schedule_report(
-                w, range_ref=range_ref
-            ),
-            build_tutor_meeting_schedule_report=lambda range_ref="A1:Z200": build_tutor_meeting_schedule_report(
                 w, range_ref=range_ref
             ),
             summarize_numeric_column=summarize_numeric_column,
