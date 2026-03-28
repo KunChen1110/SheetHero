@@ -1,9 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { fileURLToPath } from "url";
+import { spawn, ChildProcess } from "child_process";
 import path from "path";
+import http from "http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let backendProcess: ChildProcess | null = null;
 
 // Is exposed through the preload files,
 // It is used for opening file dialog with specific file extensions
@@ -52,12 +56,62 @@ function createWindow() {
   });
 
   win.setMenuBarVisibility(false);
-  win.loadURL("http://localhost:3480");
-  // win.loadFile(path.join(__dirname, "../renderer/dist/index.html"));
+
+  if (app.isPackaged) {
+    win.loadFile(path.join(__dirname, "../../dist/renderer/index.html"));
+  } else {
+    win.loadURL("http://localhost:3480");
+  }
+}
+
+
+function waitForBackend(retries = 20): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const attempt = () => {
+      http.get("http://localhost:8000/docs", (res) => {
+        if (res.statusCode === 200) resolve();
+        else retry();
+      }).on("error", retry);
+    };
+    const retry = () => {
+      if (retries-- > 0) setTimeout(attempt, 500);
+      else reject(new Error("Backend failed to start"));
+    };
+    attempt();
+  });
+}
+
+
+
+function getBackendPath(): string {
+  if (app.isPackaged) {
+    const binaryName = process.platform === "win32"
+      ? "sheet-hero-backend.exe"
+      : "sheet-hero-backend";
+    return path.join(process.resourcesPath, binaryName);
+  }
+  return "";
+}
+
+
+function startBackend() {
+  if (app.isPackaged) {
+    const backendPath = getBackendPath();
+    backendProcess = spawn(backendPath, [], { stdio: "ignore" });
+  }
 }
 
 // Creates the main window when the app is ready
-app.on("ready", createWindow);
+  app.on("ready", async () => {
+    startBackend();
+  if (app.isPackaged) await waitForBackend();
+  createWindow();
+});
+
+
+app.on("will-quit", () => {
+  if (backendProcess) backendProcess.kill();
+});
 
 // Creates the main window when the app is clicked and there are no other windows open
 app.on("activate", () => {
