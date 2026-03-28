@@ -572,12 +572,27 @@ class SheetHero:
             execution_result=execution_result,
         )
 
+        rendered_text = None
+        truncated = False
+        preview_rows = None
+        total_rows = None
+        if execution_result.get("_text_preview_only"):
+            rendered_text = final_answer
+            truncated = bool(execution_result.get("_text_preview_truncated", False))
+            preview_rows = execution_result.get("_text_preview_rows")
+            total_rows = execution_result.get("_text_total_rows")
+            short_answer = None
+
         session.result = {
             "execution_result": execution_result,
             "validation_result": validation_result,
             "final_answer": final_answer,
             "short_answer": short_answer,
             "edited_existing_file": self._output_existed_before,
+            "rendered_text": rendered_text,
+            "truncated": truncated,
+            "preview_rows": preview_rows,
+            "total_rows": total_rows,
         }
 
         extracted_context = ContextExtractor.extract_workbook_purpose_domain(

@@ -3,6 +3,7 @@ export interface IElectronAPI {
   selectFiles: () => Promise<string[]>;
   selectDirectory: () => Promise<string | null>;
   getDocumentsPath: () => Promise<string>;
+  openPath: (filePath: string) => Promise<void>;
 }
 
 declare global {

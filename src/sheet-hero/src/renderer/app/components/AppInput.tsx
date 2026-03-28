@@ -6,12 +6,16 @@ interface AppInputProperties {
   onSendMessage: (message: string) => void;
   hasApiKey?: boolean;
   isTyping?: boolean;
+    outputMode: "file" | "text";
+  onOutputModeChange: (mode: "file" | "text") => void;
 }
 
 export function AppInput({
   onSendMessage,
   hasApiKey,
   isTyping,
+  outputMode,
+  onOutputModeChange,
 }: AppInputProperties) {
   // The input text shown on the input container
   const [input, setInput] = useState("");
@@ -62,6 +66,32 @@ export function AppInput({
               target.style.height = Math.min(target.scrollHeight, 200) + "px";
             }}
           />
+
+          {/* Output mode toggle */}
+          <div className="mx-2 flex items-center bg-(--sh-dark-blue) border border-(--sh-border-grey) rounded-full p-0.5 text-xs font-medium shrink-0">
+            <button
+              type="button"
+              onClick={() => onOutputModeChange("file")}
+              className={`px-3 py-1 rounded-full transition-all ${
+                outputMode === "file"
+                  ? "bg-(--sh-green) text-(--sh-white)"
+                  : "text-(--sh-grey) hover:text-(--sh-white)"
+              }`}
+            >
+              File
+            </button>
+            <button
+              type="button"
+              onClick={() => onOutputModeChange("text")}
+              className={`px-3 py-1 rounded-full transition-all ${
+                outputMode === "text"
+                  ? "bg-(--sh-green) text-(--sh-white)"
+                  : "text-(--sh-grey) hover:text-(--sh-white)"
+              }`}
+            >
+              Text
+            </button>
+          </div>
 
           {/* Send input button */}
           <button

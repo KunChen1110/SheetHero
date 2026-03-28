@@ -31,6 +31,7 @@ class SheetHeroStartRequest(BaseModel):
     prompt: str
     base_url: Optional[str] = None 
     output_file: str
+    output_mode: str = "file"
     excel_paths: List[str]
 
 
@@ -49,7 +50,7 @@ def start_sheet_hero(request: SheetHeroStartRequest):
         max_turns=request.max_turns,
         base_url=request.base_url,
         output_file=request.output_file,
-        output_mode="file" # TODO This may need changing 
+        output_mode=request.output_mode, 
     ))
 
     driver = StreamDialogueDriver(service)
