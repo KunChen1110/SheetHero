@@ -5,7 +5,9 @@
   "type": "module",
   "main": "src/main/electron.ts",
   "scripts": {
-    "build": "vite build && electron-builder",
+    "build:backend": "cd ../.. && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && cp dist/sheet-hero-backend src/sheet-hero/python-dist/sheet-hero-backend",
+    "build:electron": "vite build && electron-builder",
+    "build": "npm run build:backend && npm run build:electron",
     "preview": "vite preview",
     "lint": "eslint",
     "dev:frontend": "vite",
@@ -38,5 +40,25 @@
     "typescript-eslint": "^8.54.0",
     "vite": "^7.2.4",
     "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.sheethero.app",
+    "productName": "SheetHero",
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "extraResources": [
+      {
+      "from": "python-dist/sheet-hero-backend",
+      "to": "sheet-hero-backend"
+      }
+    ],
+    "files": [
+      "src/main/**/*",
+      "dist/renderer/**/*"
+    ]
   }
 }
