@@ -1023,15 +1023,6 @@ def build_relational_assignment_schedule_report(
         },
     }
 
-
-def build_tutor_meeting_schedule_report(
-    world: SpreadsheetWorld,
-    range_ref: str = "A1:Z200",
-) -> Dict[str, Any]:
-    """Backward-compatible wrapper for the more generic relational assignment helper."""
-    return build_relational_assignment_schedule_report(world, range_ref=range_ref)
-
-
 def build_capacity_constrained_allocation_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z200000",
@@ -3355,7 +3346,7 @@ __all__ = [
     "build_missing_data_report",
     "build_room_format_report",
     "build_capacity_constrained_allocation_report",
-    "build_tutor_meeting_schedule_report",
+    "build_relational_assignment_schedule_report",
     "summarize_numeric_column",
     "build_group_summary",
     "build_grouped_aggregation_ranking_report",

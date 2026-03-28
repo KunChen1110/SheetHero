@@ -15,6 +15,8 @@ export interface Message {
   id: string;
   role: Role;
   content: string;
+  hasOutputFile?: boolean;
+  outputPath?: string | null;
 }
 
 export interface ExcelFile {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { fileURLToPath } from "url";
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
@@ -38,6 +38,12 @@ ipcMain.handle("dialog:selectDirectory", async () => {
 // It is used to get the operating systems default documents path
 ipcMain.handle("app:getDocumentsPath", () => {
   return app.getPath("documents");
+});
+
+// Is exposed through the preload files,
+// It is used to open the folder containing the file, with the file highlighted
+ipcMain.handle("app:openPath", async (_, filePath: string) => {
+  shell.showItemInFolder(path.normalize(filePath));
 });
 
 // Creates the main window

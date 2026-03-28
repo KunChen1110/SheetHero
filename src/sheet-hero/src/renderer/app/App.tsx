@@ -47,6 +47,9 @@ export default function App() {
   // If there is an API key in use
   const hasApiKey = settings.apiKey.trim().length > 0;
 
+  // The current output mode (file or text)
+  const [outputMode, setOutputMode] = useState<"file" | "text">("file");
+
   // Handles when the settings button is clicked
   function handleSettingsClick(): void {
     setIsSettingsOpen(true);
@@ -136,11 +139,26 @@ export default function App() {
       if (isWaiting && sessionId) assistantContent = await sendReply(content);
       else assistantContent = await startConversation(content);
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: Role.ASSISTANT,
-        content: assistantContent,
-      };
+    let parsedContent = assistantContent;
+    let hasOutputFile = false;
+    let outputPath: string | null = null;
+
+    try {
+      const parsed = JSON.parse(assistantContent);
+      parsedContent = parsed.message;
+      hasOutputFile = parsed.has_output_file ?? false;
+      outputPath = parsed.output_path ?? null;
+    } catch {
+      // Not JSON, plain string response — that's fine
+    }
+
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: Role.ASSISTANT,
+      content: parsedContent,
+      hasOutputFile,
+      outputPath,
+    };
 
       setChats((prevChats) =>
         prevChats.map((chat) =>
@@ -180,6 +198,7 @@ export default function App() {
       max_turns: settings.maxTurns,
       base_url: settings.baseURL || "",
       output_file: settings.outputDir,
+      output_mode: outputMode,
       prompt: userMessage,
       excel_paths: excelFiles.map((f) => f.path),
     });
@@ -198,28 +217,32 @@ export default function App() {
   }
 
   // Handles specific event types from backend
-  function processEvents(events: Record<string, string>[]): string {
-    for (const event of events) {
-      console.log(event); // testing, remove this
-      const type = event.type;
+function processEvents(events: Record<string, string>[]): string {
+  for (const event of events) {
+    const type = event.type;
 
-      if (type === "clarification") {
-        setIsWaiting(true);
-        return event.message;
-      }
-
-      if (type === "final" || type === "error") {
-        setIsWaiting(false);
-        if (sessionId) {
-          api.delete(`/sheet-hero/session/${sessionId}`).catch(console.error);
-          setSessionId(null);
-        }
-        return event.message;
-      }
+    if (type === "clarification") {
+      setIsWaiting(true);
+      return event.message;
     }
 
-    return "Processing...";
+    if (type === "final" || type === "error") {
+      setIsWaiting(false);
+      if (sessionId) {
+        api.delete(`/sheet-hero/session/${sessionId}`).catch(console.error);
+        setSessionId(null);
+      }
+      // Return JSON string so createNewMessage can parse out file info
+      return JSON.stringify({
+        message: event.message,
+        has_output_file: event.has_output_file ?? false,
+        output_path: event.output_path ?? null,
+      });
+    }
   }
+
+  return "Processing...";
+}
 
   // Renders the chat if there are existing chats with messages
   function renderChat() {
@@ -230,6 +253,8 @@ export default function App() {
             key={message.id}
             role={message.role}
             content={message.content}
+            hasOutputFile={message.hasOutputFile}
+            outputPath={message.outputPath}
           />
         ))}
         <div ref={scrollReference} />
@@ -335,6 +360,8 @@ export default function App() {
             onSendMessage={createNewMessage}
             hasApiKey={hasApiKey}
             isTyping={isTyping}
+            outputMode={outputMode}
+            onOutputModeChange={setOutputMode}
           />
         </div>
       </div>

@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   selectFiles: () => ipcRenderer.invoke("dialog:selectFiles"),
   selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
   getDocumentsPath: () => ipcRenderer.invoke("app:getDocumentsPath"),
+  openPath: (filePath) => ipcRenderer.invoke("app:openPath", filePath),
 });
