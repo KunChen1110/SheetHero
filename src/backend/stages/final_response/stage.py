@@ -10,11 +10,13 @@ from openpyxl import load_workbook
 
 from ...log.logger_registry import LoggerRegistry
 from ...task_families import detect_task_family
+from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
 
-class FinalResponseStage:
+class FinalResponseStage(Stage):
     """Produce a short, contentful final response for the user."""
 
     def __init__(self, client, deployment: str, progress_logger=None):
@@ -312,12 +314,8 @@ class FinalResponseStage:
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=80,
-            )
-            content = (response.choices[0].message.content or "").strip()
+            content = call_llm(self.client, self.deployment,
+                               [{"role": "user", "content": prompt}], max_tokens=80)
             content = " ".join(content.split())
             if content:
                 return content
