@@ -259,10 +259,6 @@ def is_capacity_constrained_allocation_request(user_question: str) -> bool:
     return True
 
 
-def is_tutor_meeting_schedule_request(user_question: str) -> bool:
-    return is_relational_assignment_schedule_request(user_question)
-
-
 def is_fill_missing_request(user_question: str) -> bool:
     q = (user_question or "").lower()
     fill_markers = (
@@ -270,6 +266,7 @@ def is_fill_missing_request(user_question: str) -> bool:
         "fill missing",
         "fill the missing",
         "fill missing values",
+        "fill missing data",
         "complete missing",
         "populate missing",
         "use the reference",
@@ -286,6 +283,10 @@ def is_fill_missing_request(user_question: str) -> bool:
         "another table",
         "shared",
         "lookup",
+        "information from file",
+        "information from another file",
+        "using information from file",
+        "using information from another file",
     )
     return any(marker in q for marker in reference_markers)
 
