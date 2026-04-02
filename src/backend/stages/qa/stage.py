@@ -6,11 +6,13 @@ from typing import Any, Dict, Optional
 
 from ...prompt.prompt_builder import PromptBuilder
 from ...log.logger_registry import LoggerRegistry
+from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
 
-class QualityAssuranceStage:
+class QualityAssuranceStage(Stage):
     """QA stage for multi-turn clarification."""
 
     def __init__(self, client, deployment: str, progress_logger=None,
@@ -95,13 +97,11 @@ class QualityAssuranceStage:
         )
         messages = [{"role": "user", "content": prompt_text}]
 
-        response = self.client.chat.completions.create(
-            model=self.deployment,
-            messages=messages,
-        )
-
-        content = (response.choices[0].message.content or "").strip()
-        question = content or "Please clarify your preferences for data cleaning."
+        try:
+            content = call_llm(self.client, self.deployment, messages)
+        except Exception:
+            content = ""
+        question = content.strip() or "Please clarify your preferences for data cleaning."
         return {
             "message": self._ensure_qa_scope(question),
             "details_markdown": details_markdown,
@@ -287,11 +287,7 @@ class QualityAssuranceStage:
         prompt_text = self.prompt_builder.build_qa_match_prompt(question, reply)
         messages = [{"role": "user", "content": prompt_text}]
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-            )
-            content = response.choices[0].message.content or ""
+            content = call_llm(self.client, self.deployment, messages)
         except Exception:
             return False, "", "Unable to verify reply."
 
