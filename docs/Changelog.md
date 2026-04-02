@@ -451,3 +451,22 @@
 
 - Fixed validation import/runtime issues caused by the new module split
   - Updated moved validation core modules to use the correct import paths after relocation into `validation/core/`.
+
+## 2/4/2026
+### --- Changed ---
+- Unified LLM retry logic across all pipeline stages
+  - Introduced shared `call_llm()` helper in `src/backend/stages/base/llm_utils.py` with exponential-backoff retry for rate limits and transient errors.
+  - Removed duplicated retry implementations from `UnderstandingStage` and `InteractStage`.
+  - Updated `DiagnoseStage`, `QualityAssuranceStage`, `DataCleaningStage`, `FinalResponseStage`, and `DiagnoseRouter` to use the shared helper.
+- All eight pipeline stages now inherit from the `Stage` base class
+  - Added `Stage` inheritance to `DiagnoseStage`, `DataCleaningStage`, `QualityAssuranceStage`, and `FinalResponseStage`.
+
+### --- Removed ---
+- Removed legacy direct execution path
+  - Deleted `AgentRunner` (`src/backend/agent/core/runner.py`) and `RunReportBuilder` (`src/backend/agent/io/report.py`).
+  - Removed `SheetHero.run()` and the corresponding import; `SheetHero.step()` via `SheetHeroService` is now the sole execution path.
+  - Deleted unused `calculate_token_cost_line()` utility (`src/backend/agent/utils/token_cost.py`).
+- Rewrote `test/core/run_test.py` to use `SheetHeroService` instead of the deleted `SheetHero.run()`.
+
+### --- Fixed ---
+- Updated `docs/SoftwareManualPlan.md` to reflect the unified architecture: single execution path, consistent stage inheritance, and `call_llm()` shared utility.

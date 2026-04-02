@@ -1,14 +1,12 @@
 """Initial analysis and context generation stage for SheetHero."""
 
 import re
-import time
-import random
 from typing import Optional
-from openai import RateLimitError
 
 from ...log.logger_registry import LoggerRegistry
 from ...task_families import detect_task_family
 from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 from ...prompt.prompt_builder import PromptBuilder
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -71,7 +69,7 @@ class UnderstandingStage(Stage):
             session_context
         )
     
-        understanding_output = self._get_llm_response(messages)
+        understanding_output = call_llm(self.client, self.deployment, messages)
         understanding_output = self._sanitize_understanding_output(
             understanding_output,
             user_question
@@ -413,7 +411,7 @@ class UnderstandingStage(Stage):
             last_validation
         )
         messages = [{"role": "user", "content": prompt_text}]
-        enhanced = self._get_llm_response(messages)
+        enhanced = call_llm(self.client, self.deployment, messages)
         return self._sanitize_understanding_output(enhanced, user_question)
 
     def _create_multimodal_prompt(self, user_question: str,
@@ -435,7 +433,7 @@ class UnderstandingStage(Stage):
             session_context_understanding
         )
         messages = [{"role": "user", "content": prompt_text}]
-        response = self._get_llm_response(messages)
+        response = call_llm(self.client, self.deployment, messages)
         parsed = self._parse_yes_no(response or "")
         if parsed is None:
             return False
@@ -450,72 +448,3 @@ class UnderstandingStage(Stage):
             return False
         return None
 
-    def _get_llm_response(self, messages: list, max_retries: int = 5, base_delay: float = 1.0) -> str:
-        """
-        Get LLM response with exponential backoff retry for rate limits.
-        Retries up to max_retries times, with increasing wait times between attempts.
-        """
-        last_exception = None
-
-        for attempt in range(max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.deployment,
-                    messages=messages,
-                )
-                return response.choices[0].message.content
-
-            except RateLimitError as e:
-                last_exception = e
-                logger.warning(f"Rate limit hit, attempt {attempt + 1}/{max_retries}: {str(e)}")
-
-                # Extract wait time from error message if available
-                wait_time = self._extract_wait_time_from_error(str(e))
-
-                if attempt < max_retries - 1:
-                    if wait_time:
-                        delay = wait_time + random.uniform(1, 3)
-                        logger.info(f"Waiting {delay:.1f} seconds as suggested by API")
-                    else:
-                        delay = 10
-                        logger.info(f"Waiting {delay:.1f} seconds")
-
-                    time.sleep(delay)
-                else:
-                    logger.error(f"All {max_retries} attempts failed due to rate limiting")
-                    break
-
-            except Exception as e:
-                last_exception = e
-                logger.error(f"API error, attempt {attempt + 1}/{max_retries}: {str(e)}")
-
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    logger.info(f"Waiting {delay:.1f} seconds before retry")
-                    time.sleep(delay)
-                else:
-                    logger.error(f"All {max_retries} attempts failed")
-                    break
-
-        if last_exception:
-            raise last_exception
-
-    def _extract_wait_time_from_error(self, error_message: str) -> Optional[int]:
-        """
-        Parse retry wait time from rate limit error messages.
-        Looks for patterns like "Try again in X seconds" or "Retry after X seconds".
-        """
-        try:
-            # Look for patterns like "Try again in X seconds"
-            match = re.search(r'try again in (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-
-            # Look for other patterns like "Retry after X seconds"
-            match = re.search(r'retry after (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-
-            return None
-        except:
-            return None

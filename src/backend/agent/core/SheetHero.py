@@ -8,7 +8,6 @@ import pandas as pd
 import numpy as np
 from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
 
-from .runner import AgentRunner
 from ..io.output_policy import OutputPolicy
 from ...config.settings import Config
 from ...environment import Sandbox
@@ -180,30 +179,6 @@ class SheetHero:
                 pass
         return max(1, min(int(self.config.max_turns), 5))
     
-    # Run the agent
-    def run(self, user_question: str) -> Dict[str, Any]:
-        if not self.has_excel:
-            response = self.interact_module.run(user_question)
-            return {
-                "type": "final",
-                "result": {"final_answer": response},
-                "message": response,
-            }
-        runner = AgentRunner(
-            max_turns=self.config.max_turns,
-            max_iterations=self._resolve_max_cycles(),
-            execution_turn_budget=self._resolve_execution_turn_budget(),
-            progress_logger=self.progress_logger,
-            token_budget=self.config.total_token_budget
-        )
-        return runner.run(
-            user_question,
-            self.understanding_module,
-            self.execution_module,
-            self.validation_module,
-            self.final_response_module,
-        )
-
     def start_session(self, user_question: str) -> SheetHeroSession:
         self.qa_stage.reset()
         return SheetHeroSession(original_query=user_question)

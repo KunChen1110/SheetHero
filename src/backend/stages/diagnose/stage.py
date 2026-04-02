@@ -7,11 +7,13 @@ from ...log.logger_registry import LoggerRegistry
 from ...prompt.prompt_builder import PromptBuilder
 from .cropper import sample_workbook_view
 from .reporting import build_diagnose_report
+from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
 
-class DiagnoseStage:
+class DiagnoseStage(Stage):
     """Generate a question list from read-only workbooks."""
 
     def __init__(self, client, deployment: str, excel_paths, sandbox=None,
@@ -55,12 +57,7 @@ class DiagnoseStage:
                 self.progress_logger.log_raw("\n\n".join(debug_sections))
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-            )
-            content = response.choices[0].message.content or ""
-
+            content = call_llm(self.client, self.deployment, messages)
         except Exception:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE ERROR]\nLLM request failed.")
@@ -88,11 +85,7 @@ class DiagnoseStage:
         prompt_text = self.prompt_builder.build_diagnose_prioritize_prompt(user_task, questions)
         messages = [{"role": "user", "content": prompt_text}]
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-            )
-            content = response.choices[0].message.content or ""
+            content = call_llm(self.client, self.deployment, messages)
         except Exception:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE PRIORITIZE ERROR]\nLLM request failed.")
