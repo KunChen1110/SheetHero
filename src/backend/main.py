@@ -45,6 +45,15 @@ def _print_llm_config(config: Config) -> None:
     )
 
 
+def _print_output_config(config: Config) -> None:
+    output_path = (config.output_file or "").strip() or "(auto)"
+    print(
+        "[output config] "
+        f"mode={config.output_mode}, "
+        f"output_file={output_path}"
+    )
+
+
 def _handle_llm_command(service: SheetHeroService, line: str) -> None:
     parser = argparse.ArgumentParser(prog="!llm", add_help=False)
     parser.add_argument("--show", action="store_true")
@@ -70,7 +79,7 @@ def _handle_llm_command(service: SheetHeroService, line: str) -> None:
     if has_update:
         model_name = args.switch_offline
         if model_name == "__PROMPT__":
-            model_name = input("Model full name (e.g. qwen2.5-coder:7b-instruct): ").strip()
+            model_name = input("Model full name (e.g. qwen3:8b): ").strip()
         else:
             model_name = (model_name or "").strip()
 
@@ -96,6 +105,32 @@ def _handle_path(buffer: InputBuffer, line: str) -> None:
         print(f"[paths set] {buffer.excel_paths}")
     except json.JSONDecodeError:
         print("Error: !path expects a JSON list, e.g. !path=[\"a.xlsx\"]")
+
+
+def _handle_output_command(service: SheetHeroService, line: str) -> None:
+    parser = argparse.ArgumentParser(prog="!output", add_help=False)
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("mode", nargs="?", choices=["file", "text"])
+
+    try:
+        args = parser.parse_args(shlex.split(line)[1:])
+    except SystemExit:
+        print("Error: usage `!output --show` or `!output file|text`")
+        return
+
+    if args.show:
+        _print_output_config(service.config)
+        return
+
+    if not args.mode:
+        print("Error: usage `!output --show` or `!output file|text`")
+        return
+
+    service.config.output_mode = args.mode
+    if args.mode == "text":
+        service.config.output_file = None
+    print(f"[output switched] mode={service.config.output_mode}")
+    _print_output_config(service.config)
 
 
 def _load_tasks() -> tuple[list[dict[str, Any]], Path]:
@@ -195,6 +230,22 @@ def _execute_turn(service: SheetHeroService, buffer: InputBuffer) -> None:
             if event_type in {"final", "error"}:
                 print(f"Agent: {event.get('message')}")
                 if event_type == "final":
+                    result_kind = event.get("result_kind")
+                    has_output_file = event.get("has_output_file")
+                    output_path = event.get("output_path")
+                    truncated = event.get("truncated")
+                    meta_parts = []
+                    if result_kind is not None:
+                        meta_parts.append(f"result_kind={result_kind}")
+                    if has_output_file is not None:
+                        meta_parts.append(f"has_output_file={has_output_file}")
+                    if truncated:
+                        meta_parts.append("truncated=True")
+                    if output_path:
+                        meta_parts.append(f"output_path={output_path}")
+                    if meta_parts:
+                        print("[result meta] " + ", ".join(meta_parts))
+                if event_type == "final":
                     buffer.clear()
                 return
 
@@ -279,9 +330,12 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
                 index=args.index,
                 output_path_arg=args.output_path
             )
-            service.config.output_mode = "file"
-            service.config.output_file = str(resolved_output)
-            print(f"[output path set] {resolved_output}")
+            if service.config.output_mode == "file":
+                service.config.output_file = str(resolved_output)
+                print(f"[output path set] {resolved_output}")
+            else:
+                service.config.output_file = str(resolved_output)
+                print("[text preview mode] structured outputs will be rendered as text previews.")
         except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
             print(f"Error: failed to resolve output path: {e}")
             return
@@ -354,6 +408,8 @@ def main() -> None:
     print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
     print("Type `!llm --show` to view active model endpoint settings.")
     print("Type `!llm --switch--offline <model_full_name>` to switch to local LLM.")
+    print("Type `!output --show` to view output mode settings.")
+    print("Type `!output file|text` to switch output mode.")
     print("Type `!DiagnosebenchmarkTest` to run the small diagnose benchmark.")
     print("Type `!DiagnosebenchmarkTest median` to run the medium diagnose benchmark.")
     print("Type `!DiagnosebenchmarkTest all` to run all diagnose benchmark cases.")
@@ -390,6 +446,10 @@ def main() -> None:
 
         if line.startswith("!llm"):
             _handle_llm_command(service, line)
+            continue
+
+        if line.startswith("!output"):
+            _handle_output_command(service, line)
             continue
 
         if line == "run":
