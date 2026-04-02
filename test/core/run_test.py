@@ -4,6 +4,7 @@ Dataset Runner - Unified Test Execution Script
 
 Usage:
     python3 test/core/run_test.py --test-n 1
+    python3 test/core/run_test.py --test-n 3 --dataset-dir dataset
 """
 
 import sys
@@ -11,52 +12,45 @@ import json
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Suppress all logging output to console BEFORE importing other modules
-logging.getLogger().setLevel(logging.CRITICAL)
-root_logger = logging.getLogger()
-for handler in root_logger.handlers[:]:
-    if isinstance(handler, logging.StreamHandler):
-        root_logger.removeHandler(handler)
+# Suppress all logging output before and after imports
+def _silence_loggers():
+    logging.getLogger().setLevel(logging.CRITICAL)
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        if isinstance(h, logging.StreamHandler):
+            root.removeHandler(h)
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        lg = logging.getLogger(name)
+        lg.setLevel(logging.CRITICAL)
+        for h in lg.handlers[:]:
+            if isinstance(h, logging.StreamHandler):
+                lg.removeHandler(h)
 
-from src.backend.agent.core.SheetHero import SheetHero
+_silence_loggers()
+
+from src.backend.service.sheethero_service import SheetHeroService
 from src.backend.config.settings import Config
-from src.backend.agent.io.formatter import OutputFormatter
 
-# Suppress all logging output AFTER importing modules (to catch any loggers created during import)
-logging.getLogger().setLevel(logging.CRITICAL)
-root_logger = logging.getLogger()
-for handler in root_logger.handlers[:]:
-    if isinstance(handler, logging.StreamHandler):
-        root_logger.removeHandler(handler)
-
-# Suppress all child loggers
-for logger_name in list(logging.Logger.manager.loggerDict.keys()):
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.CRITICAL)
-    for handler in logger.handlers[:]:
-        if isinstance(handler, logging.StreamHandler):
-            logger.removeHandler(handler)
+_silence_loggers()
 
 
 class DatasetRunner:
-    """Runs dataset tasks with SheetHero and formats results."""
+    """Runs dataset tasks via SheetHeroService and prints a result summary."""
 
-    def __init__(self, dataset_dir: Path, formatter: Optional[OutputFormatter] = None):
+    def __init__(self, dataset_dir: Path):
         self.dataset_dir = dataset_dir
-        self.formatter = formatter or OutputFormatter()
 
     def load_dataset_json(self) -> List[Dict[str, Any]]:
         json_path = self.dataset_dir / "dataset.json"
         if not json_path.exists():
-            raise FileNotFoundError(f"dataset.json file not found: {json_path}")
-
-        with open(json_path, 'r', encoding='utf-8') as f:
+            raise FileNotFoundError(f"dataset.json not found: {json_path}")
+        with open(json_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     @staticmethod
@@ -65,33 +59,23 @@ class DatasetRunner:
         for task in tasks:
             if task.get("task_id") == task_id:
                 return task
-
-        available_ids = [t.get("task_id") for t in tasks]
-        raise ValueError(
-            f"Task '{task_id}' not found. "
-            f"Available task IDs: {', '.join(available_ids)}"
-        )
+        available = [t.get("task_id") for t in tasks]
+        raise ValueError(f"Task '{task_id}' not found. Available: {', '.join(available)}")
 
     def build_input_paths(self, spreadsheets: List[str]) -> List[str]:
-        input_paths = []
-        for spreadsheet in spreadsheets:
-            full_path = self.dataset_dir / spreadsheet
-            if not full_path.exists():
-                raise FileNotFoundError(f"Input file not found: {full_path}")
-            input_paths.append(str(full_path.absolute()))
-        return input_paths
+        paths = []
+        for name in spreadsheets:
+            full = self.dataset_dir / name
+            if not full.exists():
+                raise FileNotFoundError(f"Input file not found: {full}")
+            paths.append(str(full.absolute()))
+        return paths
 
-    def determine_output_path(self, spreadsheets: List[str], task_id: str,
-                              expected_output_file: Optional[List[str]] = None) -> str:
-        if expected_output_file is None:
-            expected_output_file = []
-
+    def determine_output_path(self, task_id: str) -> str:
         output_dir = PROJECT_ROOT / "artifacts" / "output"
-
-        output_filename = task_id.lower().replace(" ", "") + "_output.xlsx"
-        output_path = output_dir / output_filename
-
-        return str(output_path.absolute())
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = task_id.lower().replace(" ", "") + "_output.xlsx"
+        return str((output_dir / filename).absolute())
 
     def run_task(self, test_n: int) -> int:
         tasks = self.load_dataset_json()
@@ -99,72 +83,67 @@ class DatasetRunner:
 
         spreadsheets = task.get("spreadsheets", [])
         if not spreadsheets:
-            raise ValueError("This task has no input files")
+            raise ValueError("Task has no input files")
 
         input_paths = self.build_input_paths(spreadsheets)
-
-        expected_output_file = task.get("expected_output_file", [])
-        output_path = self.determine_output_path(
-            spreadsheets,
-            task['task_id'],
-            expected_output_file
-        )
+        output_path = self.determine_output_path(task["task_id"])
+        prompt = task.get("prompt", "")
 
         config = Config()
         config.output_mode = "file"
         config.output_file = output_path
 
-        agent = SheetHero(excel_paths=input_paths, config=config)
-        result = agent.run(user_question=task.get("prompt", ""))
+        service = SheetHeroService(config=config)
+        response = service.submit_turn(prompt, input_paths)
 
-        output = self.formatter.format_user_mode(
-            result,
-            input_paths,
-            task.get("prompt", ""),
-            output_mode=config.output_mode
-        )
+        response_type = response.get("type", "")
 
-        print(output)
-        return 0 if result['success'] else 1
+        if response_type == "clarification":
+            print(f"[CLARIFICATION REQUIRED] {response.get('message', '')}")
+            return 1
+
+        result = response.get("result") or {}
+        success = bool(result.get("success", False))
+        confidence = result.get("confidence_score", 0.0)
+        duration = result.get("total_duration", 0.0)
+        short_answer = str(result.get("short_answer") or response.get("message") or "").strip()
+
+        print(f"Task:       {task['task_id']}")
+        print(f"Prompt:     {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
+        print(f"Success:    {'YES' if success else 'NO'}")
+        print(f"Confidence: {confidence:.2f}")
+        print(f"Duration:   {duration:.2f}s")
+        print(f"Output:     {output_path}")
+        if short_answer:
+            print(f"Summary:    {short_answer}")
+
+        return 0 if success else 1
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Dataset Runner - Unified Test Execution Script"
-    )
-
-    parser.add_argument(
-        "--test-n",
-        type=int,
-        required=True,
-        help="Test task number (e.g., 1, 2, 3...)"
-    )
-    parser.add_argument(
-        "--dataset-dir",
-        type=str,
-        default=None,
-        help="Dataset directory path (default: dataset folder in project root)"
-    )
-
+    parser = argparse.ArgumentParser(description="Dataset Runner")
+    parser.add_argument("--test-n", type=int, required=True,
+                        help="Task number to run (e.g. 1, 2, 3)")
+    parser.add_argument("--dataset-dir", type=str, default=None,
+                        help="Path to dataset directory (default: <project_root>/dataset)")
     args = parser.parse_args()
 
-    try:
-        if args.dataset_dir:
-            dataset_dir = Path(args.dataset_dir).resolve()
-        else:
-            dataset_dir = PROJECT_ROOT / "dataset"
-
-        if not dataset_dir.exists():
-            raise FileNotFoundError(f"Dataset directory not found: {dataset_dir}")
-
-        runner = DatasetRunner(dataset_dir)
-        exit_code = runner.run_task(args.test_n)
-        sys.exit(exit_code)
-
-    except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+    dataset_dir = (
+        Path(args.dataset_dir).resolve()
+        if args.dataset_dir
+        else PROJECT_ROOT / "dataset"
+    )
+    if not dataset_dir.exists():
+        print(f"Error: dataset directory not found: {dataset_dir}", file=sys.stderr)
         sys.exit(1)
+
+    runner = DatasetRunner(dataset_dir)
+    sys.exit(runner.run_task(args.test_n))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)

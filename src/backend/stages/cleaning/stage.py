@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 from ...log.logger_registry import LoggerRegistry
 from ...prompt.prompt_builder import PromptBuilder
 from ..understanding.context_builder import ExcelContextBuilder
+from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -18,7 +20,7 @@ _FILL_MISSING_ACTION_RE = re.compile(
 )
 
 
-class DataCleaningStage:
+class DataCleaningStage(Stage):
     """Cleaning stage driven by action list (LLM-produced)."""
 
     def __init__(self, client, deployment: str, token_budget: int = 6000, progress_logger=None):
@@ -72,11 +74,12 @@ class DataCleaningStage:
             self.progress_logger.log_raw("### [CLEANING PROMPT]\n" + prompt_text)
 
         self._log_progress("[CLEANING] generating cleaning code")
-        response = self.client.chat.completions.create(
-            model=self.deployment,
-            messages=[{"role": "user", "content": prompt_text}],
-        )
-        code = (response.choices[0].message.content or "").strip()
+        try:
+            code = call_llm(self.client, self.deployment, [{"role": "user", "content": prompt_text}])
+        except Exception as exc:
+            report["notes"].append(f"Cleaning code generation failed: {exc}")
+            return report
+        code = code.strip()
 
         if self.progress_logger:
             self.progress_logger.log_raw("### [CLEANING CODE]\n" + code)
