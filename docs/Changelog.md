@@ -381,7 +381,76 @@
 - Fixed synthetic regression coverage gaps
   - Added end-to-end synthetic validation for newly introduced abstract families, including multi-key joins, temporal growth reporting, and capacity-constrained allocation.
 
+## 26/3/2026
+### --- Changed ---
+- Upgraded the recommended local LLM path to `qwen3:8b`
+  - Added `qwen3:8b` to backend frontend-editable deployment choices in `src/backend/config/frontend_schema.py`.
+  - Updated CLI offline switch prompt text in `src/backend/main.py` so the default local-model example now points to `qwen3:8b`.
 
+### --- Added ---
+- Added `v4.1` version documentation in `docs/VersionHistory.md`
+  - Documented the local-model upgrade as a validated runtime iteration after the family-based architecture introduced in `v4.0`.
+  - Recorded benchmark- and CLI-based regression validation as part of the version narrative.
+
+### --- Fixed ---
+- Extended natural-language detector coverage for `reference_guided_completion`
+  - Prompts such as “Fill any missing data ... using information from file ...” now correctly route into the deterministic completion family instead of falling back to free-form model handling.
+
+## 27/3/2026
+### --- Added ---
+- Added explicit backend output-mode metadata for frontend integration
+  - Final responses now expose:
+    - `result_kind`
+    - `has_output_file`
+    - `file_created`
+    - `output_path`
+    - `output_dir`
+    - `truncated`
+    - `preview_rows`
+    - `total_rows`
+  - This allows the frontend to distinguish file outputs from text-only outputs without parsing message strings heuristically.
+
+- Added frontend-editable text/file output mode support in backend config
+  - `output_mode` is now an explicit frontend schema field with `file` and `text` choices.
+  - Added CLI support for output-mode switching:
+    - `!output --show`
+    - `!output file`
+    - `!output text`
+
+### --- Changed ---
+- Implemented real text-only output behavior for covered deterministic families
+  - `file` mode remains the default.
+  - `text` mode now returns text previews or scalar answers directly.
+  - Large structured outputs are truncated into preview form instead of forcing full spreadsheet text dumps.
+  - Covered deterministic text-mode paths no longer save workbooks to disk before rendering the response.
+
+- Reorganized execution-stage internals into clearer submodules
+  - Grouped family-specific execution logic under `src/backend/stages/execution/family/`.
+  - Split large runtime responsibilities into:
+    - family fast paths
+    - family preflight
+    - family prompt augmentation
+    - generic preflight
+    - question-to-helper argument inference
+  - Reduced `src/backend/stages/execution/runtime.py` to orchestration-focused responsibilities.
+
+- Reorganized validation-stage internals into clearer submodules
+  - Added `src/backend/stages/validation/core/` for validation LLM/history/parser logic.
+  - Added `src/backend/stages/validation/checks/` for deterministic validation and rule-based checks.
+  - Added `src/backend/stages/validation/inspectors/` for workbook, text-preview, and execution-signal inspection.
+  - Reduced `src/backend/stages/validation/runtime.py` to orchestration-focused responsibilities.
+
+### --- Removed ---
+- Removed obsolete validation facade and transitional wrappers after the new validation structure was introduced.
+- Removed several leftover execution helper-policy layers that were no longer needed once family modules were grouped explicitly.
+
+### --- Fixed ---
+- Fixed text-mode backend semantics
+  - `text` mode no longer reports file output for covered deterministic paths.
+  - Verified that representative CLI text-mode tasks do not leave generated workbooks behind.
+
+- Fixed validation import/runtime issues caused by the new module split
+  - Updated moved validation core modules to use the correct import paths after relocation into `validation/core/`.
 
 ## 2/4/2026
 ### --- Changed ---

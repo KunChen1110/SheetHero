@@ -79,7 +79,7 @@ class FinalResponseStage(Stage):
             (("mobile reviews",), "mobile review summary"),
             (("diabetes",), "regional diabetes report"),
             (("financial", "cash flow"), "financial report"),
-            (("students and their tutors", "students attending", "tutor meeting"), "tutor meeting schedule"),
+            (("students and their tutors", "students attending", "tutor meeting"), "assignment schedule"),
         )
         for tokens, label in keyword_labels:
             if any(token in lowered for token in tokens):
