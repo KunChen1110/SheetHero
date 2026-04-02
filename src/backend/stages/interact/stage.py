@@ -1,14 +1,11 @@
 """Interact stage for non-spreadsheet queries."""
 
-import random
-import time
 from typing import Optional
-
-from openai import RateLimitError
 
 from ...log.logger_registry import LoggerRegistry
 from ...prompt.prompt_builder import PromptBuilder
 from ..base.stage import Stage
+from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -33,7 +30,7 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT PROMPT]", prompt_text])
             )
-        response = self._get_llm_response(messages)
+        response = call_llm(self.client, self.deployment, messages)
         if self.progress_logger:
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT OUTPUT]", response or ""])
@@ -74,7 +71,7 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT CONTEXT PROMPT]", prompt_text])
             )
-        response = self._get_llm_response(messages)
+        response = call_llm(self.client, self.deployment, messages)
         summary = (response or "").strip()
         if self.progress_logger:
             self.progress_logger.log_raw(
@@ -92,7 +89,7 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT ROUTER PROMPT]", prompt_text])
             )
-        response = self._get_llm_response(messages)
+        response = call_llm(self.client, self.deployment, messages)
         parsed = self._parse_yes_no(response or "")
         if parsed is None:
             return default
@@ -107,49 +104,3 @@ class InteractStage(Stage):
             return False
         return None
 
-    def _get_llm_response(self, messages: list, max_retries: int = 5, base_delay: float = 1.0) -> str:
-        last_exception = None
-        for attempt in range(max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.deployment,
-                    messages=messages,
-                )
-                return response.choices[0].message.content
-            except RateLimitError as e:
-                last_exception = e
-                logger.warning(f"Rate limit hit, attempt {attempt + 1}/{max_retries}: {str(e)}")
-                wait_time = self._extract_wait_time_from_error(str(e))
-                if attempt < max_retries - 1:
-                    if wait_time:
-                        delay = wait_time + random.uniform(1, 3)
-                    else:
-                        delay = 10
-                    time.sleep(delay)
-                else:
-                    logger.error("All attempts failed due to rate limiting")
-                    break
-            except Exception as e:
-                last_exception = e
-                logger.error(f"API error, attempt {attempt + 1}/{max_retries}: {str(e)}")
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    time.sleep(delay)
-                else:
-                    logger.error("All attempts failed")
-                    break
-        if last_exception:
-            raise last_exception
-
-    def _extract_wait_time_from_error(self, error_message: str) -> Optional[int]:
-        try:
-            import re
-            match = re.search(r'try again in (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-            match = re.search(r'retry after (\d+) seconds?', error_message.lower())
-            if match:
-                return int(match.group(1))
-            return None
-        except Exception:
-            return None

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ..log.logger_registry import LoggerRegistry
+from ..stages.base.llm_utils import call_llm
 from ..prompt.prompt_builder import PromptBuilder
 from ..task_families import should_skip_diagnose
 from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
@@ -1772,11 +1773,8 @@ class DiagnoseRouter:
     def _ask_llm(self, prompt: str) -> Optional[bool]:
         messages = [{"role": "user", "content": prompt}]
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-            )
-            content = (response.choices[0].message.content or "").strip()
+            content = call_llm(self.client, self.deployment, messages)
+            content = content.strip()
         except Exception as exc:
             logger.warning("Diagnose router LLM request failed: %s", exc)
             return None
