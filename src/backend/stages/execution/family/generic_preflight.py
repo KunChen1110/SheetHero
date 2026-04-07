@@ -4,7 +4,7 @@ import ast
 import re
 from typing import TYPE_CHECKING, Optional
 
-from ....task_families import detect_task_family
+from ....task_skills import detect_skill, select_helper, build_loop_breaker, build_execution_strict_rules, get_helper_runtime_mode
 
 if TYPE_CHECKING:
     from ..runtime import ExecutionRuntime
@@ -21,24 +21,28 @@ class ExecutionGenericPreflightAdvisor:
         if not code:
             return "PREFLIGHT_LINEAR: empty code block."
         lower = code.lower()
-        family = detect_task_family(user_question)
-        helper_name = (family.helper_name or "") if family else ""
-        uses_registered_family_helper = bool(helper_name and f"{helper_name.lower()}(" in lower)
+        skill = detect_skill(user_question)
+        helper = select_helper(skill, user_question) if skill else None
+        helper_name = helper.name if helper else ""
+        uses_registered_helper = bool(helper_name and f"{helper_name.lower()}(" in lower)
         uses_load_all_tables = "load_all_tables(" in lower
-        uses_region_growth_helper = "build_region_growth_analysis(" in lower
-        uses_financial_dashboard_helper = "build_financial_dashboard_report(" in lower
-        uses_candidate_screening_helper = "build_candidate_screening_report(" in lower
-        uses_inventory_eoq_helper = "build_inventory_eoq_report(" in lower
-        uses_hospital_utilisation_helper = "build_hospital_utilisation_report(" in lower
-        uses_market_share_shipment_helper = "build_market_share_shipment_report(" in lower
-        uses_cash_flow_efficiency_helper = "build_cash_flow_efficiency_report(" in lower
-        uses_diabetes_region_helper = "build_diabetes_region_report(" in lower
-        uses_mobile_reviews_summary_helper = "build_mobile_reviews_summary_report(" in lower
-        uses_store_feature_analysis_helper = "build_store_feature_analysis_report(" in lower
-        uses_ecommerce_merge_helper = "build_ecommerce_merge_report(" in lower
-        uses_missing_data_helper = "build_missing_data_report(" in lower
-        uses_room_format_helper = "build_room_format_report(" in lower
-        uses_assignment_schedule_helper = "build_relational_assignment_schedule_report(" in lower
+        # Check for any known helper function call in the code
+        _ALL_KNOWN_HELPERS = (
+            "build_region_growth_analysis", "build_financial_dashboard_report",
+            "build_candidate_screening_report", "build_inventory_eoq_report",
+            "build_hospital_utilisation_report", "build_market_share_shipment_report",
+            "build_cash_flow_efficiency_report", "build_diabetes_region_report",
+            "build_mobile_reviews_summary_report", "build_store_feature_analysis_report",
+            "build_ecommerce_merge_report", "build_missing_data_report",
+            "build_room_format_report", "build_relational_assignment_schedule_report",
+            "build_dependency_schedule", "build_correlation_matrix_table",
+            "build_cycle_detection_report", "build_grouped_aggregation_ranking_report",
+            "build_time_series_aggregation_report", "build_multi_key_relational_join_report",
+            "build_relational_join_enrichment_report", "build_capacity_constrained_allocation_report",
+            "fit_linear_regression_weights", "concat_tables_with_same_headers",
+            "fill_missing_from_reference",
+        )
+        uses_any_known_helper = any(f"{h}(" in lower for h in _ALL_KNOWN_HELPERS)
 
         top_level_returns = [
             line.strip()
@@ -66,35 +70,35 @@ class ExecutionGenericPreflightAdvisor:
                 "- Keep string quoting simple and avoid nested double quotes inside f-strings."
             )
 
-        if family is not None and helper_name and not uses_registered_family_helper:
-            family_hint = (family.loop_breaker or family.execution_strict_rules or "").strip()
+        if skill is not None and helper_name and not uses_registered_helper:
+            skill_hint = (build_loop_breaker(skill, helper) or build_execution_strict_rules(skill, helper) or "").strip()
             helper_block = (
-                f"PREFLIGHT_FAMILY_HELPER: detected the `{family.name}` family, so execution must call the runtime helper `{helper_name}(...)`.\n"
+                f"PREFLIGHT_SKILL_HELPER: detected the `{skill.name}` skill, so execution must call the runtime helper `{helper_name}(...)`.\n"
                 f"- Required helper: `{helper_name}(...)`\n"
                 "- Do not replace the helper with ad-hoc pandas logic, manual joins, or manual date parsing.\n"
             )
-            if family_hint:
-                helper_block += f"{family_hint}\n"
+            if skill_hint:
+                helper_block += f"{skill_hint}\n"
             return helper_block.rstrip()
 
-        if family is not None and family.self_loading_helper and uses_registered_family_helper:
+        if helper is not None and helper.self_loading and uses_registered_helper:
             manual_reader_patterns = ("read_table_multi(", "find_table_by_headers(", "load_all_tables(")
             if any(pattern in lower for pattern in manual_reader_patterns):
-                family_hint = (family.loop_breaker or family.execution_strict_rules or "").strip()
+                skill_hint = (build_loop_breaker(skill, helper) or build_execution_strict_rules(skill, helper) or "").strip()
                 helper_block = (
-                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{family.name}` family.\n"
+                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{skill.name}` skill.\n"
                     "- Remove manual `read_table_multi(...)`, `find_table_by_headers(...)`, and `load_all_tables(...)` calls from execution code.\n"
                     "- Call the helper directly, write its returned detail data, then save.\n"
                 )
-                if family_hint:
-                    helper_block += f"{family_hint}\n"
+                if skill_hint:
+                    helper_block += f"{skill_hint}\n"
                 return helper_block.rstrip()
 
         family_grounding_issue = self.family_helper_header_grounding_guard(code_action, user_question)
         if family_grounding_issue is not None:
             return family_grounding_issue
 
-        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_registered_family_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper and not uses_assignment_schedule_helper:
+        if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_registered_helper and not uses_any_known_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read runtime inputs via `load_all_tables()` or `list_all_workbooks()`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
@@ -102,9 +106,7 @@ class ExecutionGenericPreflightAdvisor:
             )
 
         requires_saved_workbook = not (
-            (family is not None and family.output_mode == "text")
-            or (self.runtime._question_matches_family(user_question, "missing_data_scan") and uses_missing_data_helper)
-            or (self.runtime._question_matches_family(user_question, "identifier_format_scan") and uses_room_format_helper)
+            (skill is not None and skill.output_mode == "text")
         )
         if requires_saved_workbook and not re.search(r"save_workbook_to\s*\(\s*output_path\s*\)", code, flags=re.IGNORECASE):
             return (
@@ -131,7 +133,7 @@ class ExecutionGenericPreflightAdvisor:
                 "- Do not redefine `output_path`."
             )
 
-        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_registered_family_helper and not uses_region_growth_helper and not uses_financial_dashboard_helper and not uses_candidate_screening_helper and not uses_inventory_eoq_helper and not uses_hospital_utilisation_helper and not uses_market_share_shipment_helper and not uses_cash_flow_efficiency_helper and not uses_diabetes_region_helper and not uses_mobile_reviews_summary_helper and not uses_store_feature_analysis_helper and not uses_ecommerce_merge_helper and not uses_missing_data_helper and not uses_room_format_helper and not uses_assignment_schedule_helper:
+        if "read_table_multi(" not in lower and not uses_load_all_tables and not uses_registered_helper and not uses_any_known_helper:
             return (
                 "PREFLIGHT_LINEAR: code must read tabular content via `load_all_tables()` or `read_table_multi(...)`.\n"
                 "- Preferred: `tables = load_all_tables()`\n"
@@ -190,11 +192,15 @@ class ExecutionGenericPreflightAdvisor:
         return None
 
     def family_helper_header_grounding_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        family = detect_task_family(user_question)
-        if family is None or not family.helper_name:
+        skill = detect_skill(user_question)
+        if skill is None:
             return None
+        helper = select_helper(skill, user_question)
+        if helper is None:
+            return None
+        helper_name = helper.name
         lower = (code_action or "").lower()
-        if f"{family.helper_name.lower()}(" not in lower:
+        if f"{helper_name.lower()}(" not in lower:
             return None
 
         observed_headers = sorted(self.runtime._observed_header_set())
@@ -225,15 +231,14 @@ class ExecutionGenericPreflightAdvisor:
         unknown_text = ", ".join(f"`{kwarg}={value}`" for kwarg, value in unknown_args)
         observed_text = ", ".join(f"`{header}`" for header in observed_headers[:20])
         guidance = (
-            f"PREFLIGHT_FAMILY_GROUNDING: the helper call for the `{family.name}` family references column header(s) not present in the loaded workbook.\n"
+            f"PREFLIGHT_SKILL_GROUNDING: the helper call for the `{skill.name}` skill references column header(s) not present in the loaded workbook.\n"
             f"- Unknown helper arguments: {unknown_text}\n"
             f"- Observed headers: {observed_text}\n"
             "- Replace those arguments with real headers from the workbook.\n"
             "- If the correct grouping/value/date column is obvious but uncertain, prefer `group_cols=None` or `value_col=None`.\n"
         )
-        suggested_call = infer.build_family_grounded_call_hint(family.name, user_question, observed_headers)
+        suggested_call = infer.build_family_grounded_call_hint(skill.name, user_question, observed_headers)
         if suggested_call:
             guidance += f"- Recommended grounded helper call:\n  `{suggested_call}`\n"
-        if family.loop_breaker:
-            guidance += family.loop_breaker
+        guidance += build_loop_breaker(skill, helper)
         return guidance.rstrip()
