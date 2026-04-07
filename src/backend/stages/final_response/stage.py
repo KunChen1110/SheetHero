@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional
 from openpyxl import load_workbook
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_families import detect_task_family
 from ..base.stage import Stage
 from ..base.llm_utils import call_llm
 
@@ -58,10 +57,6 @@ class FinalResponseStage(Stage):
         text = cls._compact_question(user_question)
         lowered = text.lower()
         headers = [str(item).strip() for item in (workbook_summary.get("headers") or []) if str(item).strip()]
-        family = detect_task_family(user_question)
-
-        if family and family.final_label:
-            return family.final_label
 
         if cls._is_task_schedule_question(user_question):
             return "task scheduling table"

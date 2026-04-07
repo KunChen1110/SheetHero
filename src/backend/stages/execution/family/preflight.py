@@ -3,7 +3,7 @@
 import re
 from typing import TYPE_CHECKING, Optional
 
-from ....task_families import detect_task_family
+from ....task_skills import detect_skill, select_helper
 from ..analysis.schedule_helper_analysis import inspect_schedule_helper_sources
 
 if TYPE_CHECKING:
@@ -15,15 +15,6 @@ class ExecutionFamilyPreflightAdvisor:
 
     def __init__(self, runtime: "ExecutionRuntime"):
         self.runtime = runtime
-
-    @staticmethod
-    def _detected_family_name(user_question: str) -> str:
-        family = detect_task_family(user_question)
-        return family.name if family is not None else ""
-
-    @classmethod
-    def _question_matches_family(cls, user_question: str, *family_names: str) -> bool:
-        return cls._detected_family_name(user_question) in set(family_names)
 
     def uses_literal_input_basenames(self, code_action: str) -> bool:
         code = code_action or ""
@@ -37,7 +28,9 @@ class ExecutionFamilyPreflightAdvisor:
         return False
 
     def regression_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        if not self._question_matches_family(user_question, "tabular_regression_analysis"):
+        skill = detect_skill(user_question)
+        helper = select_helper(skill, user_question) if skill else None
+        if helper is None or helper.name != "fit_linear_regression_weights":
             return None
         code = code_action or ""
         lower = code.lower()
@@ -77,347 +70,17 @@ class ExecutionFamilyPreflightAdvisor:
         )
 
     def merge_fill_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        code = code_action or ""
-        lower = code.lower()
-        if self._question_matches_family(user_question, "multi_source_metric_dashboard"):
-            if "build_financial_dashboard_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_FINANCIAL_DASHBOARD: use the runtime financial-dashboard helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `dashboard_result = build_financial_dashboard_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build joins, target parsing, or dashboard rows in this task."
-            )
-        if self._question_matches_family(user_question, "entity_ranking_report"):
-            if "build_candidate_screening_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_CANDIDATE_SCREENING: use the runtime candidate-screening helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `screening_result = build_candidate_screening_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(screening_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build file loops, score formulas, or ranking rows in this task."
-            )
-        if self._question_matches_family(user_question, "parameter_driven_policy_report"):
-            if "build_inventory_eoq_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_INVENTORY_EOQ: use the runtime inventory EOQ helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `inventory_result = build_inventory_eoq_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(inventory_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build EOQ formulas, parameter parsing, or multi-table layout in this task."
-            )
-        if self._question_matches_family(user_question, "capacity_utilisation_report"):
-            if "build_hospital_utilisation_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_HOSPITAL_UTILISATION: use the runtime hospital-utilisation helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_hospital_utilisation_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `if report['highlight_rows']:`\n"
-                "      `highlight_rows('Output', report['highlight_rows'], {'fill_color': 'red'})`\n"
-                "  `else:`\n"
-                "      `print('NO_HIGHLIGHT_ROWS: threshold not reached')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build merges or grouped utilisation logic in this task."
-            )
-        if self._question_matches_family(user_question, "overlapping_period_alignment_report"):
-            if "build_market_share_shipment_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_MARKET_SHARE_SHIPMENT: use the runtime market-share/shipment helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `market_result = build_market_share_shipment_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(market_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build quarter alignment or market-share multiplications in this task."
-            )
-        if self._question_matches_family(user_question, "derived_efficiency_report"):
-            if "build_cash_flow_efficiency_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_CASH_FLOW_EFFICIENCY: use the runtime cash-flow helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_cash_flow_efficiency_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-locate statement rows or compute OCF/FCF formulas in this task."
-            )
-        if self._question_matches_family(user_question, "proportion_and_cost_report"):
-            if "build_diabetes_region_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_DIABETES_REGION: use the runtime diabetes-region helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_diabetes_region_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build region merges or percentage calculations in this task."
-            )
-        if self._question_matches_family(user_question, "grouped_metric_summary"):
-            helper_call = re.search(r"build_mobile_reviews_summary_report\s*\(([^)]*)\)", code, flags=re.IGNORECASE | re.DOTALL)
-            if helper_call:
-                if helper_call.group(1).strip():
-                    return (
-                        "PREFLIGHT_MOBILE_REVIEWS: call `build_mobile_reviews_summary_report()` with no manual DataFrame argument.\n"
-                        "- Correct usage:\n"
-                        "  `report = build_mobile_reviews_summary_report()`\n"
-                        "- The helper reads the runtime workbook internally.\n"
-                        "- Do not pre-select headers or pass `df` into the helper."
-                    )
-                return None
-            return (
-                "PREFLIGHT_MOBILE_REVIEWS: use the runtime mobile-reviews helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_mobile_reviews_summary_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Exclude rows with missing ratings.\n"
-                "- Do not hand-build groupby or aggregation code in this task."
-            )
-        if self._question_matches_family(user_question, "comparative_multi_sheet_summary"):
-            helper_call = re.search(r"build_store_feature_analysis_report\s*\(([^)]*)\)", code, flags=re.IGNORECASE | re.DOTALL)
-            if helper_call:
-                if helper_call.group(1).strip():
-                    return (
-                        "PREFLIGHT_STORE_FEATURE_ANALYSIS: call `build_store_feature_analysis_report()` with no manual DataFrame argument.\n"
-                        "- Correct usage:\n"
-                        "  `report = build_store_feature_analysis_report()`\n"
-                        "- The helper reads and merges the two runtime workbooks internally.\n"
-                        "- Do not pre-select headers or pass `df` into the helper."
-                    )
-                return None
-            return (
-                "PREFLIGHT_STORE_FEATURE_ANALYSIS: use the runtime store-feature helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_store_feature_analysis_report()`\n"
-                "  `create_output_sheet('AvgByStoreType')`\n"
-                "  `write_dataframe_to_sheet(report['avg_by_type_detail_data'], 'AvgByStoreType', 'A1')`\n"
-                "  `create_output_sheet('HolidayVsNonHoliday')`\n"
-                "  `write_dataframe_to_sheet(report['holiday_detail_data'], 'HolidayVsNonHoliday', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build merge/groupby/multi-sheet logic in this task."
-            )
-        if self._question_matches_family(user_question, "relational_flattening_report"):
-            helper_call = re.search(r"build_ecommerce_merge_report\s*\(([^)]*)\)", code, flags=re.IGNORECASE | re.DOTALL)
-            if helper_call:
-                if helper_call.group(1).strip():
-                    return (
-                        "PREFLIGHT_ECOMMERCE_MERGE: call `build_ecommerce_merge_report()` with no manual DataFrame argument.\n"
-                        "- Correct usage:\n"
-                        "  `report = build_ecommerce_merge_report()`\n"
-                        "- The helper reads, translates, and merges the runtime CSV tables internally.\n"
-                        "- Do not pre-select or pass tables into the helper."
-                    )
-                return None
-            return (
-                "PREFLIGHT_ECOMMERCE_MERGE: use the runtime e-commerce merge helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_ecommerce_merge_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build multi-file joins or category translation logic in this task."
-            )
-        if self._question_matches_family(user_question, "missing_data_scan"):
-            if "build_missing_data_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_MISSING_DATA: use the runtime missing-data helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_missing_data_report()`\n"
-                "  `final_text = report['answer']`\n"
-                "  `print(f'FINAL_TEXT: {final_text}')`\n"
-                "  `final_text`\n"
-                "- Do not create or save an output workbook for this task."
-            )
-        if self._question_matches_family(user_question, "identifier_format_scan"):
-            if "build_room_format_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_ROOM_FORMAT: use the runtime room-format helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_room_format_report()`\n"
-                "  `final_text = report['answer']`\n"
-                "  `print(f'FINAL_TEXT: {final_text}')`\n"
-                "  `final_text`\n"
-                "- Do not modify or save the workbook in this task."
-            )
-        if self._question_matches_family(user_question, "relational_assignment_schedule"):
-            helper_call = re.search(r"build_relational_assignment_schedule_report\s*\(([^)]*)\)", code, flags=re.IGNORECASE | re.DOTALL)
-            if helper_call:
-                if helper_call.group(1).strip():
-                    return (
-                        "PREFLIGHT_ASSIGNMENT_SCHEDULE: call `build_relational_assignment_schedule_report()` with no manual DataFrame argument.\n"
-                        "- Correct usage:\n"
-                        "  `report = build_relational_assignment_schedule_report()`\n"
-                        "- The helper reads and joins the runtime assignment/schedule tables internally.\n"
-                        "- Do not pass `df` objects into the helper."
-                    )
-                return None
-            return (
-                "PREFLIGHT_ASSIGNMENT_SCHEDULE: use the runtime assignment-schedule helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `report = build_relational_assignment_schedule_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-build multi-file joins or manual row loops in this task."
-            )
-        if self._question_matches_family(user_question, "pairwise_correlation_matrix"):
-            if "build_correlation_matrix_table(" in lower:
-                if re.search(r"matrix_result\s*\[\s*['\"]matrix_df['\"]\s*\]\.values", lower):
-                    return (
-                        "PREFLIGHT_CORRELATION_MATRIX: write the helper result directly.\n"
-                        "- Prefer:\n"
-                        "  `write_dataframe_to_sheet(matrix_result['detail_data'], 'Output', 'A1')`\n"
-                        "- Or:\n"
-                        "  `write_dataframe_to_sheet(matrix_result['output_df'], 'Output', 'A1')`\n"
-                        "- Do not rebuild the matrix from `.values`."
-                    )
-                return None
-            return (
-                "PREFLIGHT_CORRELATION_MATRIX: use the runtime correlation-matrix helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `tables = load_all_tables()`\n"
-                "  `df = tables[0]['df']`\n"
-                "  `matrix_result = build_correlation_matrix_table(df, numeric_columns=['sepal_length', 'sepal_width', 'petal_length', 'petal_width'], filter_column='species', filter_value='Iris-setosa')`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(matrix_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hard-code absolute paths or hand-build the correlation matrix in this task."
-            )
-        if self._question_matches_family(user_question, "graph_consistency_scan"):
-            if "build_cycle_detection_report(" in lower:
-                return None
-            return (
-                "PREFLIGHT_CYCLE_DETECTION: use the runtime cycle-detection helper.\n"
-                "- Preferred linear pipeline:\n"
-                "  `tables = load_all_tables()`\n"
-                "  `cycle_result = build_cycle_detection_report(tables, from_col='Node From', to_col='Node To')`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(cycle_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "  `print(f'SAVED_FILE: {saved_file}')`\n"
-                "  `saved_file`\n"
-                "- Do not hand-code CSV reads or manual cycle-detection loops in this task."
-            )
-        if self._question_matches_family(user_question, "temporal_growth_visual_report"):
-            if "build_region_growth_analysis(" in lower and "save_plot_to_excel(" in lower:
-                return None
-            return (
-                "PREFLIGHT_REGION_GROWTH: use the runtime region-growth helper for messy multi-row header chart tasks.\n"
-                "- Preferred linear pipeline:\n"
-                "  `all_files = list_all_workbooks()`\n"
-                "  `analysis = build_region_growth_analysis(all_files[0], sheet_name='Data', start_year=2020, end_year=2024)`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(analysis['output_df'], 'Output', 'A1')`\n"
-                "  `highlight_rows('Output', analysis['fastest_growth_rows'], {'fill_color': 'red'})`\n"
-                "  `add_summary_row('Output', len(analysis['detail_data']) + 2, analysis['summary'])`\n"
-                "  `chart_df = analysis['chart_df']`\n"
-                "  `for region in analysis['region_columns']: plt.plot(chart_df['Year'], chart_df[region], label=region)`\n"
-                "  `plt.xlabel('Year')`; `plt.ylabel('Penetration Rate')`; `plt.legend()`\n"
-                "  `save_plot_to_excel('Output', 'F2')`\n"
-                "- `plt` is already available in the sandbox; do NOT import `plotnine`, `seaborn`, or any extra chart library.\n"
-                "- Do not hand-parse the messy multi-row header with `read_table_multi()` in this task."
-            )
-        if self._question_matches_family(user_question, "reference_guided_completion"):
-            if "fill_missing_from_reference(" in lower:
-                compact = lower.replace(" ", "")
-                if "load_all_tables(" in lower and "require_primary_key=false" not in compact:
-                    return (
-                        "PREFLIGHT_FILL: fill-missing tasks must preserve rows whose key is missing.\n"
-                        "- Load with:\n"
-                        "  `tables = load_all_tables(require_primary_key=False)`\n"
-                        "- Then call:\n"
-                        "  `key_header = infer_common_key(tables)`\n"
-                        "  `fill_result = fill_missing_from_reference(tables[0]['df'], tables[1]['df'], key_header=key_header, prefer_primary=True)`"
-                    )
-                return None
-            return (
-                "PREFLIGHT_FILL: use the runtime fill helper for simple fill-missing tasks.\n"
-                "- Preferred linear pipeline:\n"
-                "  `tables = load_all_tables(require_primary_key=False)`\n"
-                "  `key_header = infer_common_key(tables)`\n"
-                "  `fill_result = fill_missing_from_reference(tables[0]['df'], tables[1]['df'], key_header=key_header, prefer_primary=True)`\n"
-                "  `write_dataframe_to_sheet(fill_result['output_df'], 'Output', 'A1')`\n"
-                "- Do not hand-write per-cell fill loops for this simple task."
-            )
-        if self._question_matches_family(user_question, "relational_join_enrichment"):
-            if "merge_tables_on_key(" in lower:
-                return None
-            return (
-                "PREFLIGHT_MERGE: use the runtime merge helper for simple multi-file merge tasks.\n"
-                "- Preferred linear pipeline:\n"
-                "  `tables = load_all_tables()`\n"
-                "  `key_header = infer_common_key(tables)`\n"
-                "  `merge_result = merge_tables_on_key(tables, key_header=key_header, how='inner')`\n"
-                "  `write_dataframe_to_sheet(merge_result['output_df'], 'Output', 'A1')`\n"
-                "- Do not hand-write repeated merge loops for this simple task."
-            )
-        if self._question_matches_family(user_question, "schema_aligned_merge_summary"):
-            if "concat_tables_with_same_headers(" in lower and "summarize_numeric_column(" in lower:
-                return None
-            if "pd.merge(" in lower:
-                return (
-                    "PREFLIGHT_MERGE_SUMMARY: this task needs vertical concatenation, not a join/merge on keys.\n"
-                    "- The input tables share the same schema and should be stacked row-wise.\n"
-                    "- Use `concat_tables_with_same_headers(tables)` first, then summarize/highlight from the combined table."
-                )
-            return (
-                "PREFLIGHT_MERGE_SUMMARY: use the runtime concat/summary helpers for same-schema merge + summary tasks.\n"
-                "- Preferred linear pipeline:\n"
-                "  `tables = load_all_tables()`\n"
-                "  `concat_result = concat_tables_with_same_headers(tables)`\n"
-                "  `combined_df = concat_result['output_df']`\n"
-                "  `summary_result = summarize_numeric_column(combined_df, value_col='...', summary_labels={...})`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(combined_df, 'Output', 'A1')`\n"
-                "  `highlight_rows('Output', summary_result['output_row_numbers'], {'fill_color': 'red'})`\n"
-                "  `add_summary_row('Output', len(concat_result['detail_data']) + 2, summary_result['summary'])`"
-            )
+        """Domain-specific helper guards.
+
+        Most domain-specific helpers no longer have dedicated detectors.
+        The generic preflight in generic_preflight.py handles skill-matched helpers.
+        """
         return None
 
     def regression_feature_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        if not self._question_matches_family(user_question, "tabular_regression_analysis"):
+        skill = detect_skill(user_question)
+        _helper = select_helper(skill, user_question) if skill else None
+        if _helper is None or _helper.name != "fit_linear_regression_weights":
             return None
         code = code_action or ""
         lower = code.lower()
@@ -456,7 +119,8 @@ class ExecutionFamilyPreflightAdvisor:
         return None
 
     def scheduling_dependency_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        if not self._question_matches_family(user_question, "dependency_constrained_schedule"):
+        skill = detect_skill(user_question)
+        if skill is None or skill.name != "schedule":
             return None
         runtime = self.runtime
         code = code_action or ""

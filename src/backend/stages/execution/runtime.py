@@ -5,7 +5,7 @@ import re
 from typing import Dict, Any, Optional
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_families import detect_task_family
+from ...task_skills import detect_skill
 from .core.executor import CodeExecutor
 from .guards.error_feedback import ExecutionErrorFeedbackBuilder
 from .guards.forbidden_policy import (
@@ -195,9 +195,9 @@ class ExecutionRuntime(StageRuntime):
         return None
 
     @staticmethod
-    def _question_matches_family(user_question: str, *family_names: str) -> bool:
-        family = detect_task_family(user_question)
-        return family is not None and family.name in set(family_names)
+    def _is_text_output_skill(user_question: str) -> bool:
+        skill = detect_skill(user_question)
+        return skill is not None and skill.output_mode == "text"
 
     def _update_forbidden_memory(self, forbidden_err: str) -> str:
         """Track forbidden signature frequency and repetition streak."""
@@ -508,7 +508,7 @@ class ExecutionRuntime(StageRuntime):
                             "- Use list_all_workbooks()+read_table_multi(); do not use pandas file readers.\n"
                         )
                     task_loop_breaker = get_task_specific_loop_breaker(user_question)
-                    if self._question_matches_family(user_question, "missing_data_scan", "identifier_format_scan"):
+                    if self._is_text_output_skill(user_question):
                         execution_shape = (
                             "Include complete task logic: read -> compute -> print `FINAL_TEXT:` -> return the final text."
                         )
@@ -691,7 +691,7 @@ class ExecutionRuntime(StageRuntime):
 
                     text_answer = self._extract_text_answer_from_result(execution_result)
                     if text_answer is not None and (
-                        self._question_matches_family(user_question, "missing_data_scan", "identifier_format_scan")
+                        self._is_text_output_skill(user_question)
                         or (
                             output_contract.get("requires_detailed_table") is False
                             and output_contract.get("requires_highlight") is False

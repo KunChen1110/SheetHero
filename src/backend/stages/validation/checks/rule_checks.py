@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING, Any, Dict
 
+from ....task_skills import detect_skill, select_helper
+
 if TYPE_CHECKING:
     from ..runtime import ValidationRuntime
 
@@ -30,6 +32,8 @@ class ValidationRuleCheckAdvisor:
     ) -> Dict[str, Any]:
         runtime = self.runtime
         hard_issues: list[str] = []
+        _skill = detect_skill(user_question)
+        _helper = select_helper(_skill, user_question) if _skill else None
 
         if not run_success:
             hard_issues.append("Execution result indicates failure (`success=false`).")
@@ -40,7 +44,7 @@ class ValidationRuleCheckAdvisor:
                     "Final answer is a file path but no 'Workbook saved to:' line found in execution output. "
                     "Execution must use save_workbook_to(output_path) and produce save confirmation."
                 )
-        elif runtime._question_matches_family(user_question, "dependency_constrained_schedule"):
+        elif _skill is not None and _skill.name == "schedule":
             hard_issues.append(
                 "Scheduling task did not finish with a saved output workbook path."
             )
@@ -94,7 +98,7 @@ class ValidationRuleCheckAdvisor:
                 f"{runtime._format_write_range(previous)} vs {runtime._format_write_range(current)}."
             )
 
-        if runtime._question_matches_family(user_question, "tabular_regression_analysis"):
+        if _helper is not None and _helper.name == "fit_linear_regression_weights":
             reported_columns = runtime._extract_reported_columns(all_results)
             expected_predictors = runtime._expected_regression_predictors(reported_columns)
             if expected_predictors:
@@ -122,7 +126,7 @@ class ValidationRuleCheckAdvisor:
                         + ", ".join(missing[:6])
                     )
 
-        if runtime._question_matches_family(user_question, "dependency_constrained_schedule"):
+        if _skill is not None and _skill.name == "schedule":
             hard_issues.extend(runtime._collect_schedule_code_issues(all_code))
             if max_written_columns and max_written_columns < 5:
                 hard_issues.append(
