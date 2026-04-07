@@ -45,12 +45,15 @@ def _is_merge_request(q: str) -> bool:
 
 def _is_aggregate_request(q: str) -> bool:
     q = q.lower()
-    agg_words = ("average", "mean", "sum", "total", "count",
-                 "median", "min", "max", "rank", "ranking")
-    group_words = ("group by", "grouped by", "for each", "per ",
-                   " by ", "each ", "by country", "by continent",
+    agg_words = ("average", "mean", " sum ", "total ",
+                 "median", "rank", "ranking")
+    # Only explicit grouping phrases — avoid the overly broad " by " which
+    # matches "efficiency of Coca-Cola from 2009 to 2018 by calculating".
+    # Avoid "by region"/"by country" which collide with domain questions
+    # like "diabetes worldwide by region" or "prevalence by country".
+    group_words = ("group by", "grouped by", "group the", "grouped the",
                    "by department", "by year", "by month", "by quarter",
-                   "by semester", "by brand", "by category", "by region",
+                   "by semester", "by brand", "by category",
                    "by store", "by type")
     has_agg = any(w in q for w in agg_words)
     has_group = any(w in q for w in group_words)
@@ -95,7 +98,11 @@ def _is_scan_request(q: str) -> bool:
                      "blank values", "empty values", "null values")
     action_words = ("identify", "find", "locate", "report", "scan",
                     "check", "detect", "audit", "inspect")
-    format_words = ("inconsistenc", "format", "identifier")
+    # "format" alone is too broad ("in the following format" triggers).
+    # Require format-specific context: "inconsistenc", "identifier", or
+    # "format" next to "check"/"inconsistenc".
+    format_words = ("inconsistenc", "identifier", "format inconsistenc",
+                    "check for any inconsistenc", "format check")
     has_missing = any(w in q for w in missing_words)
     has_format = any(w in q for w in format_words)
     has_action = any(w in q for w in action_words)
