@@ -4,7 +4,7 @@ import re
 from typing import Optional
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_skills import detect_skill, select_helper, build_skill_hint
+from ...task_skills import detect_skill, select_helper, build_skill_hint, build_available_helpers_hint
 from ..base.stage import Stage
 from ..base.llm_utils import call_llm
 from ...prompt.prompt_builder import PromptBuilder
@@ -59,7 +59,12 @@ class UnderstandingStage(Stage):
             skill_hint=skill_hint,
         )
     
-        understanding_output = call_llm(self.client, self.deployment, messages)
+        # Offline models (e.g. Qwen3 8B) burn tokens on internal thinking.
+        # Cap total generation so the understanding stage finishes faster.
+        llm_kwargs = {}
+        if self.prompt_builder.profile == "offline_strict":
+            llm_kwargs["max_tokens"] = 1024
+        understanding_output = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         understanding_output = self._sanitize_understanding_output(
             understanding_output,
             user_question
@@ -215,8 +220,15 @@ class UnderstandingStage(Stage):
             excel_context_understanding,
             session_context_understanding
         )
+        is_offline = self.prompt_builder.profile == "offline_strict"
         if skill_hint:
-            prompt_text += f"\n\n{skill_hint}\n\nKeep your response under 15 lines."
+            prompt_text += f"\n\n{skill_hint}"
+        elif is_offline:
+            # No skill matched — show available domain helpers so the LLM
+            # can plan around them instead of hand-building logic.
+            prompt_text += f"\n\n{build_available_helpers_hint()}"
+        if is_offline:
+            prompt_text += "\n\nKeep your response under 15 lines. Be concise."
         return [{"role": "user", "content": prompt_text}]
 
     def _context_is_relevant(self, user_question: str, session_context_understanding: str) -> bool:

@@ -338,6 +338,34 @@ def build_skill_hint(skill: SkillSpec, helper: HelperSpec) -> str:
     return "\n".join(lines)
 
 
+# Domain-specific zero-arg helpers available in the sandbox.
+# These have no skill detector — the LLM discovers them via this hint.
+_DOMAIN_HELPERS: tuple[tuple[str, str], ...] = (
+    ("build_financial_dashboard_report", "Quarter-level financial dashboard from P&L/sales/KPI tables"),
+    ("build_candidate_screening_report", "Ranked candidate table from multi-file candidate data"),
+    ("build_inventory_eoq_report", "Inventory EOQ analysis with sensitivity tables"),
+    ("build_hospital_utilisation_report", "Staff/service utilisation by department"),
+    ("build_market_share_shipment_report", "Brand shipment estimates from market-share + shipment tables"),
+    ("build_cash_flow_efficiency_report", "Yearly OCF/FCF efficiency table from financial statements"),
+    ("build_diabetes_region_report", "Regional diabetes summary with global share and avg expenditure"),
+    ("build_mobile_reviews_summary_report", "Grouped review summary by country and brand"),
+    ("build_store_feature_analysis_report", "Store feature analysis with avg-by-type and holiday comparison"),
+    ("build_ecommerce_merge_report", "Merged e-commerce table from relational CSV tables"),
+)
+
+
+def build_available_helpers_hint() -> str:
+    """Build a compact hint listing all zero-arg domain helpers available in sandbox."""
+    lines = [
+        "[AVAILABLE HELPERS]",
+        "The sandbox has these ready-to-use helper functions (call with no arguments):",
+    ]
+    for name, desc in _DOMAIN_HELPERS:
+        lines.append(f"- `{name}()` — {desc}")
+    lines.append("If one matches the task, plan to use it directly. Do not hand-build the logic.")
+    return "\n".join(lines)
+
+
 _OLD_FAMILY_TO_SKILL_HELPER = {
     "schema_aligned_merge_summary": ("merge", "concat_tables_with_same_headers"),
     "reference_guided_completion": ("merge", "fill_missing_from_reference"),
