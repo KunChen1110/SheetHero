@@ -1,12 +1,13 @@
-"""Task-family loop-breaker templates for execution repair prompts."""
+"""Skill-based loop breaker providers."""
 
-from __future__ import annotations
-
-from ....task_families import detect_task_family
+from ....task_skills import detect_skill, select_helper, build_loop_breaker
 
 
 def get_task_specific_loop_breaker(user_question: str) -> str:
-    family = detect_task_family(user_question)
-    if family is None:
+    skill = detect_skill(user_question)
+    if skill is None:
         return ""
-    return family.loop_breaker or ""
+    helper = select_helper(skill, user_question)
+    if helper is None:
+        return ""
+    return build_loop_breaker(skill, helper)
