@@ -12,7 +12,6 @@ import pandas as pd
 from ..log.logger_registry import LoggerRegistry
 from ..stages.base.llm_utils import call_llm
 from ..prompt.prompt_builder import PromptBuilder
-from ..task_families import should_skip_diagnose
 from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -1720,9 +1719,6 @@ class DiagnoseRouter:
     def _detect_blocking_data_issues(cls, workbook_view, user_question: str) -> List[Dict[str, Any]]:
         if cls._is_self_reporting_issue_task(user_question):
             return []
-        if should_skip_diagnose(user_question):
-            return []
-
         coerced = cls._coerce_workbook_view(workbook_view)
         if not coerced:
             return []

@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_families import detect_task_family, get_task_family_validation_mode
+from ...task_skills import detect_skill, select_helper, get_helper_validation_mode
 from ..base.runtime import StageRuntime
 from ...prompt.prompt_builder import PromptBuilder
 from .core.history import ValidationHistory
@@ -73,13 +73,13 @@ class ValidationRuntime(
         )
 
     @staticmethod
-    def _detected_family_name(user_question: str) -> str:
-        family = detect_task_family(user_question)
-        return family.name if family is not None else ""
+    def _detected_skill_name(user_question: str) -> str:
+        skill = detect_skill(user_question)
+        return skill.name if skill is not None else ""
 
     @classmethod
-    def _question_matches_family(cls, user_question: str, *family_names: str) -> bool:
-        return cls._detected_family_name(user_question) in set(family_names)
+    def _question_matches_skill(cls, user_question: str, *skill_names: str) -> bool:
+        return cls._detected_skill_name(user_question) in set(skill_names)
 
     @staticmethod
     def _looks_like_file_path(s: str) -> bool:
@@ -99,15 +99,6 @@ class ValidationRuntime(
         need_summary: bool | None,
         need_highlight: bool | None,
     ) -> tuple[bool | None, bool | None, bool | None]:
-        family = detect_task_family(user_question)
-        if family is None:
-            return need_detail, need_summary, need_highlight
-        if need_detail is None:
-            need_detail = family.requires_detailed_table
-        if need_summary is None:
-            need_summary = family.requires_summary_metrics
-        if need_highlight is None:
-            need_highlight = family.requires_highlight
         return need_detail, need_summary, need_highlight
 
     def run(self, execution_result: Dict[str, Any], user_question: str,
@@ -139,7 +130,8 @@ class ValidationRuntime(
             need_summary,
             need_highlight,
         )
-        family = detect_task_family(user_question)
+        skill = detect_skill(user_question)
+        helper = select_helper(skill, user_question) if skill else None
 
         deterministic_result = self.deterministic.try_validate(
             execution_result=execution_result,
@@ -156,7 +148,8 @@ class ValidationRuntime(
             need_detail=need_detail,
             need_summary=need_summary,
             need_highlight=need_highlight,
-            family=family,
+            skill=skill,
+            helper=helper,
         )
         if deterministic_result is not None:
             if not successful_steps:
@@ -164,7 +157,7 @@ class ValidationRuntime(
                 logger.info("Validation: FAILED")
             elif execution_result.get("_text_preview_only"):
                 logger.info("Validation: PASSED (deterministic text-preview fast-path)")
-            elif self._question_matches_family(user_question, "dependency_constrained_schedule"):
+            elif self._question_matches_skill(user_question, "schedule"):
                 logger.info("Validation: PASSED (deterministic schedule fast-path)")
             elif final_answer and not self._looks_like_file_path(final_answer):
                 logger.info("Validation: PASSED (deterministic scalar fast-path)")

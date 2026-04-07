@@ -3,10 +3,10 @@
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ....log.logger_registry import LoggerRegistry
-from ....task_families import (
-    detect_task_family,
-    get_task_family_runtime_mode,
-    task_family_uses_post_table_summary_row,
+from ....task_skills import (
+    detect_skill, select_helper,
+    get_helper_runtime_mode,
+    helper_uses_post_table_summary_row,
 )
 
 if TYPE_CHECKING:
@@ -113,15 +113,9 @@ class ExecutionFamilyFastPathRunner:
             "extra_sheet_names": extra_sheet_names or [],
         }
 
-    def execute(self, family_name: str, user_question: str) -> Optional[dict]:
+    def execute(self, helper_name_param: str, runtime_mode: str, user_question: str) -> Optional[dict]:
         runtime = self.runtime
         globals_dict = getattr(runtime.sandbox, "code_globals", {}) or {}
-        family = detect_task_family(user_question)
-        if family is None or family.name != family_name:
-            family = None
-        runtime_mode = get_task_family_runtime_mode(family_name)
-        if runtime_mode is None:
-            return None
         infer = runtime.question_inference
         observed_headers = sorted(runtime._observed_header_set())
         create_output_sheet = globals_dict.get("create_output_sheet")
@@ -149,7 +143,7 @@ class ExecutionFamilyFastPathRunner:
             value_col = infer.infer_value_header_from_question(
                 observed_headers,
                 user_question,
-                family_name,
+                helper_name_param,
             )
             report = helper(
                 file_path=None,
@@ -171,7 +165,7 @@ class ExecutionFamilyFastPathRunner:
                 value_col=infer.infer_value_header_from_question(
                     observed_headers,
                     user_question,
-                    family_name,
+                    helper_name_param,
                 ),
                 period=period,
                 aggregate=infer.infer_aggregate_from_question(user_question),
@@ -210,7 +204,7 @@ class ExecutionFamilyFastPathRunner:
             grounded_value_col = infer.infer_value_header_from_question(
                 observed_headers,
                 user_question,
-                family_name,
+                helper_name_param,
             )
             summary_result = summarize_numeric_column(combined_df, grounded_value_col or "...")
             report = {
@@ -333,13 +327,13 @@ class ExecutionFamilyFastPathRunner:
             tables = load_all_tables()
             report = helper(tables, from_col="Node From", to_col="Node To")
             helper_name = "build_cycle_detection_report"
-        elif runtime_mode == "text_scan" and family_name == "missing_data_scan":
+        elif runtime_mode == "text_scan" and helper_name_param == "build_missing_data_report":
             helper = globals_dict.get("build_missing_data_report")
             if helper is None:
                 return None
             report = helper()
             helper_name = "build_missing_data_report"
-        elif runtime_mode == "text_scan" and family_name == "identifier_format_scan":
+        elif runtime_mode == "text_scan" and helper_name_param == "build_room_format_report":
             helper = globals_dict.get("build_room_format_report")
             if helper is None:
                 return None
@@ -384,12 +378,12 @@ class ExecutionFamilyFastPathRunner:
                 ("AvgByStoreType", report.get("avg_by_type_detail_data")),
                 ("HolidayVsNonHoliday", report.get("holiday_detail_data")),
             ]
-        elif runtime_mode == "zero_arg_helper" and family is not None and family.helper_name:
-            helper = globals_dict.get(family.helper_name)
-            if helper is None:
+        elif runtime_mode == "zero_arg_helper":
+            helper_fn = globals_dict.get(helper_name_param)
+            if helper_fn is None:
                 return None
-            report = helper()
-            helper_name = family.helper_name
+            report = helper_fn()
+            helper_name = helper_name_param
         else:
             return None
 
@@ -409,11 +403,11 @@ class ExecutionFamilyFastPathRunner:
                 "total_turns": 1,
                 "conversation_history": runtime.history_formatter.format_history(runtime.conversation_history),
                 "execution_summary": runtime.summary_builder.build([step], final_text),
-                "_family_fast_path": family_name,
+                "_family_fast_path": helper_name_param,
             }
 
         if not isinstance(report, dict) or "detail_data" not in report:
-            if family_name != "comparative_multi_sheet_summary":
+            if runtime_mode != "comparative_multi_sheet":
                 return None
 
         if self._text_output_mode_enabled():
@@ -456,7 +450,7 @@ class ExecutionFamilyFastPathRunner:
                 "total_turns": 1,
                 "conversation_history": runtime.history_formatter.format_history(runtime.conversation_history),
                 "execution_summary": runtime.summary_builder.build([step], final_text),
-                "_family_fast_path": family_name,
+                "_family_fast_path": helper_name_param,
                 "_text_preview_only": True,
                 "_text_preview_truncated": bool(preview_payload["truncated"]),
                 "_text_preview_rows": preview_payload["preview_rows"],
@@ -478,9 +472,9 @@ class ExecutionFamilyFastPathRunner:
         highlight_rows_payload = report.get("highlight_rows") or []
         if highlight_rows_payload and "highlight_rows_fn" in locals() and highlight_rows_fn is not None:
             helper_messages.append(highlight_rows_fn(output_sheet_name, highlight_rows_payload, {"fill_color": "red"}))
-        elif family_name == "schema_aligned_merge_summary":
+        elif helper_name_param == "concat_tables_with_same_headers":
             helper_messages.append("NO_HIGHLIGHT_ROWS: []")
-        if task_family_uses_post_table_summary_row(family_name):
+        if helper_uses_post_table_summary_row(helper_name_param):
             summary_payload = report.get("summary") or {}
             if summary_payload:
                 helper_messages.append(add_summary_row(output_sheet_name, len(report["detail_data"]) + 2, summary_payload))
@@ -507,20 +501,24 @@ class ExecutionFamilyFastPathRunner:
             "total_turns": 1,
             "conversation_history": runtime.history_formatter.format_history(runtime.conversation_history),
             "execution_summary": runtime.summary_builder.build([step], saved_file),
-            "_family_fast_path": family_name,
+            "_family_fast_path": helper_name_param,
         }
 
     def try_run(self, user_question: str) -> Optional[dict]:
-        family = detect_task_family(user_question)
-        if family is None:
+        skill = detect_skill(user_question)
+        if skill is None:
             return None
-        if get_task_family_runtime_mode(family.name) is None:
+        helper = select_helper(skill, user_question)
+        if helper is None:
+            return None
+        runtime_mode = get_helper_runtime_mode(helper.name)
+        if runtime_mode is None:
             return None
         try:
-            return self.execute(family.name, user_question)
+            return self.execute(helper.name, runtime_mode, user_question)
         except Exception as exc:
             self.runtime._log_to_file(
-                f"\n**Deterministic family fast-path skipped:**\n{family.name}: {exc}\n"
+                f"\n**Deterministic skill fast-path skipped:**\n{helper.name}: {exc}\n"
             )
-            logger.info("Deterministic family fast-path failed for %s: %s", family.name, exc)
+            logger.info("Deterministic skill fast-path failed for %s: %s", helper.name, exc)
             return None

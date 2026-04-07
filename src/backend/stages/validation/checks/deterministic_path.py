@@ -3,7 +3,7 @@
 import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from ....task_families import get_task_family_validation_mode
+from ....task_skills import get_helper_validation_mode
 
 if TYPE_CHECKING:
     from ..runtime import ValidationRuntime
@@ -32,7 +32,8 @@ class ValidationDeterministicAdvisor:
         need_detail: bool | None,
         need_summary: bool | None,
         need_highlight: bool | None,
-        family,
+        skill=None,
+        helper=None,
     ) -> Optional[Dict[str, Any]]:
         runtime = self.runtime
 
@@ -48,7 +49,7 @@ class ValidationDeterministicAdvisor:
                 issues.append(
                     "No code execution occurred; all turns were blocked by preflight/forbidden/format checks."
                 )
-            if runtime._question_matches_family(user_question, "dependency_constrained_schedule"):
+            if (skill is not None and skill.name == "schedule"):
                 issues.append(
                     "Scheduling task never produced a saved workbook path, so validation cannot pass."
                 )
@@ -86,19 +87,19 @@ class ValidationDeterministicAdvisor:
             run_success
             and final_answer
             and not runtime._looks_like_file_path(final_answer)
-            and not runtime._question_matches_family(user_question, "dependency_constrained_schedule")
+            and not (skill is not None and skill.name == "schedule")
             and need_detail is False
             and need_highlight is False
             and need_summary is False
         ):
             deterministic_issues = []
             answer_lower = str(final_answer).strip().lower()
-            if runtime._question_matches_family(user_question, "missing_data_scan"):
+            if (helper is not None and helper.name == "build_missing_data_report"):
                 if "missing" not in answer_lower:
                     deterministic_issues.append(
                         "Missing-data task ended with a scalar answer that does not mention missing values."
                     )
-            if runtime._question_matches_family(user_question, "identifier_format_scan"):
+            if (helper is not None and helper.name == "build_room_format_report"):
                 if "room" not in answer_lower:
                     deterministic_issues.append(
                         "Room-format task ended with a scalar answer that does not mention room identifiers."
@@ -135,8 +136,8 @@ class ValidationDeterministicAdvisor:
                 )
             )
 
-            if family is not None:
-                validation_mode = get_task_family_validation_mode(family.name)
+            if helper is not None:
+                validation_mode = get_helper_validation_mode(helper.name)
                 if validation_mode == "temporal_aggregation":
                     deterministic_issues.extend(runtime._inspect_text_preview_temporal_aggregation(preview_headers, total_preview_rows))
                 elif validation_mode == "grouped_aggregation":
@@ -190,7 +191,7 @@ class ValidationDeterministicAdvisor:
             and final_answer
             and runtime._looks_like_file_path(final_answer)
             and ("Workbook saved to:" in all_results or "SAVED_FILE:" in all_results)
-            and not runtime._question_matches_family(user_question, "dependency_constrained_schedule")
+            and not (skill is not None and skill.name == "schedule")
         ):
             deterministic_issues = []
             latest_rows = runtime._extract_rows_written(latest_result)
@@ -211,7 +212,7 @@ class ValidationDeterministicAdvisor:
                 deterministic_issues.append(
                     "Output contract requires highlight, but no highlight evidence was found."
                 )
-            if runtime._question_matches_family(user_question, "temporal_growth_visual_report"):
+            if (helper is not None and helper.name == "build_region_growth_analysis"):
                 if "chart saved to" not in latest_result.lower():
                     deterministic_issues.append(
                         "Region-growth output requires an embedded chart, but no chart-save evidence was found."
@@ -222,7 +223,7 @@ class ValidationDeterministicAdvisor:
                 runtime._is_large_workbook(final_answer)
                 and need_summary is not True
                 and need_highlight is not True
-                and not runtime._question_matches_family(user_question, "temporal_growth_visual_report")
+                and not (helper is not None and helper.name == "build_region_growth_analysis")
             )
             if use_lightweight_validation:
                 if not os.path.exists(final_answer):
@@ -236,8 +237,8 @@ class ValidationDeterministicAdvisor:
                     )
                 )
 
-            if family is not None:
-                validation_mode = get_task_family_validation_mode(family.name)
+            if helper is not None:
+                validation_mode = get_helper_validation_mode(helper.name)
                 if validation_mode == "temporal_aggregation":
                     deterministic_issues.extend(runtime._inspect_saved_temporal_aggregation_workbook(final_answer))
                 elif validation_mode == "grouped_aggregation":
@@ -281,7 +282,7 @@ class ValidationDeterministicAdvisor:
                 return validation_result
 
         if (
-            runtime._question_matches_family(user_question, "dependency_constrained_schedule")
+            (skill is not None and skill.name == "schedule")
             and run_success
             and final_answer
             and runtime._looks_like_file_path(final_answer)
