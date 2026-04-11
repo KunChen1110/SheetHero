@@ -35,6 +35,22 @@ from ..utils.sheethero_helpers import (
 )
 
 
+def _is_thinking_model(deployment: str) -> bool:
+    return (deployment or "").lower().startswith("qwen3")
+
+
+def _resolve_openai_timeout(timeout: int | None, base_url: str, deployment: str) -> int | None:
+    if base_url and _is_thinking_model(deployment):
+        return None
+    if timeout is None:
+        return None
+    try:
+        parsed_timeout = int(timeout)
+    except (TypeError, ValueError):
+        return None
+    return None if parsed_timeout <= 0 else max(1, parsed_timeout)
+
+
 class SheetHero:
     def __init__(self, excel_paths: Union[str, List[str]],
                  config: Config,
@@ -68,7 +84,11 @@ class SheetHero:
 
         # OpenAI-compatible local servers still require a non-empty api_key field.
         # Use a harmless placeholder when caller chooses base_url-only mode.
-        client_kwargs = {"api_key": api_key or "local-key"}
+        client_kwargs = {
+            "api_key": api_key or "local-key",
+            "timeout": _resolve_openai_timeout(self.config.timeout, base_url, self.config.deployment),
+            "max_retries": max(0, int(self.config.max_retries)),
+        }
         if base_url:
             client_kwargs["base_url"] = base_url
         self.client = OpenAI(**client_kwargs)
@@ -94,7 +114,8 @@ class SheetHero:
         self.interact_module = InteractStage(
             self.client,
             self.config.deployment,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
         self.diagnose_module = DiagnoseStage(
             self.client,
@@ -143,7 +164,8 @@ class SheetHero:
             self.client,
             self.config.deployment,
             token_budget=self.config.total_token_budget,
-            progress_logger=self.progress_logger
+            progress_logger=self.progress_logger,
+            prompt_profile=self.prompt_profile,
         )
 
     def _resolve_prompt_profile(self) -> str:
@@ -177,7 +199,8 @@ class SheetHero:
                 return max(1, int(raw))
             except ValueError:
                 pass
-        return max(1, min(int(self.config.max_turns), 5))
+        default_budget = 7 if self.prompt_profile == "offline_strict" else 5
+        return max(1, min(int(self.config.max_turns), default_budget))
     
     def start_session(self, user_question: str) -> SheetHeroSession:
         self.qa_stage.reset()
@@ -402,13 +425,15 @@ class SheetHero:
                          qa_stage: Optional[QualityAssuranceStage],
                          current_request: str) -> Dict[str, Any]:
         actions = qa_stage.export_cleaning_actions() if qa_stage else []
+        policy_plans = qa_stage.export_cleaning_policy_plans() if qa_stage else []
         session.qa_policy_notes = qa_stage.export_interpretation_policies() if qa_stage else []
-        append_ui_thought(session, "cleaning", "running", actions)
+        append_ui_thought(session, "cleaning", "running", actions or policy_plans)
         self.cleaning_module.apply(
             sandbox=self.sandbox,
-            actions=actions
+            actions=actions,
+            policy_plans=policy_plans,
         )
-        append_ui_thought(session, "cleaning", "done", actions)
+        append_ui_thought(session, "cleaning", "done", actions or policy_plans)
         if qa_stage:
             qa_stage.clear_cleaning_actions()
         session.spreadsheet_summary = ExcelContextBuilder(
