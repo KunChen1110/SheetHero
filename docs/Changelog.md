@@ -1,3 +1,12 @@
+## 11/04/2026
+### --- Added ---
+- Added runtime execution plan inference for skill prompts and repair guidance.
+- Added structured QA issue grouping and cleaning policy plans for repeated missing-value decisions.
+
+### --- Changed ---
+- Statistical correlation guidance now uses runtime-inferred target and feature columns instead of testcase-shaped prompt recipes.
+- Cleaning now consumes structured policy plans before any LLM-generated cleaning code.
+
 ## 30/10/2025
 ### Initial Commit
 
@@ -300,7 +309,7 @@
 
 ## 23/3/2026
 ### --- Added ---
-- Added a centralized task-family registry in `src/backend/task_families.py`
+- Added a centralized family registry in `src/backend/task_families.py`
   - Introduced abstract spreadsheet capability families instead of relying on scattered task-specific branching.
   - Centralized family-level policy for:
     - helper selection
@@ -335,9 +344,9 @@
   - `build_multi_key_relational_join_report(...)`
   - `build_capacity_constrained_allocation_report(...)`
 
-- Added synthetic family regression coverage
-  - Added `test/utils/run_family_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
-  - Added CLI support for one-command execution via `!FamilySyntheticTest`.
+- Added synthetic skill regression coverage
+  - Added `test/utils/run_skill_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
+  - Added CLI support for one-command execution via `!SkillSyntheticTest`.
 
 ### --- Changed ---
 - Reworked the backend from task-oriented patches to family-oriented architecture
@@ -346,10 +355,10 @@
 
 - Strengthened deterministic execution and reduced LLM dependence
   - For covered families, execution now prefers deterministic helper-first fast paths before invoking model-generated code.
-  - Reduced runtime latency and improved reliability for covered spreadsheet task families.
+  - Reduced runtime latency and improved reliability for covered spreadsheet skills.
 
 - Strengthened family-aware validation
-  - Added family-specific deterministic workbook inspectors for:
+  - Added skill-specific deterministic workbook inspectors for:
     - grouped aggregation
     - temporal aggregation
     - relational join
@@ -373,7 +382,7 @@
 
 ### --- Fixed ---
 - Fixed validation mismatches for deterministic allocation outputs
-  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a family-specific summary row is already valid.
+  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a skill-specific summary row is already valid.
 
 - Fixed large-task architectural drift
   - Moved additional execution/validation family routing logic into centralized registry mappings to reduce duplicated branching and future regression risk.
@@ -389,7 +398,7 @@
 
 ### --- Added ---
 - Added `v4.1` version documentation in `docs/VersionHistory.md`
-  - Documented the local-model upgrade as a validated runtime iteration after the family-based architecture introduced in `v4.0`.
+  - Documented the local-model upgrade as a validated runtime iteration after the skill-based architecture introduced in `v4.0`.
   - Recorded benchmark- and CLI-based regression validation as part of the version narrative.
 
 ### --- Fixed ---
@@ -425,11 +434,11 @@
   - Covered deterministic text-mode paths no longer save workbooks to disk before rendering the response.
 
 - Reorganized execution-stage internals into clearer submodules
-  - Grouped family-specific execution logic under `src/backend/stages/execution/family/`.
+  - Grouped skill-specific execution logic under `src/backend/stages/execution/skill/`.
   - Split large runtime responsibilities into:
-    - family fast paths
-    - family preflight
-    - family prompt augmentation
+    - skill fast paths
+    - skill preflight
+    - skill prompt augmentation
     - generic preflight
     - question-to-helper argument inference
   - Reduced `src/backend/stages/execution/runtime.py` to orchestration-focused responsibilities.
