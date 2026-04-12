@@ -2,15 +2,20 @@
 
 from typing import TYPE_CHECKING
 
+from ....log.logger_registry import LoggerRegistry
 from ....skills import (
-    detect_skill, select_helper,
+    detect_skills, select_helper,
     build_execution_strict_rules, build_loop_breaker, build_skill_hint,
     build_compact_skill_workflow,
     build_fallback_strategy,
 )
+from ....skills.prompt_builders import format_plan_log
+from ....skills import compose_skill_plan
 
 if TYPE_CHECKING:
     from ..runtime import ExecutionRuntime
+
+logger = LoggerRegistry.setup_logger(__name__)
 
 
 class ExecutionSkillPromptAdvisor:
@@ -38,11 +43,19 @@ class ExecutionSkillPromptAdvisor:
                 "Use these real headers for all select/merge operations. Do not invent columns."
             )
 
-        skill = detect_skill(user_question)
+        all_matched_skills = detect_skills(user_question)
+        skill = all_matched_skills[0] if all_matched_skills else None
         if skill:
             helper = select_helper(skill, user_question)
             if helper is not None:
                 observed_headers = sorted(runtime._observed_header_set())
+
+                # --- verbose skill-chain observability ---
+                helpers_map = {s.name: select_helper(s, user_question) for s in all_matched_skills}
+                composed_plan = compose_skill_plan(all_matched_skills, helpers_map)  # type: ignore[arg-type]
+                logger.info(format_plan_log(all_matched_skills, composed_plan))
+                # -----------------------------------------
+
                 plan_summary = ""
                 try:
                     plan = runtime.question_inference.infer_runtime_plan(
@@ -73,6 +86,8 @@ class ExecutionSkillPromptAdvisor:
                     skill,
                     helper,
                     plan_summary=plan_summary,
+                    extra_skills=all_matched_skills,
+                    user_question=user_question,
                 )
         else:
             # No skill matched — inject signal-aware fallback so the LLM always

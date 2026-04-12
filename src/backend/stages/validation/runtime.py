@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_skills import detect_skill, select_helper, get_helper_validation_mode
+from ...skills import detect_skill, select_helper
 from ..base.runtime import StageRuntime
 from ...prompt.prompt_builder import PromptBuilder
 from .core.history import ValidationHistory
@@ -77,10 +77,6 @@ class ValidationRuntime(
         skill = detect_skill(user_question)
         return skill.name if skill is not None else ""
 
-    @classmethod
-    def _question_matches_skill(cls, user_question: str, *skill_names: str) -> bool:
-        return cls._detected_skill_name(user_question) in set(skill_names)
-
     @staticmethod
     def _looks_like_file_path(s: str) -> bool:
         """True if s looks like a file path (e.g. ends with .xlsx or starts with / or contains \\)."""
@@ -100,6 +96,42 @@ class ValidationRuntime(
         need_highlight: bool | None,
     ) -> tuple[bool | None, bool | None, bool | None]:
         return need_detail, need_summary, need_highlight
+
+    def _collect_regression_feature_coverage_issues(
+        self,
+        all_results: str,
+        all_code: str,
+    ) -> list[str]:
+        reported_columns = self._extract_reported_columns(all_results)
+        expected_predictors = self._expected_regression_predictors(reported_columns)
+        if not expected_predictors:
+            return []
+
+        feature_cols = self._extract_feature_cols_from_code(all_code)
+        missing_from_feature_cols: list[str] = []
+        if feature_cols:
+            used = {c.lower() for c in feature_cols}
+            missing_from_feature_cols = [
+                predictor for predictor in expected_predictors
+                if predictor.lower() not in used
+            ]
+
+        weight_labels = self._extract_weight_labels(all_results)
+        missing_from_weights: list[str] = []
+        if weight_labels:
+            present_labels = {label.lower() for label in weight_labels}
+            missing_from_weights = [
+                predictor for predictor in expected_predictors
+                if predictor.lower() not in present_labels
+            ]
+
+        missing = missing_from_feature_cols or missing_from_weights
+        if not missing:
+            return []
+        return [
+            "Regression feature coverage incomplete. Missing predictor(s): "
+            + ", ".join(missing[:6])
+        ]
 
     def run(self, execution_result: Dict[str, Any], user_question: str,
             understanding_output: str) -> Dict[str, Any]:
@@ -152,18 +184,42 @@ class ValidationRuntime(
             helper=helper,
         )
         if deterministic_result is not None:
-            if not successful_steps:
-                logger.info("Validation fast-failed: no successful execution steps.")
-                logger.info("Validation: FAILED")
-            elif execution_result.get("_text_preview_only"):
-                logger.info("Validation: PASSED (deterministic text-preview fast-path)")
-            elif self._question_matches_skill(user_question, "schedule"):
-                logger.info("Validation: PASSED (deterministic schedule fast-path)")
-            elif final_answer and not self._looks_like_file_path(final_answer):
-                logger.info("Validation: PASSED (deterministic scalar fast-path)")
-            else:
-                logger.info("Validation: PASSED (deterministic workbook fast-path)")
+            logger.info("Validation fast-failed: no successful execution steps.")
+            logger.info("Validation: FAILED")
             return deterministic_result
+
+        if run_success and final_answer and self._looks_like_file_path(final_answer):
+            rule_only_result = {
+                "validation_passed": True,
+                "confidence_score": 1.0,
+                "issues_found": [],
+                "improvement_feedback": "",
+                "final_assessment": (
+                    "Saved workbook passed rule-based output-contract checks; no validation-LLM retry was needed."
+                ),
+                "verified_answer": final_answer,
+                "requires_reexecution": False,
+            }
+            rule_only_result = self.rule_checks.apply(
+                rule_only_result,
+                execution_result=execution_result,
+                user_question=user_question,
+                run_success=run_success,
+                final_answer=final_answer,
+                latest_result=latest_result,
+                latest_code=latest_code,
+                all_results=all_results,
+                all_code=all_code,
+                need_detail=need_detail,
+                need_summary=need_summary,
+                need_highlight=need_highlight,
+            )
+            if rule_only_result.get("validation_passed"):
+                logger.info("Validation: PASSED (rule-based workbook checks)")
+                self._log_to_file(
+                    f"\n**Validation Analysis:**\n```\n{self._render_validation_result(rule_only_result)}\n```\n"
+                )
+                return rule_only_result
 
         conversation_history = execution_result.get("conversation_history", [])
         conversation_history_text = self.history_formatter.format(conversation_history)

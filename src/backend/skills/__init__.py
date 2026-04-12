@@ -10,13 +10,14 @@ Helper selection: keyword sub-detectors on the user question; schema grounding
 
 from .models import HelperSpec, SkillSpec
 from .registry import all_skills, detect_skill, detect_skills, select_helper
-from .runtime_plan import RuntimeExecutionPlan, parse_plan_summary
+from .runtime_plan import RuntimeExecutionPlan, parse_plan_summary, WorkflowStep, compose_skill_plan
 from .prompt_builders import (
     build_skill_hint,
     build_compact_skill_workflow,
     build_execution_strict_rules,
     build_loop_breaker,
     build_fallback_strategy,
+    format_plan_log,
 )
 from .helper_metadata import (
     all_helper_names,
@@ -52,11 +53,14 @@ __all__ = [
     "select_helper",
     "RuntimeExecutionPlan",
     "parse_plan_summary",
+    "WorkflowStep",
+    "compose_skill_plan",
     "build_skill_hint",
     "build_compact_skill_workflow",
     "build_execution_strict_rules",
     "build_loop_breaker",
     "build_fallback_strategy",
+    "format_plan_log",
     "all_helper_names",
     "get_helper_metadata",
     "get_helper_runtime_mode",

@@ -316,8 +316,14 @@ class WorkbookValidationInspectorMixin:
         output_sheet = workbook["Output"] if "Output" in workbook.sheetnames else workbook.worksheets[0]
         header = [output_sheet.cell(row=1, column=col_idx).value for col_idx in range(1, 4)]
         normalized_header = [str(v).strip() if v is not None else "" for v in header]
-        if normalized_header != ["Region", "Avg Penetration (2020-2024)", "Growth (2020-2024)"]:
+        if normalized_header[0] != "Region":
             issues.append("Region-growth output table headers are incorrect or missing.")
+        avg_match = re.fullmatch(r"Avg Penetration \((\d{4})-(\d{4})\)", normalized_header[1])
+        growth_match = re.fullmatch(r"Growth(?: Rate)? \((\d{4})-(\d{4})\)", normalized_header[2])
+        if avg_match is None or growth_match is None:
+            issues.append("Region-growth output table headers are incorrect or missing.")
+        elif avg_match.groups() != growth_match.groups():
+            issues.append("Region-growth output uses inconsistent year windows across headers.")
 
         data_rows = 0
         for row_idx in range(2, output_sheet.max_row + 1):
@@ -338,7 +344,7 @@ class WorkbookValidationInspectorMixin:
                     summary_labels.add(str(label).strip())
         if "Fastest Growth Region" not in summary_labels:
             issues.append("Region-growth output is missing the `Fastest Growth Region` summary label.")
-        if not any("Growth (2020-2024)" in label for label in summary_labels):
+        if not any(label.startswith("Growth") for label in summary_labels):
             issues.append("Region-growth output is missing the growth summary metric.")
 
         return issues

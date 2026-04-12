@@ -191,3 +191,26 @@ def test_target_feature_correlation_guidance_prefers_one_row_feature_output():
     assert "feature_cols=Sex, Age, Fare, Cabin, Embarked" in guidance
     assert "target_col=target_col" in loop_breaker
     assert "feature_cols=feature_cols" in loop_breaker
+
+
+def test_regression_guidance_uses_plan_variables_and_feature_audit():
+    question = (
+        "Fit a linear regression model to estimate the weight of temperature, price, "
+        "and number of tourists in predicting ice cream sales."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+
+    plan_summary = (
+        "task_type=regression\n"
+        "target_col=Ice Cream Sales ($,thousands)\n"
+        "feature_cols=Temperature (F), Ice-cream Price ($), Number of Tourists (thousands), Did it rain on that day?"
+    )
+    guidance = build_execution_strict_rules(skill, helper, plan_summary=plan_summary)
+    loop_breaker = build_loop_breaker(skill, helper, plan_summary=plan_summary)
+
+    assert "target_col=Ice Cream Sales ($,thousands)" in guidance
+    assert "feature_cols=Temperature (F), Ice-cream Price ($), Number of Tourists (thousands), Did it rain on that day?" in guidance
+    assert "fit_linear_regression_weights" in loop_breaker
+    assert "print(\"USED_FEATURES:\", feature_cols)" in loop_breaker
+    assert "target_col='...'" not in loop_breaker

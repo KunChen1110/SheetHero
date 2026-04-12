@@ -6,6 +6,16 @@ import os
 import re
 from typing import Callable, Optional
 
+from ....skills import (
+    helper_bounded_error_extra_note,
+    helper_bounded_error_task_label,
+    get_helper_documented_result_keys,
+    helper_name_for_bounded_error,
+    helper_requires_chart_embedding,
+    helper_result_variable_name,
+    helper_supports_highlight_rows,
+)
+
 
 class ExecutionErrorFeedbackBuilder:
     """Build targeted repair feedback for common execution failures."""
@@ -140,6 +150,98 @@ class ExecutionErrorFeedbackBuilder:
         if not execution_result:
             return None
 
+        def _helper_result_key_lines(helper_name: str) -> list[str]:
+            result_var = helper_result_variable_name(helper_name)
+            documented_keys = get_helper_documented_result_keys(helper_name)
+            return [f"  `{result_var}['{key}']`" for key in documented_keys]
+
+        def _direct_helper_feedback(helper_name: str, *, task_label: str, extra_note: str = "") -> str:
+            result_var = helper_result_variable_name(helper_name)
+            lines = [
+                f"MINIMAL FIX REQUIRED: this {task_label} should use the single runtime helper path.",
+                "- Use exactly:",
+                f"  `{result_var} = {helper_name}()`",
+                "  `create_output_sheet('Output')`",
+                f"  `write_dataframe_to_sheet({result_var}['detail_data'], 'Output', 'A1')`",
+            ]
+            if helper_supports_highlight_rows(helper_name):
+                lines.append(
+                    f"  `if {result_var}.get('highlight_rows'): highlight_rows('Output', {result_var}['highlight_rows'], {{'fill_color': 'red'}})`"
+                )
+            if helper_requires_chart_embedding(helper_name):
+                lines.append("  `save_plot_to_excel('Output', 'F2')`")
+            lines.append("  `saved_file = save_workbook_to(output_path)`")
+            if extra_note:
+                lines.append(extra_note)
+            return "\n".join(lines)
+
+        metadata_helper_name = helper_name_for_bounded_error(execution_result)
+        if metadata_helper_name is not None:
+            task_label = helper_bounded_error_task_label(metadata_helper_name) or "helper-driven task"
+            return _direct_helper_feedback(
+                metadata_helper_name,
+                task_label=task_label,
+                extra_note=helper_bounded_error_extra_note(metadata_helper_name),
+            )
+
+        if "list indices must be integers or slices, not str" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `load_all_tables()` returns a LIST, not a dict.\n"
+                "- WRONG: `tables['filename']`  or  `tables['sheet_name']`\n"
+                "- RIGHT: `tables[0]['df']`  (first table's DataFrame)\n"
+                "- RIGHT: `tables[0]['header']`, `tables[0]['rows']`, `tables[0]['file_name']`\n"
+                "- For multiple files: `tables[0]`, `tables[1]`, etc.\n"
+                "- Example fix:\n"
+                "    tables = load_all_tables()\n"
+                "    df = tables[0]['df']   # access as list index, not string key\n"
+                "    print(df.columns.tolist(), len(df))"
+            )
+
+        if "All arrays must be of the same length" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: do not wrap `tables[0]` in `pd.DataFrame()` — `tables[0]` is already a dict with a `'df'` key.\n"
+                "- WRONG: `pd.DataFrame(tables[0])`  (tables[0] is a dict with mismatched-length values)\n"
+                "- RIGHT: `df = tables[0]['df']`  (the DataFrame is already built)\n"
+                "- Example fix:\n"
+                "    tables = load_all_tables()\n"
+                "    df = tables[0]['df']   # access the ready-made DataFrame\n"
+                "    print(df.columns.tolist(), len(df))"
+            )
+
+        if ("'dict' object has no attribute" in execution_result
+                and any(attr in execution_result for attr in ["'loc'", "'iloc'", "'corr'", "'groupby'", "'merge'", "'concat'"])):
+            return (
+                "MINIMAL FIX REQUIRED: `tables[0]` is a dict, NOT a DataFrame.\n"
+                "- Access the DataFrame via: `df = tables[0]['df']`\n"
+                "- WRONG: `tables[0].loc[...]`   RIGHT: `df = tables[0]['df']; df.loc[...]`\n"
+                "- WRONG: `tables[0].corr()`      RIGHT: `df = tables[0]['df']; df.corr()`\n"
+                "- Example fix:\n"
+                "    tables = load_all_tables()\n"
+                "    df = tables[0]['df']   # get the actual DataFrame\n"
+                "    print(df.columns.tolist(), len(df))"
+            )
+
+        if "'list' object is not callable" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: a variable name is shadowing a sandbox function.\n"
+                "- The most common cause: assigning `highlight_rows = [...]` overrides the `highlight_rows()` function.\n"
+                "- Rename the list variable: use `row_numbers`, `rows_to_highlight`, or `highlight_indices` instead.\n"
+                "- Then call: `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`\n"
+                "- Do NOT reassign any sandbox function name (`highlight_rows`, `add_summary_row`, `create_output_sheet`, etc.)."
+            )
+
+        if "string indices must be integers" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: iterating a DataFrame yields column labels, not row dicts.\n"
+                "- Wrong: `for i, row in enumerate(df)` then `row['col']`\n"
+                "- If you wrote the same filtered frame that you summarized, reuse:\n"
+                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "- Otherwise compute row numbers from a boolean mask:\n"
+                "  `idx_list = df[df['Daily Spending (£)'] == max_value].index.tolist()`\n"
+                "  `row_numbers = [i + 2 for i in idx_list]`\n"
+                "- Then call `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`."
+            )
+
         sheet_missing = re.search(
             r"Sheet '([^']+)' not found in ([^.\n]+)\. Available sheets: (\[[^\]]*\])",
             execution_result
@@ -163,53 +265,6 @@ class ExecutionErrorFeedbackBuilder:
                 "- Task table: `Task ID` + duration/name/priority-like columns.\n"
                 "- Dependency table: `Task ID` + `Depends on`.\n"
                 "- Only concat tables that truly have the same role and same headers."
-            )
-
-        if (
-            "Could not identify the P&L, sales/marketing, and KPI target tables." in execution_result
-            or "No structured table matched headers" in execution_result
-        ):
-            return (
-                "MINIMAL FIX REQUIRED: this dashboard task should use the single runtime helper path.\n"
-                "- Use exactly:\n"
-                "  `dashboard_result = build_financial_dashboard_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "- Do not manually parse header rows or rebuild the dashboard in code."
-            )
-
-        if "No candidate tables were loaded." in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: this screening task should use the single runtime helper path.\n"
-                "- Use exactly:\n"
-                "  `screening_result = build_candidate_screening_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(screening_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "- Do not manually load or concatenate candidate files in code."
-            )
-
-        if "No inventory parameter table was loaded." in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: this EOQ task should use the single runtime helper path.\n"
-                "- Use exactly:\n"
-                "  `inventory_result = build_inventory_eoq_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(inventory_result['detail_data'], 'Output', 'A1')`\n"
-                "  `saved_file = save_workbook_to(output_path)`\n"
-                "- Do not manually parse parameters or build EOQ tables in code."
-            )
-
-        if "Hospital utilisation workflow expects patient, service, and staff tables." in execution_result:
-            return (
-                "MINIMAL FIX REQUIRED: this hospital task should use the single runtime helper path.\n"
-                "- Use exactly:\n"
-                "  `report = build_hospital_utilisation_report()`\n"
-                "  `create_output_sheet('Output')`\n"
-                "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
-                "  `if report['highlight_rows']:` then highlight them; otherwise print `NO_HIGHLIGHT_ROWS:`.\n"
-                "- Do not manually merge the patient/service/staff tables in code."
             )
 
         if "No module named 'plotnine'" in execution_result or "No module named 'seaborn'" in execution_result:
@@ -250,13 +305,54 @@ class ExecutionErrorFeedbackBuilder:
             )
 
         if "KeyError: 'coef'" in execution_result:
+            lines = [
+                "MINIMAL FIX REQUIRED: the regression helper does not return a `coef` key.",
+                "- Use the provided outputs instead:",
+                *_helper_result_key_lines("fit_linear_regression_weights"),
+                "- Write `regression_result['output_df']` directly to Output.",
+            ]
             return (
-                "MINIMAL FIX REQUIRED: the regression helper does not return a `coef` key.\n"
-                "- Use the provided outputs instead:\n"
-                "  `regression_result['output_df']`\n"
-                "  `regression_result['detail_data']`\n"
-                "  `regression_result['coefficients_df']`\n"
-                "- Write `regression_result['output_df']` directly to Output."
+                "\n".join(lines)
+            )
+
+        if (
+            "KeyError: 'Time'" in execution_result
+            and (
+                "merge_on_shared_period" in execution_result
+                or "build_weighted_period_output" in execution_result
+            )
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: the shared period column was not normalized before weighted period merge.\n"
+                "- Print both DataFrame column lists first.\n"
+                "- Rename the verified period column in BOTH frames to `Time` before calling `merge_on_shared_period(...)`.\n"
+                "- If the shipment table uses `Units` or `Total Shipments`, rename that column to `Shipment` before calling `build_weighted_period_output(...)`.\n"
+                "- Safe repair shape:\n"
+                "  `print('share columns:', share_df.columns.tolist())`\n"
+                "  `print('shipment columns:', shipment_df.columns.tolist())`\n"
+                "  `share_df = share_df.rename(columns={'Year': 'Time'})  # or the verified period column`\n"
+                "  `shipment_df = shipment_df.rename(columns={'Year': 'Time', 'Units': 'Shipment'})`\n"
+                "  `overlap_df = merge_on_shared_period(share_df, shipment_df, period_col='Time')`\n"
+                "- Keep brand columns from `share_df` only after the rename is complete."
+            )
+
+        if (
+            "No table matches the requested headers." in execution_result
+            and "available=[{'file_name':" in execution_result
+            and ("market share" in execution_result.lower() or "shipment" in execution_result.lower())
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: do not require an exact `Shipment` header on title-heavy period sheets.\n"
+                "- Print the loaded column lists first.\n"
+                "- Choose the wider table with many brand columns as `share_df`.\n"
+                "- Choose the narrower table with `Time` plus one numeric value column as `shipment_df`.\n"
+                "- Rename that lone numeric shipment column to `Shipment` before the weighted merge.\n"
+                "- Safe repair shape:\n"
+                "  `share_t = max(tables, key=lambda t: len(t['df'].columns))`\n"
+                "  `shipment_t = min(tables, key=lambda t: len(t['df'].columns))`\n"
+                "  `shipment_value_col = [c for c in shipment_t['df'].columns if c != 'Time'][0]`\n"
+                "  `shipment_df = shipment_t['df'].rename(columns={shipment_value_col: 'Shipment'})`\n"
+                "  `overlap_df = merge_on_shared_period(share_df, shipment_df[['Time', 'Shipment']], period_col='Time')`"
             )
 
         if (
@@ -270,6 +366,18 @@ class ExecutionErrorFeedbackBuilder:
                 "- Select tables with `find_table_by_headers(...)` and pass the original DataFrames directly:\n"
                 "  `schedule_result = build_dependency_schedule(task_table['df'], dependency_table['df'], start_time='08:00')`\n"
                 "- The helper requires real task metadata columns like `Task Name`, `Duration (hours)`, and `Priority`."
+            )
+
+        if "KeyError: 'max'" in execution_result or "Execution error: 'max'" in execution_result:
+            return (
+                "MINIMAL FIX REQUIRED: `summarize_numeric_column(...)` does not return a `max` key.\n"
+                "- Use `summary_result['summary']` for the total/average text that goes into `add_summary_row(...)`.\n"
+                "- Use `summary_result['output_row_numbers']` to highlight the highest-spending rows when you wrote the same `summary_df`.\n"
+                "- Safe repair shape:\n"
+                "  `summary_result = summarize_numeric_column(summary_df, value_col='...')`\n"
+                "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
+                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`"
             )
 
         column_missing = re.search(r"KeyError:\s*'([^']+)'", execution_result)

@@ -1,17 +1,23 @@
-"""Family-specific execution preflight guard helpers."""
+"""Skill-specific execution preflight guard helpers."""
 
 import re
 from typing import TYPE_CHECKING, Optional
 
-from ....task_skills import detect_skill, select_helper
+from ....skills import (
+    detect_skills,
+    get_helper_documented_result_keys,
+    get_helper_preflight_guard_names,
+    helper_result_variable_name,
+    select_helper,
+)
 from ..analysis.schedule_helper_analysis import inspect_schedule_helper_sources
 
 if TYPE_CHECKING:
     from ..runtime import ExecutionRuntime
 
 
-class ExecutionFamilyPreflightAdvisor:
-    """Own family-specific execution preflight rules."""
+class ExecutionSkillPreflightAdvisor:
+    """Own skill-specific execution preflight rules."""
 
     def __init__(self, runtime: "ExecutionRuntime"):
         self.runtime = runtime
@@ -27,10 +33,67 @@ class ExecutionFamilyPreflightAdvisor:
                 return True
         return False
 
-    def regression_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        skill = detect_skill(user_question)
+    @staticmethod
+    def _helper_name(helper) -> Optional[str]:
+        return getattr(helper, "name", None) if helper is not None else None
+
+    def _selected_helper_name(self, user_question: str) -> Optional[str]:
+        skills = detect_skills(user_question)
+        skill = skills[0] if skills else None
         helper = select_helper(skill, user_question) if skill else None
-        if helper is None or helper.name != "fit_linear_regression_weights":
+        return self._helper_name(helper)
+
+    @staticmethod
+    def _documented_result_key_lines(helper_name: str) -> list[str]:
+        result_var = helper_result_variable_name(helper_name)
+        return [
+            f"  `{result_var}['{key}']`"
+            for key in get_helper_documented_result_keys(helper_name)
+        ]
+
+    @staticmethod
+    def _extract_assigned_string_var(code_action: str, variable_name: str) -> Optional[str]:
+        match = re.search(
+            rf"^\s*{re.escape(variable_name)}\s*=\s*['\"]([^'\"]+)['\"]",
+            code_action or "",
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        if not match:
+            return None
+        return match.group(1).strip()
+
+    @staticmethod
+    def _extract_assigned_string_list_var(code_action: str, variable_name: str) -> list[str]:
+        match = re.search(
+            rf"^\s*{re.escape(variable_name)}\s*=\s*\[([^\]]*)\]",
+            code_action or "",
+            flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+        )
+        if not match:
+            return []
+        return [item.strip() for item in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))]
+
+    def metadata_routed_preflight_check(self, code_action: str, user_question: str) -> Optional[str]:
+        helper_name = self._selected_helper_name(user_question)
+        if not helper_name:
+            return None
+        for guard_name in get_helper_preflight_guard_names(helper_name):
+            guard = getattr(self, guard_name, None)
+            if not callable(guard):
+                continue
+            issue = guard(code_action, user_question, helper_name=helper_name)
+            if issue is not None:
+                return issue
+        return None
+
+    def regression_helper_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "fit_linear_regression_weights":
             return None
         code = code_action or ""
         lower = code.lower()
@@ -47,14 +110,12 @@ class ExecutionFamilyPreflightAdvisor:
                     "  `write_dataframe_to_sheet(regression_result['output_df'], 'Output', 'A1')`"
                 )
             if re.search(r"regression_result\s*\[\s*['\"]coef['\"]\s*\]", lower):
+                documented_lines = self._documented_result_key_lines(helper_name)
                 return (
                     "PREFLIGHT_REGRESSION: the regression helper does not return a `coef` key.\n"
                     "- Use these keys only:\n"
-                    "  `regression_result['used_features']`\n"
-                    "  `regression_result['output_df']`\n"
-                    "  `regression_result['detail_data']`\n"
-                    "  `regression_result['coefficients_df']`\n"
-                    "- Write `regression_result['output_df']` directly."
+                    + "\n".join(documented_lines)
+                    + "\n- Write `regression_result['output_df']` directly."
                 )
             return None
         return (
@@ -77,13 +138,315 @@ class ExecutionFamilyPreflightAdvisor:
         """
         return None
 
-    def regression_feature_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        skill = detect_skill(user_question)
-        _helper = select_helper(skill, user_question) if skill else None
-        if _helper is None or _helper.name != "fit_linear_regression_weights":
+    def concat_merge_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Guard for cross-table stacking tasks: fires when concat helper should be used but isn't."""
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "concat_tables_with_same_headers":
+            return None
+
+        lower_q = (user_question or "").lower()
+        has_merge = any(w in lower_q for w in ("merge", "combine", "concatenate", "concat"))
+        if not has_merge:
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        uses_concat_helper = "concat_tables_with_same_headers(" in lower
+        builds_data_2d = "data_2d" in lower
+
+        if uses_concat_helper and not builds_data_2d:
+            return None
+
+        # Detect month qualifier so temporal filter guidance can be appended.
+        month_num: Optional[int] = None
+        for name in self._MONTH_NAMES:
+            if name in lower_q:
+                from calendar import month_name as _mn
+                # Convert name to number via index (1-based)
+                full_names = [m.lower() for m in _mn]  # ['', 'january', ...]
+                if name in full_names:
+                    month_num = full_names.index(name)
+                else:
+                    _abbr_map = {
+                        "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+                        "jun": 6, "jul": 7, "aug": 8,
+                        "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+                    }
+                    month_num = _abbr_map.get(name)
+                break
+
+        msg = (
+            "PREFLIGHT_CONCAT_MERGE: cross-table stacking tasks should use concat_tables_with_same_headers.\n"
+            "- Load and stack:\n"
+            "  `tables = load_all_tables()`\n"
+            "  `concat_result = concat_tables_with_same_headers(tables)`\n"
+            "  `combined_df = concat_result['output_df']`\n"
+            "  `print(combined_df.columns.tolist(), len(combined_df))`\n"
+            "- Do not hand-build data_2d from headers + rows; write DataFrames directly.\n"
+            "- Classify tables by verified headers, not filename or file order."
+        )
+        if month_num is not None:
+            msg += (
+                f"\n- The question specifies a period (month {month_num}): filter BEFORE summarizing:\n"
+                "  `combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`\n"
+                f"  `summary_df = combined_df[combined_df['Date'].dt.month == {month_num}]`"
+            )
+        return msg
+
+    # ------------------------------------------------------------------
+    # Aggregate guard (independent of concat)
+    # ------------------------------------------------------------------
+
+    def aggregate_summary_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Guard for aggregate/summary tasks: fires when summarize_numeric_column should be used but isn't."""
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "concat_tables_with_same_headers":
+            return None
+
+        lower_q = (user_question or "").lower()
+        has_aggregate = any(w in lower_q for w in (
+            "average", "mean", "total", "sum", "count",
+            "maximum", "minimum", "highest", "lowest", "median",
+        ))
+        if not has_aggregate:
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        uses_summary_helper = "summarize_numeric_column(" in lower
+        shadows_highlight_rows = re.search(r"^\s*highlight_rows\s*=", code, flags=re.MULTILINE) is not None
+
+        undocumented_summary_key = None
+        if uses_summary_helper:
+            documented_summary_keys = {"summary", "output_row_numbers"}
+            for key in re.findall(r"summary_result\s*\[\s*['\"]([^'\"]+)['\"]\s*\]", code):
+                if key not in documented_summary_keys:
+                    undocumented_summary_key = key
+                    break
+
+        if uses_summary_helper and not shadows_highlight_rows and undocumented_summary_key is None:
+            return None
+
+        return (
+            "PREFLIGHT_AGGREGATE: use summarize_numeric_column for numeric summary tasks.\n"
+            "  `summary_result = summarize_numeric_column(df, value_col='...')`\n"
+            "  `add_summary_row('Output', len(df) + 2, summary_result['summary'])`\n"
+            "- summary_result keys: 'summary' (dict), 'output_row_numbers' (list of 1-based ints).\n"
+            + (
+                f"- Does not return key '{undocumented_summary_key}'. "
+                "Use 'summary' for totals/averages and 'output_row_numbers' for highlighting.\n"
+                if undocumented_summary_key else ""
+            )
+            + "- Do not reassign the name `highlight_rows` to a variable."
+        )
+
+    # ------------------------------------------------------------------
+    # Highlight guard (independent of merge/aggregate)
+    # ------------------------------------------------------------------
+
+    def highlight_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Guard for highlight tasks: fires when highlight_rows is called with wrong row numbers."""
+        lower_q = (user_question or "").lower()
+        needs_highlight = any(w in lower_q for w in (
+            "highlight", "highlighted", "red", "color", "colour", "mark in red",
+        ))
+        if not needs_highlight:
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        if "highlight_rows(" not in lower:
+            return None
+
+        # Detect manual enumerate-based row numbers (risky pattern)
+        uses_manual_enumerate = bool(re.search(r"enumerate\s*\(", code))
+        shadows_highlight_rows = re.search(r"^\s*highlight_rows\s*=", code, flags=re.MULTILINE) is not None
+        uses_summary_row_numbers = "summary_result['output_row_numbers']" in code or 'summary_result["output_row_numbers"]' in code
+
+        if not shadows_highlight_rows and not uses_manual_enumerate:
+            return None
+
+        return (
+            "PREFLIGHT_HIGHLIGHT: row numbers passed to highlight_rows must be 1-based and header-offset.\n"
+            "- Preferred: use `row_numbers = summary_result['output_row_numbers']` (already correct).\n"
+            "- If computing manually: row = DataFrame position (0-based) + 2 (header row).\n"
+            "  `row_numbers = [i + 2 for i, v in enumerate(df['col']) if v == max_val]`\n"
+            "- The df passed to write_dataframe_to_sheet must have a reset (0-based) index.\n"
+            "- Do not reassign the name `highlight_rows` to a variable in your code."
+        )
+
+    # ------------------------------------------------------------------
+    # Temporal filter guard (aggregate + period-qualified questions)
+    # ------------------------------------------------------------------
+
+    _MONTH_NAMES = (
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    )
+
+    def temporal_filter_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Fire when the question names a month/period but the code lacks a date filter.
+
+        Targeting the merge+aggregate family: if the question says "in November"
+        or "for Q3" but the generated code runs summarize_numeric_column over
+        the unfiltered combined_df, stats and highlight row numbers will be wrong.
+        """
+        lower_q = (user_question or "").lower()
+        has_month = any(m in lower_q for m in self._MONTH_NAMES)
+        has_period = any(w in lower_q for w in (
+            "in q1", "in q2", "in q3", "in q4", "quarter", "semester",
+            "this year", "last year", "year to date",
+        ))
+        if not (has_month or has_period):
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+
+        # Only fire when aggregate helper is in use
+        if "summarize_numeric_column(" not in lower:
+            return None
+
+        # Check whether any date-based filter is applied before summarize
+        has_date_filter = any(pat in lower for pat in (
+            ".dt.month", ".dt.year", ".dt.quarter",
+            "month ==", "month==", "year ==", "year==",
+            "quarter ==", "quarter==",
+            ".str.contains",
+            "pd.to_datetime",
+        ))
+        if has_date_filter:
+            return None
+
+        # Determine which month was mentioned for a concrete hint
+        month_hint = ""
+        for name in self._MONTH_NAMES:
+            if name in lower_q:
+                month_hint = name.capitalize()
+                break
+
+        period_label = f"'{month_hint}'" if month_hint else "the requested period"
+        return (
+            f"PREFLIGHT_TEMPORAL_FILTER: the question asks for stats restricted to {period_label} "
+            "but the code passes the unfiltered DataFrame to summarize_numeric_column.\n"
+            "- Convert the date column and filter BEFORE summarizing:\n"
+            "  `combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`\n"
+            "  `summary_df = combined_df[combined_df['Date'].dt.month == <N>]  # e.g. 11 for November`\n"
+            "- Pass `summary_df` (not `combined_df`) to both summarize_numeric_column AND write_dataframe_to_sheet.\n"
+            "- `output_row_numbers` is only valid for the DataFrame that was written — using a different frame gives wrong highlight rows."
+        )
+
+    # keep old name as alias so existing caller sites continue to work
+    def same_schema_merge_summary_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        c = self.concat_merge_guard(code_action, user_question, helper_name)
+        a = self.aggregate_summary_guard(code_action, user_question, helper_name)
+        t = self.temporal_filter_guard(code_action, user_question, helper_name)
+        h = self.highlight_guard(code_action, user_question, helper_name)
+        parts = [p for p in (c, a, t, h) if p]
+        return "\n".join(parts) if parts else None
+
+    def market_share_shipment_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "build_market_share_shipment_report":
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        assumes_exact_shipment_header = (
+            "find_table_by_headers(" in lower
+            and "shipment" in lower
+        )
+        guesses_table_order = bool(
+            re.search(r"(share|shipment)_df\s*=\s*tables\[\d+\]\s*\[\s*['\"]df['\"]\s*\]", lower)
+        )
+        calls_direct_helper = "build_market_share_shipment_report(" in lower
+
+        if not (assumes_exact_shipment_header or guesses_table_order or calls_direct_helper):
+            return None
+
+        return (
+            "PREFLIGHT_MARKET_SHARE_SHIPMENT: do not identify the share/shipment tables from list order or from an assumed exact `Shipment` header.\n"
+            "- The market-share table is the wider period table with many brand columns.\n"
+            "- The shipment table is the narrower period table with `Time` plus a single numeric value column.\n"
+            "- Preferred repair shape:\n"
+            "  `tables = load_all_tables(require_primary_key=False, stop_at_note_row=False)`\n"
+            "  `share_t = max(tables, key=lambda t: len(t['df'].columns))`\n"
+            "  `shipment_t = min(tables, key=lambda t: len(t['df'].columns))`\n"
+            "  `share_df = share_t['df'].copy()`\n"
+            "  `shipment_df = shipment_t['df'].copy()`\n"
+            "  `if 'Year' in share_df.columns: share_df = share_df.rename(columns={'Year': 'Time'})`\n"
+            "  `if 'Year' in shipment_df.columns: shipment_df = shipment_df.rename(columns={'Year': 'Time'})`\n"
+            "  `shipment_value_cols = [c for c in shipment_df.columns if c != 'Time']`\n"
+            "  `shipment_value_col = shipment_value_cols[0]`\n"
+            "  `shipment_df = shipment_df.rename(columns={shipment_value_col: 'Shipment'})`\n"
+            "  `overlap_df = merge_on_shared_period(share_df, shipment_df[['Time', 'Shipment']], period_col='Time')`"
+        )
+
+    def regression_feature_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "fit_linear_regression_weights":
             return None
         code = code_action or ""
         lower = code.lower()
+        observed_headers = sorted(getattr(self.runtime, "_observed_header_set", lambda: set())())
+        try:
+            plan = self.runtime.question_inference.infer_runtime_plan(
+                "statistical",
+                "fit_linear_regression_weights",
+                user_question,
+                observed_headers,
+            )
+        except Exception:
+            plan = None
+        expected_target = getattr(plan, "target_col", None) if plan is not None else None
+        expected_features = list(getattr(plan, "feature_cols", ()) or ())
+        literal_target = (
+            self._extract_assigned_string_var(code, "target_col")
+            or self.runtime.question_inference.extract_single_string_kwarg(code, "target_col")
+        )
+        if expected_target and literal_target and literal_target.strip().lower() != expected_target.strip().lower():
+            return (
+                "PREFLIGHT_REGRESSION: target column conflicts with the runtime plan.\n"
+                f"- Runtime plan target: {expected_target}\n"
+                f"- Current code target: {literal_target}\n"
+                "- Use the target column inferred from the current question and schema."
+            )
         if "feature_cols" not in lower:
             return (
                 "PREFLIGHT_REGRESSION: regression task must define explicit `feature_cols`.\n"
@@ -91,10 +454,13 @@ class ExecutionFamilyPreflightAdvisor:
                 "- Include binary categorical predictors (e.g., yes/no -> 1/0).\n"
                 "- Print `USED_FEATURES` before fitting."
             )
-        expected = self.runtime.question_inference.expected_regression_predictors()
+        expected = expected_features or self.runtime.question_inference.expected_regression_predictors()
         if not expected:
             return None
-        used = self.runtime.question_inference.extract_feature_cols_literal(code)
+        used = (
+            self._extract_assigned_string_list_var(code, "feature_cols")
+            or self.runtime.question_inference.extract_feature_cols_literal(code)
+        )
         if not used:
             return (
                 "PREFLIGHT_REGRESSION: could not parse explicit feature list.\n"
@@ -118,9 +484,14 @@ class ExecutionFamilyPreflightAdvisor:
             )
         return None
 
-    def scheduling_dependency_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        skill = detect_skill(user_question)
-        if skill is None or skill.name != "schedule":
+    def scheduling_dependency_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "build_dependency_schedule":
             return None
         runtime = self.runtime
         code = code_action or ""
@@ -605,4 +976,96 @@ class ExecutionFamilyPreflightAdvisor:
                 "- Call `write_dataframe_to_sheet(detail_data, \"Output\", \"A1\")` directly."
             )
 
+        return None
+
+    def relational_assignment_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "build_relational_assignment_schedule_report":
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        uses_helper = "build_relational_assignment_schedule_report(" in lower
+        uses_header_selector = "find_table_by_headers(" in lower
+        filename_or_order_guess = (
+            re.search(r"tables\s*\[\s*\d+\s*\]\s*\[\s*['\"]df['\"]\s*\]", lower)
+            or re.search(r"tables\s*\[\s*['\"][^'\"]+\.(csv|xlsx?)['\"]\s*\]", lower)
+            or self.uses_literal_input_basenames(code)
+        )
+
+        if filename_or_order_guess:
+            return (
+                "PREFLIGHT_ASSIGNMENT_SCHEDULE: do not identify assignment/schedule tables from filenames, literal basenames, file order, or list positions.\n"
+                "- Classify tables by verified headers only.\n"
+                "- Preferred pipeline:\n"
+                "  `tables = load_all_tables()`\n"
+                "  `assignment_t = find_table_by_headers(tables, required_headers=['Assigned Tutor'], preferred_headers=['Student Name', 'Name', 'Student'])`\n"
+                "  `schedule_t = find_table_by_headers(tables, required_headers=['Tutor Name', 'Time Slot', 'Room'])`\n"
+                "  `output_df = build_grouped_assignment_join(assignment_t['df'], 'Assigned Tutor', 'Name', schedule_t['df'], 'Tutor Name', ['Time Slot', 'Room'])`\n"
+                "- Or call `build_relational_assignment_schedule_report()` directly when the matched helper fits the observed headers."
+            )
+
+        if not uses_helper and not uses_header_selector:
+            return (
+                "PREFLIGHT_ASSIGNMENT_SCHEDULE: relational assignment tasks must ground table roles by headers before joining.\n"
+                "- Load all tables, then use `find_table_by_headers(...)` to select the assignment and schedule tables.\n"
+                "- Assignment table: `Assigned Tutor` plus entity headers like `Student Name`, `Name`, or `Student`.\n"
+                "- Schedule table: `Tutor Name` + `Time Slot` + `Room`.\n"
+                "- After that, either compose with `build_grouped_assignment_join(...)` or call `build_relational_assignment_schedule_report()` directly."
+            )
+
+        if (
+            uses_header_selector
+            and not uses_helper
+            and "build_grouped_assignment_join(" not in lower
+            and "pd.merge(" in lower
+        ):
+            return (
+                "PREFLIGHT_ASSIGNMENT_SCHEDULE: after header-grounded table selection, use the shared grouped-assignment helper instead of a hand-written bare merge.\n"
+                "- Preferred composition:\n"
+                "  `output_df = build_grouped_assignment_join(assignment_t['df'], 'Assigned Tutor', 'Name', schedule_t['df'], 'Tutor Name', ['Time Slot', 'Room'])`\n"
+                "- This keeps entity-column resolution grounded in the observed headers and avoids hard-coded `Student Name` assumptions.\n"
+                "- If the matched helper fits the observed headers exactly, `build_relational_assignment_schedule_report()` is also allowed."
+            )
+
+        return None
+
+    def region_growth_helper_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "build_region_growth_analysis":
+            return None
+
+        code = code_action or ""
+        lower = code.lower()
+        uses_helper = "build_region_growth_analysis(" in lower
+        if not uses_helper:
+            return (
+                "PREFLIGHT_REGION_GROWTH: use `build_region_growth_analysis()` for this region-growth chart task instead of hand-parsing the multi-row header.\n"
+                "- Preferred workflow:\n"
+                "  `region_growth_result = build_region_growth_analysis(sheet_name='Data', start_year=2021, end_year=2024)`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(region_growth_result['output_df'], 'Output', 'A1')`\n"
+                "  `summary_row = len(region_growth_result['output_df']) + 2`\n"
+                "  `add_summary_row('Output', summary_row, region_growth_result['summary'])`\n"
+                "  `chart_df = region_growth_result['chart_df']`\n"
+                "  `for region in region_growth_result['region_columns']: plt.plot(chart_df['Year'], chart_df[region], label=region)`\n"
+                "  `save_plot_to_excel('Output', 'F2')`"
+            )
+
+        if re.search(r"build_region_growth_analysis\(\s*(tables\[|df\b|pd\.)", lower):
+            return (
+                "PREFLIGHT_REGION_GROWTH: `build_region_growth_analysis()` expects runtime workbook context, not a DataFrame.\n"
+                "- Call it as `build_region_growth_analysis()` or with optional named args like `sheet_name='Data'`.\n"
+                "- Do not pass `tables[...]`, `df`, or other DataFrame objects into the helper."
+            )
         return None

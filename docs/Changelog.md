@@ -1,3 +1,29 @@
+## 12/04/2026
+### --- Added ---
+- Added `skills/` package: `SkillSpec`, `HelperSpec`, keyword-based detectors, skill registry, strategy docs, and helper metadata (grounding requirements, expected result keys, bounded error signatures, preflight guard names).
+- Added `RuntimeExecutionPlan` — schema-grounded execution plan inferred from observed workbook headers and detected skill; injected into LLM prompts to prevent hallucinated column references.
+- Added `WorkflowStep` and `compose_skill_plan()` for deterministic step ordering (load → merge → aggregate → sort/rank → highlight → output).
+- Added `ExecutionSkillPreflightAdvisor`, `ExecutionGenericPreflightAdvisor` under `stages/execution/skill/` (migrated and extended from `execution/family/`).
+- Added `stages/execution/skill/__init__.py` and `ExecutionQuestionInferenceAdvisor.infer_runtime_plan()` for schema-grounded column inference.
+- Added structured cleaning policy plans: QA decisions now produce deterministic actions and LLM-driven policy rules consumed by `DataCleaningStage`.
+- Added comprehensive test suites: `test_detector_precision.py`, `test_skill_composition.py`, `test_execution_preflight.py`, `test_execution_runtime_fallback.py`, `test_execution_prompt_compaction.py`, `test_error_feedback.py`, `test_validation_deterministic.py`, `test_validation_rule_checks.py`, `test_validation_runtime.py`, `test_final_response_stage.py`, `test_execution_error_capture.py`, `test_workflows.py`, `test_diagnose_router.py`, `test_runner_config.py`.
+- Added `run_skill_synthetic_regression.py` replacing the family-based regression runner.
+
+### --- Changed ---
+- Migrated all execution advisor logic from `stages/execution/family/` to `stages/execution/skill/`; `ExecutionSkillPromptAdvisor` now composes prompts dynamically from skill metadata instead of hardcoded family fragments.
+- Simplified `prompt_texts_offline.py` and `prompt_texts_online.py` by removing hardcoded family-specific prompt fragments; skill guidance is now injected dynamically via `build_skill_hint()` / `build_compact_skill_workflow()`.
+- `UnderstandingStage` now detects skill + helper and injects skill workflow hint before calling the LLM.
+- `ExecutionRuntime` turn loop now runs the full advisor pipeline: prompt augmentation → forbidden check → generic preflight → skill preflight → sandbox → output contract → error feedback.
+- `DiagnoseRouter` simplified to evidence-based + optional LLM confirmation; removed hardcoded task-type branches.
+- `QualityAssuranceStage` now finalises decisions as structured policy plans instead of free-form notes.
+- Updated `docs/VersionHistory.md` with v4.3 entry.
+- Updated `docs/FineTuningTaskCoverage.md` and `docs/ProjectPositioning.md` to reflect skill-based architecture.
+
+### --- Removed ---
+- Deleted `src/backend/task_skills.py` (legacy family registry, ~457 lines).
+- Deleted `stages/execution/family/` module entirely: `fast_path.py` (~524 lines), `preflight.py` (~608 lines), `generic_preflight.py` (~244 lines), `question_inference.py` (~422 lines), `prompt.py`, `__init__.py`.
+- Deleted `test/utils/run_family_synthetic_regression.py` (~1146 lines).
+
 ## 11/04/2026
 ### --- Added ---
 - Added runtime execution plan inference for skill prompts and repair guidance.

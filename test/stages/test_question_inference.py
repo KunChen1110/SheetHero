@@ -82,3 +82,59 @@ def test_plan_prompt_summary_uses_runtime_values_not_recipe_text():
     assert "target_col=Survived" in summary
     assert "feature_cols=Sex, Fare" in summary
     assert "use Survived as target" not in summary.lower()
+
+
+def test_infer_regression_plan_uses_target_like_column_and_all_predictors():
+    advisor = ExecutionQuestionInferenceAdvisor(_DummyRuntime())
+
+    plan = advisor.infer_runtime_plan(
+        skill_name="statistical",
+        helper_name="fit_linear_regression_weights",
+        user_question=(
+            "Fit a linear regression model to estimate the weight of temperature, price, "
+            "and number of tourists in predicting ice cream sales."
+        ),
+        observed_headers=[
+            "Temperature (F)",
+            "Ice-cream Price ($)",
+            "Number of Tourists (thousands)",
+            "Ice Cream Sales ($,thousands)",
+            "Did it rain on that day?",
+        ],
+    )
+
+    assert plan.task_type == "regression"
+    assert plan.target_col == "Ice Cream Sales ($,thousands)"
+    assert plan.feature_cols == (
+        "Temperature (F)",
+        "Ice-cream Price ($)",
+        "Number of Tourists (thousands)",
+        "Did it rain on that day?",
+    )
+
+
+def test_infer_regression_plan_does_not_treat_day_suffix_as_target_marker_when_headers_are_sorted():
+    advisor = ExecutionQuestionInferenceAdvisor(_DummyRuntime())
+    observed_headers = sorted(
+        [
+            "Temperature (F)",
+            "Ice-cream Price ($)",
+            "Number of Tourists (thousands)",
+            "Ice Cream Sales ($,thousands)",
+            "Did it rain on that day?",
+        ]
+    )
+
+    plan = advisor.infer_runtime_plan(
+        skill_name="statistical",
+        helper_name="fit_linear_regression_weights",
+        user_question=(
+            "Assume a linear relationship between ice-cream sales and three factors: "
+            "temperature, price, and number of tourists. Fit a linear regression model "
+            "to estimate the weight (coefficient) of each factor in predicting sales."
+        ),
+        observed_headers=observed_headers,
+    )
+
+    assert plan.target_col == "Ice Cream Sales ($,thousands)"
+    assert "Did it rain on that day?" in plan.feature_cols

@@ -19,7 +19,7 @@ from src.backend.environment.spreadsheet.tools.workflows import (
 )
 from src.backend.stages.execution.runtime import ExecutionRuntime
 from src.backend.stages.validation.runtime import ValidationRuntime
-from src.backend.task_families import detect_task_family
+from src.backend.skills import detect_skill, select_helper
 
 
 def _write_workbook(path: Path, sheet_name: str, rows: list[list[object]]) -> None:
@@ -37,10 +37,10 @@ def _assert(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    with TemporaryDirectory(prefix="sheethero_family_regression_") as temp_dir:
+    with TemporaryDirectory(prefix="sheethero_skill_regression_") as temp_dir:
         root = Path(temp_dir)
 
-        print("[family regression] helper: schema-aligned merge summary")
+        print("[skill regression] helper: schema-aligned merge summary")
         merge_a = root / "merge_a.xlsx"
         merge_b = root / "merge_b.xlsx"
         _write_workbook(
@@ -96,7 +96,7 @@ def main() -> None:
         )
         _assert(merge_validation_result["validation_passed"], "Expected schema-aligned merge fast-path output to pass validation.")
 
-        print("[family regression] helper: grouped aggregation")
+        print("[skill regression] helper: grouped aggregation")
         grouped_path = root / "grouped_scores.xlsx"
         _write_workbook(
             grouped_path,
@@ -125,7 +125,7 @@ def main() -> None:
         _assert(grouped_rows[0]["Course"] == "Physics", "Expected Physics to rank first by average score.")
         _assert(round(float(grouped_rows[0]["Average Score"]), 4) == 89.0, "Unexpected Physics average score.")
 
-        print("[family regression] helper: grouped inference")
+        print("[skill regression] helper: grouped inference")
         spending_path = root / "category_spend.xlsx"
         _write_workbook(
             spending_path,
@@ -152,7 +152,7 @@ def main() -> None:
             "Unexpected Books average spending.",
         )
 
-        print("[family regression] helper: temporal aggregation")
+        print("[skill regression] helper: temporal aggregation")
         time_path_a = root / "spend_a.xlsx"
         time_path_b = root / "spend_b.xlsx"
         _write_workbook(
@@ -188,7 +188,7 @@ def main() -> None:
         time_rows = time_report["output_df"].to_dict("records")
         _assert(time_rows[0]["Period"] == "2025-11", "Expected a YYYY-MM monthly period label.")
 
-        print("[family regression] helper: relational join")
+        print("[skill regression] helper: relational join")
         join_a = root / "student_core.xlsx"
         join_b = root / "student_program.xlsx"
         _write_workbook(
@@ -219,163 +219,102 @@ def main() -> None:
         _assert(len(join_rows) == 2, "Expected two joined rows in relational join report.")
         _assert(join_rows[0]["Program"] in {"CS", "Math"}, "Expected joined Program column in relational report.")
 
-        print("[family regression] detector coverage")
-        family_grouped = detect_task_family(
-            "Calculate the average score for each course and sort the results from highest to lowest."
+        print("[skill regression] detector coverage")
+
+        def _assert_skill_helper(question: str, skill_name: str, helper_name: str | None = None) -> None:
+            skill = detect_skill(question)
+            _assert(skill is not None, f"Expected `{question}` to match the `{skill_name}` skill.")
+            _assert(skill.name == skill_name, f"Expected `{question}` to map to `{skill_name}`, got `{skill.name}`.")
+            if helper_name is not None:
+                helper = select_helper(skill, question)
+                _assert(helper is not None, f"Expected `{question}` to select helper `{helper_name}`.")
+                _assert(
+                    helper.name == helper_name,
+                    f"Expected `{question}` to select `{helper_name}`, got `{helper.name}`.",
+                )
+
+        _assert_skill_helper(
+            "Calculate the average score for each course and sort the results from highest to lowest.",
+            "aggregate",
+            "build_grouped_aggregation_ranking_report",
         )
-        family_temporal = detect_task_family(
-            "Using the Date and Daily Spending columns, calculate the average spending for each YYYY-MM period within the latest 5 years and sort descending."
+        _assert_skill_helper(
+            "Using the Date and Daily Spending columns, calculate the average spending for each YYYY-MM period within the latest 5 years and sort descending.",
+            "aggregate",
+            "build_time_series_aggregation_report",
         )
-        family_join = detect_task_family(
-            "Merge the student information file with the program file into a single table using the shared student ID."
+        _assert_skill_helper(
+            "Merge the student information file with the program file into a single table using the shared student ID.",
+            "merge",
+            "build_relational_join_enrichment_report",
         )
-        family_multi_key_join = detect_task_family(
-            "Merge the enrollment file with the attendance file using Student ID and Term as the shared keys."
+        _assert_skill_helper(
+            "Merge the enrollment file with the attendance file using Student ID and Term as the shared keys.",
+            "merge",
+            "build_multi_key_relational_join_report",
         )
-        family_fill = detect_task_family(
-            "Fill the missing program values in the primary file using the reference file with the shared student ID."
+        _assert_skill_helper(
+            "Fill the missing program values in the primary file using the reference file with the shared student ID.",
+            "merge",
+            "fill_missing_from_reference",
         )
-        family_missing = detect_task_family(
-            "Identify where values are missing in the file and report the missing data."
+        _assert_skill_helper(
+            "Identify where values are missing in the file and report the missing data.",
+            "scan",
+            "build_missing_data_report",
         )
-        family_room = detect_task_family(
-            "Check whether the room identifiers are inconsistent, for example C80 versus C 80."
+        _assert_skill_helper(
+            "Check whether the room identifiers are inconsistent, for example C80 versus C 80.",
+            "scan",
+            "build_room_format_report",
         )
-        family_schedule = detect_task_family(
-            "Create a task schedule based on task durations and dependencies."
+        _assert_skill_helper(
+            "Create a task schedule based on task durations and dependencies.",
+            "schedule",
+            "build_dependency_schedule",
         )
-        family_growth = detect_task_family(
-            "Create a line chart showing the growth rate of internet penetration by region from 2020 to 2024."
+        _assert_skill_helper(
+            "Use study hours, attendance, and homework score to fit a regression model predicting final score.",
+            "statistical",
+            "fit_linear_regression_weights",
         )
-        family_screening = detect_task_family(
-            "Rank the candidates using working experience, number of skills, and personality score from the candidate information files."
+        _assert_skill_helper(
+            "Build a correlation matrix for sepal length, sepal width, petal length, and petal width.",
+            "statistical",
+            "build_correlation_matrix_table",
         )
-        family_comparative = detect_task_family(
-            "Compare weekly sales features by store type and holiday status using feature1, feature2, and holiday metadata."
+        _assert_skill_helper(
+            "Analyze the correlations between sepal length, sepal width, petal length, and petal width.",
+            "statistical",
+            "build_correlation_matrix_table",
         )
-        family_dashboard = detect_task_family(
-            "Create a dashboard with gross profit, net profit, gross profit margin, net profit margin, customer acquisition cost, and marketing efficiency ratio."
+        _assert_skill_helper(
+            "Audit the spreadsheet for null values and report which fields are missing.",
+            "scan",
+            "build_missing_data_report",
         )
-        family_reviews = detect_task_family(
-            "Summarize smartphone reviews by country and brand using average rating and number of reviews."
+        _assert_skill_helper(
+            "Create a schedule showing each student with their assigned professor meeting slot and room.",
+            "schedule",
+            "build_relational_assignment_schedule_report",
         )
-        family_regression = detect_task_family(
-            "Use study hours, attendance, and homework score to fit a regression model predicting final score."
+        _assert_skill_helper(
+            "Build a roster showing each advisee with the assigned advisor availability slot and venue.",
+            "schedule",
+            "build_relational_assignment_schedule_report",
         )
-        family_correlation = detect_task_family(
-            "Build a correlation matrix for sepal length, sepal width, petal length, and petal width."
+        _assert_skill_helper(
+            "Allocate students to rooms based on room capacities and available seats.",
+            "schedule",
+            "build_capacity_constrained_allocation_report",
         )
-        family_regression_natural = detect_task_family(
-            "Fit a model to predict final score using study hours, attendance, and homework score."
-        )
-        family_correlation_natural = detect_task_family(
-            "Analyze the correlations between sepal length, sepal width, petal length, and petal width."
-        )
-        family_missing_natural = detect_task_family(
-            "Audit the spreadsheet for null values and report which fields are missing."
-        )
-        family_assignment_natural = detect_task_family(
-            "Create a schedule showing each student with their assigned professor meeting slot and room."
-        )
-        family_assignment_alt = detect_task_family(
-            "Build a roster showing each advisee with the assigned advisor availability slot and venue."
-        )
-        family_allocation = detect_task_family(
-            "Allocate students to rooms based on room capacities and available seats."
-        )
-        family_allocation_alt = detect_task_family(
-            "Place participants into lab sessions according to available slots and remaining capacity."
-        )
-        _assert(
-            family_grouped is not None and family_grouped.name == "grouped_aggregation_ranking",
-            "Expected grouped aggregation prompt to map to grouped_aggregation_ranking.",
-        )
-        _assert(
-            family_temporal is not None and family_temporal.name == "temporal_aggregation_ranking",
-            "Expected temporal aggregation prompt to map to temporal_aggregation_ranking.",
-        )
-        _assert(
-            family_join is not None and family_join.name == "relational_join_enrichment",
-            "Expected relational merge prompt to map to relational_join_enrichment.",
-        )
-        _assert(
-            family_multi_key_join is not None and family_multi_key_join.name == "composite_key_relational_join",
-            "Expected multi-key relational merge prompt to map to composite_key_relational_join.",
-        )
-        _assert(
-            family_fill is not None and family_fill.name == "reference_guided_completion",
-            "Expected fill prompt to map to reference_guided_completion.",
-        )
-        _assert(
-            family_missing is not None and family_missing.name == "missing_data_scan",
-            "Expected missing-data prompt to map to missing_data_scan.",
-        )
-        _assert(
-            family_room is not None and family_room.name == "identifier_format_scan",
-            "Expected room-format prompt to map to identifier_format_scan.",
-        )
-        _assert(
-            family_schedule is not None and family_schedule.name == "dependency_constrained_schedule",
-            "Expected scheduling prompt to map to dependency_constrained_schedule.",
-        )
-        _assert(
-            family_growth is not None and family_growth.name == "temporal_growth_visual_report",
-            "Expected regional growth prompt to map to temporal_growth_visual_report.",
-        )
-        _assert(
-            family_screening is not None and family_screening.name == "entity_ranking_report",
-            "Expected candidate-screening prompt to map to entity_ranking_report.",
-        )
-        _assert(
-            family_comparative is not None and family_comparative.name == "comparative_multi_sheet_summary",
-            "Expected comparative-features prompt to map to comparative_multi_sheet_summary.",
-        )
-        _assert(
-            family_dashboard is not None and family_dashboard.name == "multi_source_metric_dashboard",
-            "Expected dashboard prompt to map to multi_source_metric_dashboard.",
-        )
-        _assert(
-            family_reviews is not None and family_reviews.name == "grouped_metric_summary",
-            "Expected reviews prompt to map to grouped_metric_summary.",
-        )
-        _assert(
-            family_regression is not None and family_regression.name == "tabular_regression_analysis",
-            "Expected regression prompt to map to tabular_regression_analysis.",
-        )
-        _assert(
-            family_correlation is not None and family_correlation.name == "pairwise_correlation_matrix",
-            "Expected correlation prompt to map to pairwise_correlation_matrix.",
-        )
-        _assert(
-            family_regression_natural is not None and family_regression_natural.name == "tabular_regression_analysis",
-            "Expected natural regression prompt to map to tabular_regression_analysis.",
-        )
-        _assert(
-            family_correlation_natural is not None and family_correlation_natural.name == "pairwise_correlation_matrix",
-            "Expected natural correlation prompt to map to pairwise_correlation_matrix.",
-        )
-        _assert(
-            family_missing_natural is not None and family_missing_natural.name == "missing_data_scan",
-            "Expected natural missing-data prompt to map to missing_data_scan.",
-        )
-        _assert(
-            family_assignment_natural is not None and family_assignment_natural.name == "relational_assignment_schedule",
-            "Expected natural assignment-schedule prompt to map to relational_assignment_schedule.",
-        )
-        _assert(
-            family_assignment_alt is not None and family_assignment_alt.name == "relational_assignment_schedule",
-            "Expected alternate assignment-schedule prompt to map to relational_assignment_schedule.",
-        )
-        _assert(
-            family_allocation is not None and family_allocation.name == "capacity_constrained_allocation",
-            "Expected allocation prompt to map to capacity_constrained_allocation.",
-        )
-        _assert(
-            family_allocation_alt is not None and family_allocation_alt.name == "capacity_constrained_allocation",
-            "Expected alternate allocation prompt to map to capacity_constrained_allocation.",
+        _assert_skill_helper(
+            "Place participants into lab sessions according to available slots and remaining capacity.",
+            "schedule",
+            "build_capacity_constrained_allocation_report",
         )
 
-        print("[family regression] runtime: grouped")
+        print("[skill regression] runtime: grouped")
         grouped_sandbox = Sandbox(
             excel_paths=[str(grouped_path)],
             output_preferences={},
@@ -406,7 +345,7 @@ def main() -> None:
         )
         _assert(grouped_validation_result["validation_passed"], "Expected grouped fast-path output to pass validation.")
 
-        print("[family regression] runtime: temporal")
+        print("[skill regression] runtime: temporal")
         temporal_sandbox = Sandbox(
             excel_paths=[str(time_path_a), str(time_path_b)],
             output_preferences={},
@@ -440,7 +379,7 @@ def main() -> None:
         )
         _assert(temporal_validation_result["validation_passed"], "Expected temporal fast-path output to pass validation.")
 
-        print("[family regression] runtime: relational join")
+        print("[skill regression] runtime: relational join")
         join_sandbox = Sandbox(
             excel_paths=[str(join_a), str(join_b)],
             output_preferences={},
@@ -471,7 +410,7 @@ def main() -> None:
         )
         _assert(join_validation_result["validation_passed"], "Expected relational join fast-path output to pass validation.")
 
-        print("[family regression] runtime: composite-key relational join")
+        print("[skill regression] runtime: composite-key relational join")
         enrollment_path = root / "enrollment.xlsx"
         attendance_path = root / "attendance.xlsx"
         _write_workbook(
@@ -527,7 +466,7 @@ def main() -> None:
             "Expected composite-key relational join fast-path output to pass validation.",
         )
 
-        print("[family regression] runtime: reference fill")
+        print("[skill regression] runtime: reference fill")
         fill_primary = root / "fill_primary.xlsx"
         fill_reference = root / "fill_reference.xlsx"
         _write_workbook(
@@ -577,7 +516,7 @@ def main() -> None:
         )
         _assert(fill_validation_result["validation_passed"], "Expected reference-fill fast-path output to pass validation.")
 
-        print("[family regression] runtime: missing-data scan")
+        print("[skill regression] runtime: missing-data scan")
         missing_scan_path = root / "missing_scan.xlsx"
         _write_workbook(
             missing_scan_path,
@@ -607,7 +546,7 @@ def main() -> None:
         _assert(missing_exec["success"], "Expected missing-data scan fast-path to succeed.")
         _assert("missing" in missing_exec["answer"].lower(), "Expected missing-data fast-path to return a missing-data answer.")
 
-        print("[family regression] runtime: identifier-format scan")
+        print("[skill regression] runtime: identifier-format scan")
         room_scan_path = root / "room_scan.xlsx"
         _write_workbook(
             room_scan_path,
@@ -637,7 +576,7 @@ def main() -> None:
         _assert(room_exec["success"], "Expected room-format scan fast-path to succeed.")
         _assert("room" in room_exec["answer"].lower(), "Expected room-format fast-path to return a room-related answer.")
 
-        print("[family regression] runtime: dependency schedule")
+        print("[skill regression] runtime: dependency schedule")
         task_info = root / "task_info.xlsx"
         task_deps = root / "task_deps.xlsx"
         _write_workbook(
@@ -687,51 +626,7 @@ def main() -> None:
         )
         _assert(schedule_validation_result["validation_passed"], "Expected dependency schedule fast-path output to pass validation.")
 
-        print("[family regression] runtime: temporal growth visual report")
-        growth_path = root / "growth_report.xlsx"
-        _write_workbook(
-            growth_path,
-            "Data",
-            [
-                ["", "", "", ""],
-                ["", "North", "South", "in %"],
-                [2020, 45, 52, None],
-                [2021, 50, 55, None],
-                [2022, 57, 61, None],
-                [2023, 64, 66, None],
-                [2024, 72, 70, None],
-            ],
-        )
-        growth_sandbox = Sandbox(
-            excel_paths=[str(growth_path)],
-            output_preferences={},
-            output_path=str(root / "growth_runtime_output.xlsx"),
-        )
-        growth_runtime = ExecutionRuntime(
-            client=None,
-            deployment="offline-test",
-            sandbox=growth_sandbox,
-            excel_context_execution="",
-        )
-        growth_exec = growth_runtime.run(
-            understanding_output="",
-            user_question="Create a line chart showing the growth rate of internet penetration by region from 2020 to 2024.",
-            max_turns=1,
-        )
-        _assert(growth_exec["success"], "Expected temporal growth fast-path to succeed.")
-        growth_validation = ValidationRuntime(
-            client=None,
-            deployment="offline-test",
-            excel_context_understanding="",
-        )
-        growth_validation_result = growth_validation.run(
-            growth_exec,
-            "Create a line chart showing the growth rate of internet penetration by region from 2020 to 2024.",
-            "",
-        )
-        _assert(growth_validation_result["validation_passed"], "Expected temporal growth fast-path output to pass validation.")
-
-        print("[family regression] runtime: capacity-constrained allocation")
+        print("[skill regression] runtime: capacity-constrained allocation")
         allocation_entities = root / "allocation_entities.xlsx"
         allocation_resources = root / "allocation_resources.xlsx"
         _write_workbook(
@@ -786,7 +681,7 @@ def main() -> None:
             "Expected capacity-constrained allocation fast-path output to pass validation.",
         )
 
-        print("[family regression] runtime: relational assignment schedule")
+        print("[skill regression] runtime: relational assignment schedule")
         assigned_students = root / "assigned_students.xlsx"
         professor_slots = root / "professor_slots.xlsx"
         _write_workbook(
@@ -837,225 +732,11 @@ def main() -> None:
         )
         _assert(assignment_validation_result["validation_passed"], "Expected relational assignment schedule fast-path output to pass validation.")
 
-        print("[family regression] runtime: candidate screening")
-        candidate_a = root / "candidate_a.xlsx"
-        candidate_b = root / "candidate_b.xlsx"
-        _write_workbook(
-            candidate_a,
-            "Sheet1",
-            [
-                ["Name", "Key Skills", "EDUCATION", "Past companies", "YearsOfExperience", "Personality Score"],
-                ["Alice", "Python,SQL,ML", "BSc", "Contoso", 4, 88],
-                ["Bob", "Excel,PowerBI", "MSc", "Fabrikam", 6, 80],
-            ],
-        )
-        _write_workbook(
-            candidate_b,
-            "Sheet1",
-            [
-                ["Name", "Key Skills", "EDUCATION", "Past companies", "YearsOfExperience", "Personality Score"],
-                ["Cara", "Python,SQL,Stats,ML", "PhD", "Northwind", 5, 92],
-                ["Dan", "Excel", "BSc", "Adventure", 2, 70],
-            ],
-        )
-        screening_sandbox = Sandbox(
-            excel_paths=[str(candidate_a), str(candidate_b)],
-            output_preferences={},
-            output_path=str(root / "screening_runtime_output.xlsx"),
-        )
-        screening_runtime = ExecutionRuntime(
-            client=None,
-            deployment="offline-test",
-            sandbox=screening_sandbox,
-            excel_context_execution="",
-        )
-        screening_exec = screening_runtime.run(
-            understanding_output="",
-            user_question=(
-                "Rank the candidates using working experience, number of skills, and personality score "
-                "from the candidate information files."
-            ),
-            max_turns=1,
-        )
-        _assert(screening_exec["success"], "Expected candidate-screening fast-path to succeed.")
-        screening_validation = ValidationRuntime(
-            client=None,
-            deployment="offline-test",
-            excel_context_understanding="",
-        )
-        screening_validation_result = screening_validation.run(
-            screening_exec,
-            "Rank the candidates using working experience, number of skills, and personality score from the candidate information files.",
-            "",
-        )
-        _assert(screening_validation_result["validation_passed"], "Expected candidate-screening fast-path output to pass validation.")
+        # Domain-specific macro helpers are now exposed as LLM helper hints rather than
+        # automatic skill fast-paths, so this synthetic regression focuses on the
+        # five routed skills and their registered helpers.
 
-        print("[family regression] runtime: comparative multi-sheet summary")
-        features_path = root / "store_features.xlsx"
-        stores_path = root / "stores.xlsx"
-        _write_workbook(
-            features_path,
-            "Features",
-            [
-                ["Store", "Temperature", "Fuel_Price", "MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5", "CPI", "Unemployment", "IsHoliday"],
-                [1, 20.0, 3.2, 10, 5, 3, 2, 1, 220.0, 7.1, True],
-                [1, 18.0, 3.1, 8, 4, 2, 2, 1, 219.0, 7.0, False],
-                [2, 25.0, 3.4, 12, 6, 4, 3, 2, 221.0, 6.8, True],
-                [2, 22.0, 3.3, 9, 5, 3, 2, 1, 220.5, 6.9, False],
-            ],
-        )
-        _write_workbook(
-            stores_path,
-            "Stores",
-            [
-                ["Store", "Type", "Size"],
-                [1, "A", 150000],
-                [2, "B", 120000],
-            ],
-        )
-        comparative_sandbox = Sandbox(
-            excel_paths=[str(features_path), str(stores_path)],
-            output_preferences={},
-            output_path=str(root / "comparative_runtime_output.xlsx"),
-        )
-        comparative_runtime = ExecutionRuntime(
-            client=None,
-            deployment="offline-test",
-            sandbox=comparative_sandbox,
-            excel_context_execution="",
-        )
-        comparative_exec = comparative_runtime.run(
-            understanding_output="",
-            user_question=(
-                "Compare weekly sales features by store type and holiday status using feature1, feature2, and holiday metadata."
-            ),
-            max_turns=1,
-        )
-        _assert(comparative_exec["success"], "Expected comparative multi-sheet fast-path to succeed.")
-        comparative_validation = ValidationRuntime(
-            client=None,
-            deployment="offline-test",
-            excel_context_understanding="",
-        )
-        comparative_validation_result = comparative_validation.run(
-            comparative_exec,
-            "Compare weekly sales features by store type and holiday status using feature1, feature2, and holiday metadata.",
-            "",
-        )
-        _assert(comparative_validation_result["validation_passed"], "Expected comparative multi-sheet fast-path output to pass validation.")
-
-        print("[family regression] runtime: grouped metric summary")
-        reviews_path = root / "reviews.xlsx"
-        _write_workbook(
-            reviews_path,
-            "Reviews",
-            [
-                ["country", "brand", "rating"],
-                ["UK", "Alpha", 4.5],
-                ["UK", "Alpha", 3.5],
-                ["UK", "Beta", 5.0],
-                ["US", "Alpha", 4.0],
-            ],
-        )
-        reviews_sandbox = Sandbox(
-            excel_paths=[str(reviews_path)],
-            output_preferences={},
-            output_path=str(root / "reviews_runtime_output.xlsx"),
-        )
-        reviews_runtime = ExecutionRuntime(
-            client=None,
-            deployment="offline-test",
-            sandbox=reviews_sandbox,
-            excel_context_execution="",
-        )
-        reviews_exec = reviews_runtime.run(
-            understanding_output="",
-            user_question="Summarize smartphone reviews by country and brand using average rating and number of reviews.",
-            max_turns=1,
-        )
-        _assert(reviews_exec["success"], "Expected grouped metric summary fast-path to succeed.")
-        reviews_validation = ValidationRuntime(
-            client=None,
-            deployment="offline-test",
-            excel_context_understanding="",
-        )
-        reviews_validation_result = reviews_validation.run(
-            reviews_exec,
-            "Summarize smartphone reviews by country and brand using average rating and number of reviews.",
-            "",
-        )
-        _assert(reviews_validation_result["validation_passed"], "Expected grouped metric summary fast-path output to pass validation.")
-
-        print("[family regression] runtime: dashboard")
-        pnl_path = root / "pnl.xlsx"
-        sales_path = root / "sales.xlsx"
-        targets_path = root / "targets.xlsx"
-        _write_workbook(
-            pnl_path,
-            "Pnl",
-            [
-                ["Month", "Revenue", "Cost of Goods Sold", "Operating Expenses", "Interest Paid"],
-                ["Jan", 1000, 400, 200, 20],
-                ["Feb", 1200, 500, 250, 25],
-                ["Mar", 1100, 450, 220, 22],
-            ],
-        )
-        _write_workbook(
-            sales_path,
-            "Sales",
-            [
-                ["Month", "New Customers", "Marketing Spend"],
-                ["Jan", 50, 100],
-                ["Feb", 60, 120],
-                ["Mar", 55, 110],
-            ],
-        )
-        _write_workbook(
-            targets_path,
-            "Targets",
-            [
-                ["KPI", "Q1 Target"],
-                ["Gross Profit", 1800],
-                ["Net Profit", 1100],
-                ["Gross Profit Margin", 55],
-                ["Net Profit Margin", 35],
-                ["Customer Acquisition Cost (CAC)", 2.5],
-                ["Marketing Efficiency Ratio", 10],
-            ],
-        )
-        dashboard_sandbox = Sandbox(
-            excel_paths=[str(pnl_path), str(sales_path), str(targets_path)],
-            output_preferences={},
-            output_path=str(root / "dashboard_runtime_output.xlsx"),
-        )
-        dashboard_runtime = ExecutionRuntime(
-            client=None,
-            deployment="offline-test",
-            sandbox=dashboard_sandbox,
-            excel_context_execution="",
-        )
-        dashboard_exec = dashboard_runtime.run(
-            understanding_output="",
-            user_question=(
-                "Create a dashboard with gross profit, net profit, gross profit margin, "
-                "net profit margin, customer acquisition cost, and marketing efficiency ratio."
-            ),
-            max_turns=1,
-        )
-        _assert(dashboard_exec["success"], "Expected dashboard fast-path to succeed.")
-        dashboard_validation = ValidationRuntime(
-            client=None,
-            deployment="offline-test",
-            excel_context_understanding="",
-        )
-        dashboard_validation_result = dashboard_validation.run(
-            dashboard_exec,
-            "Create a dashboard with gross profit, net profit, gross profit margin, net profit margin, customer acquisition cost, and marketing efficiency ratio.",
-            "",
-        )
-        _assert(dashboard_validation_result["validation_passed"], "Expected dashboard fast-path output to pass validation.")
-
-        print("[family regression] runtime: regression")
+        print("[skill regression] runtime: regression")
         regression_path = root / "regression.xlsx"
         _write_workbook(
             regression_path,
@@ -1097,7 +778,7 @@ def main() -> None:
         )
         _assert(regression_validation_result["validation_passed"], "Expected regression fast-path output to pass validation.")
 
-        print("[family regression] runtime: correlation")
+        print("[skill regression] runtime: correlation")
         correlation_path = root / "correlation.xlsx"
         _write_workbook(
             correlation_path,
@@ -1139,7 +820,7 @@ def main() -> None:
         )
         _assert(correlation_validation_result["validation_passed"], "Expected correlation fast-path output to pass validation.")
 
-    print("Synthetic family regression passed.")
+    print("Synthetic skill regression passed.")
 
 
 if __name__ == "__main__":

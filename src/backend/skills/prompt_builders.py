@@ -2,8 +2,49 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 from .models import HelperSpec, SkillSpec
 from .helper_metadata import get_helper_documented_result_keys, helper_result_variable_name
+from .runtime_plan import WorkflowStep, compose_skill_plan
+
+
+def format_plan_log(
+    matched_skills: "Sequence[SkillSpec]",
+    plan: "Sequence[WorkflowStep]",
+) -> str:
+    """Return a human-readable log string for the composed skill plan.
+
+    Emitted by the execution prompt advisor so operators can verify
+    that skill detection and artifact flow are correct for every request.
+    """
+    skill_names = ", ".join(s.name for s in matched_skills) if matched_skills else "(none)"
+    lines = [
+        f"[SKILL-CHAIN] Detected skills: {skill_names}",
+        f"[SKILL-CHAIN] Composed plan ({len(plan)} steps):",
+    ]
+    for i, step in enumerate(plan):
+        lines.append(f"  [{i}] {step.to_log_line()}")
+    return "\n".join(lines)
+
+
+_MONTH_NUMBERS: dict[str, int] = {
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+    "jun": 6, "jul": 7, "aug": 8,
+    "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _extract_month_from_question(q: str) -> int | None:
+    """Return the first calendar month number found in the question, or None."""
+    q_lower = q.lower()
+    for name, num in _MONTH_NUMBERS.items():
+        if name in q_lower:
+            return num
+    return None
 
 
 def build_skill_hint(skill: SkillSpec, helper: HelperSpec) -> str:
@@ -25,10 +66,10 @@ def build_compact_skill_workflow(skill: SkillSpec, helper: HelperSpec) -> str:
             f"[{label} WORKFLOW]\n"
             "- Load runtime tables and print real headers.\n"
             "- Classify same-schema concat vs shared-key join from observed columns.\n"
-            "- Same-schema stack tasks: `concat_result = concat_tables_with_same_headers(tables)` then use `combined_df = concat_result['output_df']`.\n"
-            "- If the question asks for totals/averages/max highlight, compute them with `summarize_numeric_column(summary_df, value_col='...')` after any verified filter.\n"
-            "- Write the DataFrame directly with `write_dataframe_to_sheet(df, 'Output', 'A1')`; do not hand-build `data_2d`.\n"
-            "- Put any summary row strictly below the written table, keep `highlight_rows(...)` as the function name, then save."
+            "- Same-schema stack: `concat_result = concat_tables_with_same_headers(tables)` → use `combined_df = concat_result['output_df']`.\n"
+            "- Shared-key join: use `find_table_by_headers(...)` to select tables by role, then join on the shared key column.\n"
+            "- Write the combined DataFrame with `write_dataframe_to_sheet(df, 'Output', 'A1')`; do not hand-build `data_2d`.\n"
+            "- This skill covers only loading and joining; aggregation and highlighting are handled by separate skill steps."
         ),
         "aggregate": (
             f"[{label} WORKFLOW]\n"
@@ -160,6 +201,24 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
                 "- Write a one-row output table with the selected feature headers, not a `Feature | Correlation` long-form table, unless the user explicitly asks for long form.",
             ]
         )
+    elif helper.name == "fit_linear_regression_weights":
+        lines.extend(
+            [
+                "- For regression tasks, infer `target_col` and `feature_cols` from the runtime plan and current runtime schema.",
+                "- Prefer `fit_linear_regression_weights(...)` over hand-written least-squares or external ML libraries.",
+                "- Include all available predictors from the runtime plan unless the user explicitly restricts them.",
+                "- Print the selected predictor list before fitting with `print(\"USED_FEATURES:\", feature_cols)`.",
+                "- Write the returned coefficient table from `regression_result['output_df']` directly to `Output`.",
+            ]
+        )
+    elif helper.name == "build_cash_flow_efficiency_report":
+        lines.extend(
+            [
+                "- For row-label financial statement tasks, prefer `build_cash_flow_efficiency_report()` over manual header parsing.",
+                "- This workflow reads the statement layout, finds the OCF / net income / capex rows, and returns a year-by-year output table.",
+                "- Write `report['detail_data']` or `report['formatted_df']` to `Output`, then save.",
+            ]
+        )
     else:
         lines.append("- Do not replace the whole task with a single task-shaped helper shortcut.")
     if helper.description and helper.name != "build_relational_assignment_schedule_report":
@@ -169,7 +228,13 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
     return "\n".join(lines) + "\n"
 
 
-def build_loop_breaker(skill: SkillSpec, helper: HelperSpec, plan_summary: str = "") -> str:
+def build_loop_breaker(
+    skill: SkillSpec,
+    helper: HelperSpec,
+    plan_summary: str = "",
+    extra_skills: "Sequence[SkillSpec] | None" = None,
+    user_question: str = "",
+) -> str:
     label = skill.name.upper()
     if skill.output_mode == "text":
         return (
@@ -212,26 +277,84 @@ def build_loop_breaker(skill: SkillSpec, helper: HelperSpec, plan_summary: str =
             "  `saved_file`\n"
         )
     if helper.name == "concat_tables_with_same_headers":
-        return (
-            f"\n{label} LOOP BREAKER:\n"
-            "- Use this helper-grounded workflow shape for same-schema merge/summary tasks:\n"
-            "  `tables = load_all_tables()`\n"
-            "  `concat_result = concat_tables_with_same_headers(tables)`\n"
-            "  `combined_df = concat_result['output_df']`\n"
-            "  `summary_df = combined_df  # or a verified filtered subset before summarizing`\n"
-            "  `summary_result = summarize_numeric_column(summary_df, value_col='...')`\n"
-            "  `create_output_sheet('Output')`\n"
-            "  `write_dataframe_to_sheet(summary_df, 'Output', 'A1')`\n"
-            "  `summary_row = len(summary_df) + 2`\n"
-            "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
-            "  `row_numbers = summary_result['output_row_numbers']`\n"
-            "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`\n"
-            "  `saved_file = save_workbook_to(output_path)`\n"
-            "  `print(f'SAVED_FILE: {saved_file}')`\n"
-            "  `saved_file`\n"
-            "- Write the DataFrame directly; do not hand-build `data_2d`.\n"
-            "- If you highlight a different written frame than `summary_df`, recompute row numbers against the written frame instead of reusing `output_row_numbers`.\n"
-        )
+        # Build the loop breaker from the composed skill plan so that
+        # steps are only included when the corresponding skill was detected.
+        all_skills = list(extra_skills) if extra_skills else [skill]
+        all_helpers = {s.name: (
+            next((h for h in s.helpers), None) if s.helpers else None
+        ) for s in all_skills}
+        if skill not in all_skills:
+            all_skills.insert(0, skill)
+        plan = compose_skill_plan(all_skills, all_helpers)  # type: ignore[arg-type]
+
+        skill_names_in_plan = {step.skill for step in plan}
+        needs_aggregate = "aggregate" in skill_names_in_plan
+        needs_highlight = "highlight" in skill_names_in_plan
+
+        # Build temporal-filter instruction from question when a month is named.
+        month_num = _extract_month_from_question(user_question)
+        if month_num is not None:
+            temporal_filter_lines = [
+                "  `combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`",
+                f"  `summary_df = combined_df[combined_df['Date'].dt.month == {month_num}]`"
+                f"  `# ← period filter required by the question`",
+            ]
+            temporal_note = (
+                f"- The question specifies a period (month {month_num}): "
+                "filter BEFORE summarizing and writing — do not compute stats over all rows."
+            )
+        else:
+            temporal_filter_lines = [
+                "  `# Apply period filter here if the question specifies a month or date range:`",
+                "  `# combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`",
+                "  `# summary_df = combined_df[combined_df['Date'].dt.month == N]`",
+                "  `summary_df = combined_df  # replace with filtered subset when question names a period`",
+            ]
+            temporal_note = ""
+
+        lines = [
+            f"\n{label} LOOP BREAKER:",
+            "- Use this helper-grounded workflow shape for same-schema merge tasks:",
+            "  `tables = load_all_tables()`",
+            "  `concat_result = concat_tables_with_same_headers(tables)`",
+            "  `combined_df = concat_result['output_df']`",
+        ]
+        if needs_aggregate:
+            # Inject temporal filter lines only when aggregate is in the plan —
+            # filtering is irrelevant for merge-only tasks.
+            lines += temporal_filter_lines
+            if temporal_note:
+                lines.append(temporal_note)
+            lines += [
+                "  `# IMPORTANT: summarize_numeric_column and write_dataframe_to_sheet must use the SAME df`",
+                "  `summary_result = summarize_numeric_column(summary_df, value_col='...')`",
+                "  `create_output_sheet('Output')`",
+                "  `write_dataframe_to_sheet(summary_df, 'Output', 'A1')`",
+                "  `summary_row = len(summary_df) + 2`",
+                "  `add_summary_row('Output', summary_row, summary_result['summary'])`",
+            ]
+        else:
+            lines += [
+                "  `create_output_sheet('Output')`",
+                "  `write_dataframe_to_sheet(combined_df, 'Output', 'A1')`",
+            ]
+        if needs_highlight:
+            lines += [
+                "  `row_numbers = summary_result['output_row_numbers']`",
+                "  `# output_row_numbers are Excel rows relative to summary_df — valid ONLY when summary_df was written above`",
+                "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`",
+            ]
+        lines += [
+            "  `saved_file = save_workbook_to(output_path)`",
+            "  `print(f'SAVED_FILE: {saved_file}')`",
+            "  `saved_file`",
+            "- Write the DataFrame directly; do not hand-build `data_2d`.",
+        ]
+        if needs_aggregate:
+            lines.append(
+                "- `output_row_numbers` is only valid for the DataFrame passed to summarize_numeric_column — never mix filtered and unfiltered frames."
+            )
+        return "\n".join(lines) + "\n"
     if helper.name == "build_market_share_shipment_report":
         return (
             f"\n{label} LOOP BREAKER:\n"
@@ -312,13 +435,75 @@ def build_loop_breaker(skill: SkillSpec, helper: HelperSpec, plan_summary: str =
             "- Keep the output as one row whose selected feature columns appear once in order.\n"
             "- Do not switch to a square matrix unless the user explicitly asks for a correlation matrix.\n"
         )
+    if helper.name == "fit_linear_regression_weights":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use this grounded workflow shape for regression:\n"
+            "  `tables = load_all_tables()`\n"
+            "  `df = tables[0]['df'].copy()`\n"
+            "  Set `target_col` from the runtime plan summary above.\n"
+            "  Set `feature_cols` from the runtime plan summary above.\n"
+            "  `print(\"USED_FEATURES:\", feature_cols)`\n"
+            "  `regression_result = fit_linear_regression_weights(df, target_col=target_col, feature_cols=feature_cols, round_digits=3)`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(regression_result['output_df'], 'Output', 'A1')`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not hand-write `numpy.linalg.lstsq`, and do not import sklearn/statsmodels.\n"
+        )
+    if helper.name == "build_cash_flow_efficiency_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use this grounded workflow shape for cash-flow efficiency analysis:\n"
+            "  `report = build_cash_flow_efficiency_report()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not manually rebuild the statement header or hand-select year columns.\n"
+        )
+    # Generic fallback — but if extra_skills carry aggregate or highlight we
+    # still build the skeleton from the composed plan so the code shape stays
+    # plan-driven rather than falling back to a context-free skeleton.
+    all_skills = list(extra_skills) if extra_skills else [skill]
+    if skill not in all_skills:
+        all_skills.insert(0, skill)
+    all_helpers_map = {s.name: (
+        next((h for h in s.helpers), None) if s.helpers else None
+    ) for s in all_skills}
+    plan = compose_skill_plan(all_skills, all_helpers_map)  # type: ignore[arg-type]
+    skill_names_in_plan = {step.skill for step in plan}
+    needs_aggregate = "aggregate" in skill_names_in_plan
+    needs_highlight = "highlight" in skill_names_in_plan
+
     lines = [
         f"\n{label} LOOP BREAKER:",
         "- Use exactly this workflow shape:",
-        "  `tables = load_all_tables()` or grounded `read_table_multi(...)`",
+        "  `tables = load_all_tables()`",
+        "  `df = tables[0]['df'].copy()  # select by verified headers`",
         "  `# compose transformation steps with shared helpers / pandas`",
-        "  `create_output_sheet('Output')`",
-        "  `write_dataframe_to_sheet(result_df_or_rows, 'Output', 'A1')`",
+    ]
+    if needs_aggregate:
+        lines += [
+            "  `summary_result = summarize_numeric_column(df, value_col='...')`",
+            "  `create_output_sheet('Output')`",
+            "  `write_dataframe_to_sheet(df, 'Output', 'A1')`",
+            "  `summary_row = len(df) + 2`",
+            "  `add_summary_row('Output', summary_row, summary_result['summary'])`",
+        ]
+    else:
+        lines += [
+            "  `create_output_sheet('Output')`",
+            "  `write_dataframe_to_sheet(df, 'Output', 'A1')`",
+        ]
+    if needs_highlight:
+        lines += [
+            "  `row_numbers = summary_result['output_row_numbers']`",
+            "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`",
+        ]
+    lines += [
         "  `saved_file = save_workbook_to(output_path)`",
         "  `print(f'SAVED_FILE: {saved_file}')`",
         "  `saved_file`",

@@ -10,6 +10,10 @@ from ..world import SpreadsheetWorld
 
 
 _XML_ESCAPE_RE = re.compile(r"_x[0-9A-Fa-f]{4}_")
+_PERIOD_TEXT_RE = re.compile(
+    r"^(?:Q[1-4]\s+\d{4}|\d{4}(?:-\d{2}-\d{2})?|[A-Za-z]{3,9}\s+\d{4})$",
+    flags=re.IGNORECASE,
+)
 _NOTE_MARKERS = {
     "note",
     "notes",
@@ -97,6 +101,71 @@ def _is_note_sentinel_row(row: List[Any]) -> bool:
     return all(_is_empty(v) for v in row[1:])
 
 
+def _non_empty_pairs(row: List[Any]) -> list[tuple[int, Any]]:
+    return [(idx, value) for idx, value in enumerate(row) if not _is_empty(value)]
+
+
+def _looks_numeric_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text or text == "-":
+        return False
+    text = (
+        text.replace(",", "")
+        .replace("%", "")
+        .replace("£", "")
+        .replace("$", "")
+    )
+    return bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?", text))
+
+
+def _looks_period_label(value: Any) -> bool:
+    text = _normalize_text(value)
+    return isinstance(text, str) and bool(_PERIOD_TEXT_RE.fullmatch(text))
+
+
+def _find_next_non_empty_row_index(rows: List[List[Any]], start_idx: int) -> int | None:
+    for idx in range(start_idx, len(rows)):
+        if _non_empty_pairs(rows[idx]):
+            return idx
+    return None
+
+
+def _pick_header_row_index(rows: List[List[Any]], first_non_empty_idx: int) -> int:
+    first_pairs = _non_empty_pairs(rows[first_non_empty_idx])
+    if len(first_pairs) > 1:
+        return first_non_empty_idx
+
+    for idx in range(first_non_empty_idx + 1, len(rows)):
+        pairs = _non_empty_pairs(rows[idx])
+        if len(pairs) < 2:
+            continue
+        text_like_count = sum(
+            1
+            for _, value in pairs
+            if not _looks_numeric_value(value) and not _looks_period_label(value)
+        )
+        next_idx = _find_next_non_empty_row_index(rows, idx + 1)
+        next_pairs = _non_empty_pairs(rows[next_idx]) if next_idx is not None else []
+        next_starts_with_period = bool(next_pairs and _looks_period_label(next_pairs[0][1]))
+        if text_like_count >= 2 and (len(pairs) >= 3 or next_starts_with_period):
+            return idx
+
+    return first_non_empty_idx
+
+
+def _is_ignorable_overflow_value(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    marker = value.strip().lower()
+    return marker in {"in %", "%"}
+
+
 def extract_sheet_table(
     worksheet,
     range_ref: str = "A1:Z200",
@@ -134,13 +203,13 @@ def extract_sheet_table(
             "dropped_rows": 0,
         }
 
-    header_row_index = None
+    first_non_empty_row_index = None
     for idx, row in enumerate(normalized_rows):
         if any(not _is_empty(cell) for cell in row):
-            header_row_index = idx
+            first_non_empty_row_index = idx
             break
 
-    if header_row_index is None:
+    if first_non_empty_row_index is None:
         return {
             "sheet_name": worksheet.title,
             "header": [],
@@ -153,12 +222,42 @@ def extract_sheet_table(
             "dropped_rows": len(normalized_rows),
         }
 
+    header_row_index = _pick_header_row_index(normalized_rows, first_non_empty_row_index)
     header_raw = normalized_rows[header_row_index]
     keep_indices = [
         idx for idx, cell in enumerate(header_raw)
         if not _is_empty(cell)
     ]
     header = [str(header_raw[idx]).strip() for idx in keep_indices]
+    data_start_index = header_row_index + 1
+
+    preview_data_index = _find_next_non_empty_row_index(normalized_rows, data_start_index)
+    if header and keep_indices and preview_data_index is not None:
+        preview_pairs = _non_empty_pairs(normalized_rows[preview_data_index])
+        if (
+            preview_pairs
+            and _looks_period_label(preview_pairs[0][1])
+            and preview_pairs[0][0] < min(keep_indices)
+        ):
+            keep_indices = [preview_pairs[0][0]] + keep_indices
+            header = ["Time"] + header
+
+    if len(header) <= 1:
+        synthetic_data_index = _find_next_non_empty_row_index(normalized_rows, header_row_index + 1)
+        while synthetic_data_index is not None:
+            data_pairs = _non_empty_pairs(normalized_rows[synthetic_data_index])
+            if len(data_pairs) >= 2 and _looks_period_label(data_pairs[0][1]):
+                keep_indices = [col_idx for col_idx, _ in data_pairs]
+                value_count = len(keep_indices) - 1
+                if value_count >= 1:
+                    header = ["Time"] + (
+                        ["Value"] if value_count == 1
+                        else [f"Value {idx}" for idx in range(1, value_count + 1)]
+                    )
+                    data_start_index = synthetic_data_index
+                    header_row_index = synthetic_data_index - 1 if synthetic_data_index > 0 else 0
+                    break
+            synthetic_data_index = _find_next_non_empty_row_index(normalized_rows, synthetic_data_index + 1)
 
     if not header:
         return {
@@ -175,7 +274,7 @@ def extract_sheet_table(
 
     candidate_rows: List[tuple[List[Any], int, bool]] = []
     dropped_rows = 0
-    for offset, raw_row in enumerate(normalized_rows[header_row_index + 1:], start=header_row_index + 1):
+    for offset, raw_row in enumerate(normalized_rows[data_start_index:], start=data_start_index):
         row = [
             raw_row[idx] if idx < len(raw_row) else None
             for idx in keep_indices
@@ -185,7 +284,7 @@ def extract_sheet_table(
         for idx, value in enumerate(raw_row):
             if idx in keep_indices:
                 continue
-            if not _is_empty(value):
+            if not _is_empty(value) and not _is_ignorable_overflow_value(value):
                 overflow = True
                 break
 
