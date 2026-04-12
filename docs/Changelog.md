@@ -499,7 +499,7 @@
 - `ExecutionRuntime` turn loop now runs the full advisor pipeline: prompt augmentation → forbidden check → generic preflight → skill preflight → sandbox → output contract → error feedback.
 - `DiagnoseRouter` simplified to evidence-based + optional LLM confirmation; removed hardcoded task-type branches.
 - `QualityAssuranceStage` now finalises decisions as structured policy plans instead of free-form notes.
-- Updated `docs/VersionHistory.md` with v4.3 entry.
+- Updated `docs/VersionHistory.md` with v5.0 entry.
 - Updated `docs/FineTuningTaskCoverage.md` and `docs/ProjectPositioning.md` to reflect skill-based architecture.
 
 ### --- Removed ---

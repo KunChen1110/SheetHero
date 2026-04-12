@@ -10,6 +10,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 - `v2.x`: data-quality handling and conversational pipeline integration
 - `v3.x`: local/offline LLM support and execution-stage hardening
 - `v4.x`: benchmark-driven diagnose improvement, skill-based generalization, local-model upgrade validation, and output-mode polish
+- `v5.x`: schema-grounded execution planning, full skill system migration, and advisor pipeline formalization
 
 ## Version Summary
 | Version | Date | Tag Commit | Main Theme |
@@ -22,7 +23,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 | `v4.0` | 2026-03-23 | `485d6da8` | Skill-based spreadsheet pipeline with benchmark-driven validation |
 | `v4.1` | 2026-03-26 | `88da932e` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
 | `v4.2` | 2026-03-27 | `pending release commit` | Text-only output mode and execution/validation modular cleanup |
-| `v4.3` | 2026-04-12 | `pending release commit` | Complete migration from task families to skill-based routing with runtime execution plans |
+| `v5.0` | 2026-04-12 | `pending release commit` | Schema-grounded execution planning, full skill system migration, and advisor pipeline formalization |
 
 ---
 
@@ -264,13 +265,13 @@ This version marks the first output-mode polish release after the local-model up
 
 ---
 
-## v4.3
+## v5.0
 **Date:** 2026-04-12  
-**Tag:** `v4.3`  
+**Tag:** `v5.0`  
 **Commit:** `pending release commit`
 
 ### Stage Position
-This version marks the completion of the migration from the legacy task-family routing system to a fully skill-based architecture with schema-grounded runtime execution plans.
+This version marks a major architectural break from v4: the legacy task-family routing system is completely removed and replaced by a schema-grounded execution planning layer built on top of the skill system.
 
 ### Main Characteristics
 - Replaced the family-based routing module (`task_families.py`, `task_skills.py`, `execution/family/`) with a composable skill system (`skills/` package) built on `SkillSpec`, `HelperSpec`, keyword-based detectors, and rich helper metadata.
