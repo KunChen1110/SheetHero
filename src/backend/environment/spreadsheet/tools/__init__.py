@@ -2,9 +2,8 @@
 
 These exports are meant for the sandbox namespace and backend runtime.
 They are not a stable frontend API. The helper workflows collected here are
-the main mechanism for the current helper-first execution strategy: runtime
-selects a task-appropriate helper, then the LLM only has to call it and write
-the returned output.
+the shared capabilities that the execution LLM can compose into task-specific
+code, alongside pandas and the output writer helpers.
 """
 
 from .charts import ExcelChartManager
@@ -23,6 +22,12 @@ from .cross_workbook import (
 )
 from .diagnose import diagnose_format_inconsistencies
 from .workflows import (
+    select_contiguous_labeled_columns,
+    find_first_period_cell,
+    extract_period_records,
+    merge_on_shared_period,
+    build_grouped_assignment_join,
+    build_weighted_period_output,
     load_all_tables,
     find_table_by_headers,
     infer_common_key,
@@ -43,20 +48,16 @@ from .workflows import (
     build_region_growth_analysis,
     build_market_share_shipment_report,
     build_cash_flow_efficiency_report,
-    build_diabetes_region_report,
-    build_mobile_reviews_summary_report,
-    build_store_feature_analysis_report,
-    build_ecommerce_merge_report,
-    build_financial_dashboard_report,
-    build_candidate_screening_report,
-    build_inventory_eoq_report,
-    build_hospital_utilisation_report,
     build_group_summary,
     build_grouped_aggregation_ranking_report,
     build_time_series_aggregation_report,
     compute_feature_correlations,
     build_correlation_matrix_table,
     fit_linear_regression_weights,
+    compute_ratio_column,
+    compute_weighted_score,
+    compute_percentage_share,
+    add_rank_column,
 )
 
 __all__ = [
@@ -72,6 +73,12 @@ __all__ = [
     "get_sheet_from_workbook",
     "inspector_multi",
     "read_table_multi",
+    "select_contiguous_labeled_columns",
+    "find_first_period_cell",
+    "extract_period_records",
+    "merge_on_shared_period",
+    "build_grouped_assignment_join",
+    "build_weighted_period_output",
     "load_all_tables",
     "find_table_by_headers",
     "infer_common_key",
@@ -92,19 +99,15 @@ __all__ = [
     "build_region_growth_analysis",
     "build_market_share_shipment_report",
     "build_cash_flow_efficiency_report",
-    "build_diabetes_region_report",
-    "build_mobile_reviews_summary_report",
-    "build_store_feature_analysis_report",
-    "build_ecommerce_merge_report",
-    "build_financial_dashboard_report",
-    "build_candidate_screening_report",
-    "build_inventory_eoq_report",
-    "build_hospital_utilisation_report",
     "build_group_summary",
     "build_grouped_aggregation_ranking_report",
     "build_time_series_aggregation_report",
     "compute_feature_correlations",
     "build_correlation_matrix_table",
     "fit_linear_regression_weights",
+    "compute_ratio_column",
+    "compute_weighted_score",
+    "compute_percentage_share",
+    "add_rank_column",
     "diagnose_format_inconsistencies",
 ]

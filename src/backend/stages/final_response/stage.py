@@ -9,9 +9,8 @@ from typing import Any, Dict, Optional
 from openpyxl import load_workbook
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_families import detect_task_family
+from ...skills import detect_skill, get_helper_final_response_label, select_helper
 from ..base.stage import Stage
-from ..base.llm_utils import call_llm
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -35,55 +34,13 @@ class FinalResponseStage(Stage):
         return text[:240]
 
     @classmethod
-    def _is_task_schedule_question(cls, user_question: str) -> bool:
-        lowered = cls._compact_question(user_question).lower()
-        if not any(token in lowered for token in ("schedule", "scheduling")):
-            return False
-        return any(
-            token in lowered
-            for token in (
-                "depends on",
-                "dependency",
-                "dependencies",
-                "task id",
-                "start time",
-                "end time",
-                "root task",
-                "prerequisite",
-            )
-        )
-
-    @classmethod
     def _question_content_label(cls, user_question: str, workbook_summary: Dict[str, Any]) -> str:
         text = cls._compact_question(user_question)
-        lowered = text.lower()
         headers = [str(item).strip() for item in (workbook_summary.get("headers") or []) if str(item).strip()]
-        family = detect_task_family(user_question)
 
-        if family and family.final_label:
-            return family.final_label
-
-        if cls._is_task_schedule_question(user_question):
-            return "task scheduling table"
-
-        keyword_labels = (
-            (("correlation matrix",), "correlation matrix"),
-            (("correlation",), "correlation report"),
-            (("dashboard",), "dashboard"),
-            (("merge", "merged"), "merged spreadsheet"),
-            (("fill missing", "missing data"), "completed data table"),
-            (("rank", "screening", "candidates"), "candidate screening report"),
-            (("inventory", "eoq"), "inventory report"),
-            (("cycle", "graph"), "cycle detection report"),
-            (("market share", "shipment"), "market share and shipment report"),
-            (("mobile reviews",), "mobile review summary"),
-            (("diabetes",), "regional diabetes report"),
-            (("financial", "cash flow"), "financial report"),
-            (("students and their tutors", "students attending", "tutor meeting"), "assignment schedule"),
-        )
-        for tokens, label in keyword_labels:
-            if any(token in lowered for token in tokens):
-                return label
+        routed_label = cls._routed_content_label(user_question)
+        if routed_label:
+            return routed_label
 
         if headers:
             if len(headers) == 2:
@@ -94,6 +51,16 @@ class FinalResponseStage(Stage):
         cleaned = re.sub(r"^(please|kindly)\s+", "", text, flags=re.IGNORECASE).strip(" .")
         cleaned = re.sub(r"\b(output|create|generate|produce|return|save)\b.*$", "", cleaned, flags=re.IGNORECASE).strip(" ,.")
         return cleaned or "spreadsheet"
+
+    @staticmethod
+    def _routed_content_label(user_question: str) -> Optional[str]:
+        skill = detect_skill(user_question)
+        if skill is None:
+            return None
+        helper = select_helper(skill, user_question)
+        if helper is None:
+            return None
+        return get_helper_final_response_label(helper.name)
 
     @classmethod
     def _inspect_output_workbook(cls, output_path: str) -> Dict[str, Any]:
@@ -206,6 +173,27 @@ class FinalResponseStage(Stage):
         return summary
 
     @classmethod
+    def _infer_scalar_subject(cls, user_question: str, metric_kind: str) -> str:
+        question = cls._compact_question(user_question)
+        lowered = question.lower().strip(" ?.")
+        metric_patterns = {
+            "average": (r"\baverage\s+(.+)", r"\bmean\s+(.+)"),
+            "total": (r"\btotal\s+(.+)", r"\bsum(?:\s+of)?\s+(.+)"),
+            "count": (r"\bcount(?:\s+of)?\s+(.+)",),
+            "maximum": (r"\b(?:maximum|max(?:imum)?|highest)\s+(.+)",),
+            "minimum": (r"\b(?:minimum|min(?:imum)?|lowest)\s+(.+)",),
+        }
+        for pattern in metric_patterns.get(metric_kind, ()):
+            match = re.search(pattern, lowered, flags=re.IGNORECASE)
+            if not match:
+                continue
+            subject = (match.group(1) or "").strip(" ?.,")
+            subject = re.sub(r"\b(for|in|within)\s+the\s+.*$", "", subject, flags=re.IGNORECASE).strip(" ,.")
+            if subject:
+                return subject
+        return "result"
+
+    @classmethod
     def _fallback_short_answer(
         cls,
         user_question: str,
@@ -251,18 +239,16 @@ class FinalResponseStage(Stage):
             if len(answer_text.split()) >= 5 and re.search(r"[.!?]$", answer_text):
                 return answer_text
             lowered = question.lower()
-            if "average spending" in lowered:
-                return f"The average spending is {answer_text}."
             if "average" in lowered:
-                return f"The average result is {answer_text}."
+                return f"The average {cls._infer_scalar_subject(user_question, 'average')} is {answer_text}."
             if "total" in lowered or "sum" in lowered:
-                return f"The total result is {answer_text}."
+                return f"The total {cls._infer_scalar_subject(user_question, 'total')} is {answer_text}."
             if "count" in lowered:
-                return f"The count is {answer_text}."
+                return f"The count of {cls._infer_scalar_subject(user_question, 'count')} is {answer_text}."
             if "maximum" in lowered or "highest" in lowered or "max " in lowered:
-                return f"The maximum result is {answer_text}."
+                return f"The maximum {cls._infer_scalar_subject(user_question, 'maximum')} is {answer_text}."
             if "minimum" in lowered or "lowest" in lowered or "min " in lowered:
-                return f"The minimum result is {answer_text}."
+                return f"The minimum {cls._infer_scalar_subject(user_question, 'minimum')} is {answer_text}."
             return f"The result is {answer_text}."
         if validation_passed:
             return f"Successfully completed the request for {question}."
@@ -290,36 +276,4 @@ class FinalResponseStage(Stage):
             validation_passed=validation_passed,
             workbook_summary=workbook_summary,
         )
-
-        # Default to deterministic final wording for both online and offline.
-        # This avoids an extra LLM round-trip after the task has already succeeded.
-        use_llm = os.getenv("SHEETHERO_FINAL_RESPONSE_LLM", "0").strip() == "1"
-        if not use_llm:
-            return fallback
-
-        if not self._looks_like_file_path(final_answer):
-            return fallback
-
-        prompt = (
-            "Write exactly one short user-facing sentence.\n"
-            "- If a spreadsheet file was produced, describe what spreadsheet was generated based on the question.\n"
-            "- If a key metric is available, include it naturally.\n"
-            "- Do not mention file paths, validation modules, code, or internal stages.\n"
-            "- Keep it under 28 words.\n\n"
-            f"User question: {self._compact_question(user_question)}\n"
-            f"Final answer type: {'file' if self._looks_like_file_path(final_answer) else 'text'}\n"
-            f"Validation passed: {validation_passed}\n"
-            f"Workbook summary: {workbook_summary}\n"
-            f"Fallback wording: {fallback}\n"
-        )
-
-        try:
-            content = call_llm(self.client, self.deployment,
-                               [{"role": "user", "content": prompt}], max_tokens=80)
-            content = " ".join(content.split())
-            if content:
-                return content
-        except Exception as exc:
-            logger.warning(f"Final response generation fallback used: {exc}")
-
         return fallback

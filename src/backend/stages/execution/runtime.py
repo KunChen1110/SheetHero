@@ -5,7 +5,7 @@ import re
 from typing import Dict, Any, Optional
 
 from ...log.logger_registry import LoggerRegistry
-from ...task_families import detect_task_family
+from ...skills import detect_skills
 from .core.executor import CodeExecutor
 from .guards.error_feedback import ExecutionErrorFeedbackBuilder
 from .guards.forbidden_policy import (
@@ -21,17 +21,56 @@ from .core.parser import ExecutionResponseParser
 from .core.summary import ExecutionSummary
 from .guards.loop_breakers import get_task_specific_loop_breaker
 from .analysis.workbook_grounding import WorkbookGrounding
-from .family import (
-    ExecutionFamilyFastPathRunner,
+from .skill import (
     ExecutionGenericPreflightAdvisor,
-    ExecutionFamilyPreflightAdvisor,
-    ExecutionFamilyPromptAdvisor,
+    ExecutionSkillPreflightAdvisor,
+    ExecutionSkillPromptAdvisor,
     ExecutionQuestionInferenceAdvisor,
 )
 from ..base.runtime import StageRuntime
 from ...prompt.prompt_builder import PromptBuilder
 
 logger = LoggerRegistry.setup_logger(__name__)
+
+_REPAIR_FEEDBACK_MARKERS = (
+    "FORMAT_ERROR_EXECUTION:",
+    "PREFLIGHT_",
+    "FORBIDDEN:",
+    "SOFT_FORBIDDEN_WARNING:",
+    "MINIMAL FIX REQUIRED:",
+    "LOOP_BREAKER_OFFLINE:",
+    "OUTPUT_INCOMPLETE_LINEAR:",
+    "OUTPUT_INTENT_MISMATCH_OFFLINE:",
+    "OUTPUT_QUALITY_RISK_OFFLINE:",
+)
+
+
+def _is_thinking_model(deployment: str) -> bool:
+    return (deployment or "").lower().startswith("qwen3")
+
+
+def _resolve_initial_exec_max_tokens(deployment: str, bounded_exec_max_tokens: int) -> int:
+    raw_value = os.getenv("SHEETHERO_INITIAL_EXEC_MAX_TOKENS")
+    if raw_value is not None and raw_value.strip():
+        try:
+            return max(1, int(raw_value))
+        except ValueError:
+            pass
+    if _is_thinking_model(deployment):
+        return min(bounded_exec_max_tokens, 1024)
+    return 768
+
+
+def _resolve_recovery_max_tokens(deployment: str, bounded_exec_max_tokens: int) -> int:
+    raw_value = os.getenv("SHEETHERO_LLM_RECOVERY_MAX_TOKENS")
+    if raw_value is not None and raw_value.strip():
+        try:
+            return max(1, int(raw_value))
+        except ValueError:
+            pass
+    if _is_thinking_model(deployment):
+        return bounded_exec_max_tokens
+    return 768
 
 
 class ExecutionRuntime(StageRuntime):
@@ -58,10 +97,9 @@ class ExecutionRuntime(StageRuntime):
         self.summary_builder = ExecutionSummary()
         self.grounding = WorkbookGrounding(sandbox)
         self.output_contract_checker = OutputContractChecker()
-        self.family_fast_path_runner = ExecutionFamilyFastPathRunner(self)
         self.generic_preflight = ExecutionGenericPreflightAdvisor(self)
-        self.family_preflight = ExecutionFamilyPreflightAdvisor(self)
-        self.family_prompt = ExecutionFamilyPromptAdvisor(self)
+        self.skill_preflight = ExecutionSkillPreflightAdvisor(self)
+        self.skill_prompt = ExecutionSkillPromptAdvisor(self)
         self.question_inference = ExecutionQuestionInferenceAdvisor(self)
         self.error_feedback = ExecutionErrorFeedbackBuilder(
             available_workbook_basenames_fn=self._available_workbook_basenames,
@@ -73,7 +111,18 @@ class ExecutionRuntime(StageRuntime):
         self._consecutive_forbidden = 0
         self._consecutive_format_errors = 0
         self._bounded_exec_max_tokens = int(
-            os.getenv("SHEETHERO_EXECUTION_MAX_TOKENS", "4096")
+            os.getenv("SHEETHERO_EXECUTION_MAX_TOKENS", "1536")
+        )
+        self._initial_exec_max_tokens = _resolve_initial_exec_max_tokens(
+            deployment,
+            self._bounded_exec_max_tokens,
+        )
+        self._llm_recovery_max_tokens = _resolve_recovery_max_tokens(
+            deployment,
+            self._bounded_exec_max_tokens,
+        )
+        self._max_llm_error_retries = int(
+            os.getenv("SHEETHERO_MAX_LLM_ERROR_RETRIES", "2")
         )
         self._max_format_errors = int(os.getenv("SHEETHERO_MAX_FORMAT_ERRORS", "3"))
         self._max_forbidden_before_hard_reset = int(
@@ -85,14 +134,21 @@ class ExecutionRuntime(StageRuntime):
         self._max_same_error_streak = int(
             os.getenv("SHEETHERO_MAX_SAME_ERROR_STREAK", "2")
         )
+        self._max_same_preflight_streak = int(
+            os.getenv("SHEETHERO_MAX_SAME_PREFLIGHT_STREAK", "2")
+        )
         self._max_same_error_before_abort = int(
             os.getenv("SHEETHERO_MAX_SAME_ERROR_BEFORE_ABORT", "4")
         )
         self._last_error_signature: Optional[str] = None
         self._same_error_streak = 0
+        self._last_preflight_signature: Optional[str] = None
+        self._same_preflight_streak = 0
         self._forbidden_signature_counts: Dict[str, int] = {}
         self._last_forbidden_signature: Optional[str] = None
         self._same_forbidden_streak = 0
+        self._llm_error_streak = 0
+        self._active_understanding_output = ""
 
     def _install_linear_io_guards(self) -> None:
         """Disable ambiguous I/O helpers for execution-time determinism."""
@@ -195,9 +251,10 @@ class ExecutionRuntime(StageRuntime):
         return None
 
     @staticmethod
-    def _question_matches_family(user_question: str, *family_names: str) -> bool:
-        family = detect_task_family(user_question)
-        return family is not None and family.name in set(family_names)
+    def _is_text_output_skill(user_question: str) -> bool:
+        skills = detect_skills(user_question)
+        skill = skills[0] if skills else None
+        return skill is not None and skill.output_mode == "text"
 
     def _update_forbidden_memory(self, forbidden_err: str) -> str:
         """Track forbidden signature frequency and repetition streak."""
@@ -327,18 +384,6 @@ class ExecutionRuntime(StageRuntime):
 
         return False, soft_warning
 
-    def _regression_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        return self.family_preflight.regression_helper_guard(code_action, user_question)
-
-    def _merge_fill_helper_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        return self.family_preflight.merge_fill_helper_guard(code_action, user_question)
-
-    def _regression_feature_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        return self.family_preflight.regression_feature_guard(code_action, user_question)
-
-    def _scheduling_dependency_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        return self.family_preflight.scheduling_dependency_guard(code_action, user_question)
-
     @staticmethod
     def _has_summary_write_signal_from_code(code_action: str) -> bool:
         return OutputContractChecker._has_summary_write_signal_from_code(code_action)
@@ -355,25 +400,120 @@ class ExecutionRuntime(StageRuntime):
     def _create_initial_user_prompt(self, understanding_output: str,
                                     user_question: str) -> dict:
         if self._is_offline_strict:
-            bounded_understanding = (
-                "Offline bounded mode: treat this section as low-confidence hint only. "
-                "If it conflicts with Sheet Content or runtime errors, ignore it."
+            user_content = (
+                "OFFLINE_EXECUTION_START:\n"
+                "Return ONE short complete ```python ... ``` block only.\n"
+                "Skip the Thought section unless it is one short line and the code block follows immediately.\n"
+                "Keep code under 60 lines.\n"
+                "Start from runtime inputs only: `tables = load_all_tables()`.\n"
+                "For multi-file tasks, select tables by verified headers, not filenames or file order.\n"
+                "If uncertain, print columns first and branch from observed headers.\n"
+                "Save with `save_workbook_to(output_path)`.\n\n"
+                f"User Question:\n{user_question}\n\n"
             )
         else:
-            bounded_understanding = understanding_output
-        user_content = self.prompt_builder.build_execution_user_prompt(
-            self.excel_context_execution,
-            bounded_understanding,
-            user_question,
-        )
-        user_content = self.family_prompt.augment_initial_prompt(user_content, user_question)
+            user_content = self.prompt_builder.build_execution_user_prompt(
+                self.excel_context_execution,
+                understanding_output,
+                user_question,
+            )
+        user_content = self.skill_prompt.augment_initial_prompt(user_content, user_question)
         return {"role": "user", "content": user_content}
+
+    def _create_llm_recovery_prompt(self, user_question: str) -> dict:
+        user_content = (
+            "LLM_CONNECTION_RECOVERY: the previous response could not be generated.\n"
+            "Return ONE short complete ```python ... ``` block only.\n"
+            "Do not spend tokens on a standalone Thought section.\n"
+            "Keep code under 60 lines.\n"
+            "Start from runtime inputs only: `tables = load_all_tables()`.\n"
+            "Print file names / headers before selecting or joining tables.\n"
+            "Save with `save_workbook_to(output_path)`.\n\n"
+            f"User Question:\n{user_question}\n"
+        )
+        user_content = self.skill_prompt.augment_initial_prompt(user_content, user_question)
+        return {"role": "user", "content": user_content}
+
+    def _attempt_plan_to_code_recovery(
+        self,
+        thought: str,
+        user_question: str,
+    ) -> tuple[Optional[dict], Optional[str]]:
+        if not self._is_offline_strict:
+            return None, None
+        plan_text = (thought or "").strip()
+        if not plan_text:
+            return None, None
+
+        task_loop_breaker = get_task_specific_loop_breaker(user_question)
+        user_content = (
+            "PLAN_TO_CODE_RECOVERY: your previous reply explained the solution but did not include executable code.\n"
+            "Convert the plan below into exactly one runnable ```python ... ``` block.\n"
+            "Start the very first line with ```python.\n"
+            "Do not include Thought, explanation, or markdown outside the code block.\n"
+            "Use only runtime helpers that are already allowed in this task.\n\n"
+            f"User Question:\n{user_question}\n\n"
+            f"Plan To Convert:\n{plan_text}\n"
+        )
+        if task_loop_breaker:
+            user_content += f"\n{task_loop_breaker.strip()}\n"
+
+        recovery_messages = [self._get_system_prompt(), {"role": "user", "content": user_content}]
+        try:
+            recovery_message = self.llm_client.get_response(
+                recovery_messages,
+                max_retries=1,
+                max_tokens=self._llm_recovery_max_tokens,
+            )
+        except Exception:
+            return None, None
+
+        _recovery_thought, recovery_code = self.parser.parse(recovery_message.content)
+        return recovery_message, recovery_code
 
     def _available_workbook_basenames(self) -> list[str]:
         return self.grounding.available_workbook_basenames()
 
     def _build_schema_snapshot(self) -> str:
-        return self.grounding.build_schema_snapshot()
+        snapshot = self.grounding.build_schema_snapshot()
+        if not self._is_offline_strict:
+            return snapshot
+
+        relevant = self._extract_relevant_basenames(
+            self._active_understanding_output,
+            self._available_workbook_basenames(),
+        )
+        if not relevant:
+            return snapshot
+
+        filtered_lines = [
+            line for line in snapshot.splitlines()
+            if any(f"`{basename}`" in line for basename in relevant)
+        ]
+        return "\n".join(filtered_lines) if filtered_lines else snapshot
+
+    @staticmethod
+    def _extract_relevant_basenames(text: str, available_basenames: list[str]) -> list[str]:
+        source_text = text or ""
+        lines = [line.strip() for line in source_text.splitlines() if line.strip()]
+        priority_markers = ("read", "schema", "join", "key header", "computation")
+        priority_lines = [
+            line for line in lines
+            if any(marker in line.lower() for marker in priority_markers)
+        ]
+
+        def _collect(matches_from: list[str]) -> list[str]:
+            collected: list[str] = []
+            lowered_lines = "\n".join(matches_from).lower()
+            for basename in available_basenames:
+                if basename and basename.lower() in lowered_lines:
+                    collected.append(basename)
+            return collected
+
+        prioritized = _collect(priority_lines)
+        if prioritized:
+            return prioritized
+        return _collect(lines)
 
     def _observed_header_set(self) -> set[str]:
         return self.grounding.observed_header_set()
@@ -394,6 +534,53 @@ class ExecutionRuntime(StageRuntime):
             self._last_error_signature = signature
             self._same_error_streak = 1
         return signature
+
+    @staticmethod
+    def _preflight_signature(preflight_issue: str) -> str:
+        first_line = (preflight_issue or "").strip().splitlines()[0] if preflight_issue else ""
+        return first_line.strip().lower() or "unknown_preflight"
+
+    def _update_preflight_streak(self, preflight_issue: str) -> str:
+        signature = self._preflight_signature(preflight_issue)
+        if signature == self._last_preflight_signature:
+            self._same_preflight_streak += 1
+        else:
+            self._last_preflight_signature = signature
+            self._same_preflight_streak = 1
+        return signature
+
+    @staticmethod
+    def _build_preflight_loop_breaker_feedback(preflight_issue: str) -> str:
+        signature = ExecutionRuntime._preflight_signature(preflight_issue)
+        if signature.startswith("preflight_schema_merge_summary"):
+            return (
+                "REPEATED_PREFLIGHT_LOOP_BREAKER:\n"
+                "- Rebuild from this exact helper-contract shape.\n"
+                "- Keep these exact variable names and result keys:\n"
+                "  `tables = load_all_tables()`\n"
+                "  `concat_result = concat_tables_with_same_headers(tables)`\n"
+                "  `combined_df = concat_result['output_df']`\n"
+                "  `combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`\n"
+                "  `summary_df = combined_df[combined_df['Date'].dt.month == 11]`\n"
+                "  `summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')`\n"
+                "  `create_output_sheet('Output')`\n"
+                "  `write_dataframe_to_sheet(summary_df, 'Output', 'A1')`\n"
+                "  `summary_row = len(summary_df) + 2`\n"
+                "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
+                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`\n"
+                "  `saved_file = save_workbook_to(output_path)`\n"
+                "  `print(f'SAVED_FILE: {saved_file}')`\n"
+                "  `saved_file`\n"
+                "- Do NOT use `summary_result['row']`, `summary_result['total']`, or `summary_result['average']`.\n"
+                "- Return one complete code block matching this contract."
+            )
+        return (
+            "REPEATED_PREFLIGHT_LOOP_BREAKER:\n"
+            "- The same preflight issue repeated.\n"
+            "- Rewrite the code from the helper contract shown in the preflight message.\n"
+            "- Keep exact documented result keys and remove any invented keys or helper return fields."
+        )
 
     @staticmethod
     def _build_loop_breaker_feedback(error_signature: str) -> str:
@@ -424,30 +611,56 @@ class ExecutionRuntime(StageRuntime):
             return str(msg.get("content", "") or "")
         return str(getattr(msg, "content", "") or "")
 
-    def _prune_repair_feedback_history(self) -> None:
-        markers = (
-            "FORMAT_ERROR_EXECUTION:",
-            "PREFLIGHT_",
-            "FORBIDDEN:",
-            "SOFT_FORBIDDEN_WARNING:",
-            "MINIMAL FIX REQUIRED:",
-            "LOOP_BREAKER_OFFLINE:",
-            "OUTPUT_INCOMPLETE_LINEAR:",
-            "OUTPUT_INTENT_MISMATCH_OFFLINE:",
-            "OUTPUT_QUALITY_RISK_OFFLINE:",
+    @staticmethod
+    def _is_repair_feedback_content(content: str) -> bool:
+        return any(marker in content for marker in _REPAIR_FEEDBACK_MARKERS)
+
+    def _should_use_compact_repair_budget(self) -> bool:
+        if not self._is_offline_strict or len(self.conversation_history) < 3:
+            return False
+        last_message = self.conversation_history[-1]
+        return (
+            self._message_role(last_message) == "user"
+            and self._is_repair_feedback_content(self._message_content(last_message))
         )
+
+    def _prune_repair_feedback_history(self) -> None:
         matched_indices = [
             idx for idx, msg in enumerate(self.conversation_history)
             if self._message_role(msg) == "user"
-            and any(marker in self._message_content(msg) for marker in markers)
+            and self._is_repair_feedback_content(self._message_content(msg))
         ]
-        if len(matched_indices) <= 1:
+        if not matched_indices:
             return
         keep_idx = matched_indices[-1]
+        if self._is_offline_strict:
+            self.conversation_history = (
+                self.conversation_history[:2] + [self.conversation_history[keep_idx]]
+            )
+            return
+        if len(matched_indices) <= 1:
+            return
         self.conversation_history = [
             msg for idx, msg in enumerate(self.conversation_history)
             if idx == keep_idx or idx not in matched_indices[:-1]
         ]
+        self._prune_old_execution_rounds()
+
+    def _prune_old_execution_rounds(self, keep_rounds: int = 2) -> None:
+        """Drop old code+result pairs when history grows large.
+
+        Keeps the system prompt, the initial user prompt, and the last
+        *keep_rounds* assistant/user pairs from execution so the total
+        context stays within the offline model's context window.
+        """
+        # History layout: [system, initial_user, asst1, usr1, asst2, usr2, ...]
+        # Index 0 = system, index 1 = initial user prompt — always preserved.
+        if len(self.conversation_history) <= 2 + keep_rounds * 2:
+            return
+        preserved = self.conversation_history[:2]
+        tail = self.conversation_history[2:]
+        # Keep only the last keep_rounds * 2 messages (assistant + user pairs).
+        self.conversation_history = preserved + tail[-(keep_rounds * 2):]
 
     def run(self, understanding_output: str, user_question: str,
             max_turns: int = 20) -> Dict[str, Any]:
@@ -455,18 +668,11 @@ class ExecutionRuntime(StageRuntime):
         self._install_linear_io_guards()
         self._last_error_signature = None
         self._same_error_streak = 0
+        self._last_preflight_signature = None
+        self._same_preflight_streak = 0
+        self._llm_error_streak = 0
+        self._active_understanding_output = understanding_output or ""
         output_contract = self._extract_output_contract(understanding_output)
-
-        deterministic_family_result = self.family_fast_path_runner.try_run(user_question)
-        if deterministic_family_result is not None:
-            family_name = deterministic_family_result.get("_family_fast_path", "unknown_family")
-            self._log_to_file(
-                "\n**Deterministic Family Fast-Path:**\n"
-                f"- family: `{family_name}`\n"
-                f"- answer: `{deterministic_family_result.get('answer', '')}`\n"
-            )
-            logger.info("Execution completed via deterministic family fast-path: %s", family_name)
-            return deterministic_family_result
 
         self.conversation_history = [self._get_system_prompt()]
         initial_prompt = self._create_initial_user_prompt(
@@ -483,10 +689,17 @@ class ExecutionRuntime(StageRuntime):
 
             try:
                 max_tokens = self._bounded_exec_max_tokens
+                if turn == 0 and self._is_offline_strict:
+                    max_tokens = min(max_tokens, self._initial_exec_max_tokens)
+                elif self._should_use_compact_repair_budget():
+                    max_tokens = min(max_tokens, self._llm_recovery_max_tokens)
+                if self._llm_error_streak > 0:
+                    max_tokens = min(max_tokens, self._llm_recovery_max_tokens)
                 response_message = self.llm_client.get_response(
                     self.conversation_history,
                     max_tokens=max_tokens,
                 )
+                self._llm_error_streak = 0
                 self.conversation_history.append(response_message)
 
                 thought, code_action = self.parser.parse(response_message.content)
@@ -497,7 +710,27 @@ class ExecutionRuntime(StageRuntime):
                     )
 
                 if code_action is None:
+                    recovery_message = None
+                    if thought:
+                        recovery_message, recovered_code = self._attempt_plan_to_code_recovery(
+                            thought,
+                            user_question,
+                        )
+                        if recovered_code is not None:
+                            self.conversation_history[-1] = recovery_message
+                            code_action = recovered_code
+                            self._log_to_file(
+                                f"\n**Plan-to-code recovery (Turn {turn + 1}):** converted thought-only reply into executable code.\n"
+                            )
+
+                if code_action is None:
                     self._consecutive_format_errors += 1
+                    raw_preview = (response_message.content or "").strip()
+                    if raw_preview:
+                        preview = raw_preview[:1600]
+                        self._log_to_file(
+                            f"\n**Raw reply preview (Turn {turn + 1}):**\n```\n{preview}\n```\n"
+                        )
                     strict_repair = ""
                     if self._consecutive_format_errors >= self._max_format_errors:
                         strict_repair = (
@@ -508,7 +741,7 @@ class ExecutionRuntime(StageRuntime):
                             "- Use list_all_workbooks()+read_table_multi(); do not use pandas file readers.\n"
                         )
                     task_loop_breaker = get_task_specific_loop_breaker(user_question)
-                    if self._question_matches_family(user_question, "missing_data_scan", "identifier_format_scan"):
+                    if self._is_text_output_skill(user_question):
                         execution_shape = (
                             "Include complete task logic: read -> compute -> print `FINAL_TEXT:` -> return the final text."
                         )
@@ -519,6 +752,9 @@ class ExecutionRuntime(StageRuntime):
                     format_msg = (
                         "FORMAT_ERROR_EXECUTION: executable code is required.\n"
                         "Reply with exactly one ```python ... ``` block.\n"
+                        "Start the very first line with ```python.\n"
+                        "Any Thought, explanation, or planning text will be discarded.\n"
+                        "Do not return a standalone Thought section.\n"
                         f"{execution_shape}"
                         f"{strict_repair}"
                     )
@@ -540,22 +776,28 @@ class ExecutionRuntime(StageRuntime):
                     continue
                 preflight_issue = self.generic_preflight.offline_preflight_check(code_action, user_question)
                 if preflight_issue is None:
-                    preflight_issue = self._merge_fill_helper_guard(code_action, user_question)
-                if preflight_issue is None:
-                    preflight_issue = self._regression_helper_guard(code_action, user_question)
-                if preflight_issue is None:
-                    preflight_issue = self._regression_feature_guard(code_action, user_question)
-                if preflight_issue is None:
-                    preflight_issue = self.family_preflight.scheduling_dependency_guard(code_action, user_question)
+                    preflight_issue = self.skill_preflight.metadata_routed_preflight_check(
+                        code_action,
+                        user_question,
+                    )
                 if preflight_issue is not None:
+                    self._last_error_signature = None
+                    self._same_error_streak = 0
+                    self._update_preflight_streak(preflight_issue)
                     preflight_feedback = (
                         preflight_issue
                         + "\nReturn one full corrected ```python ... ``` block. "
                         "Keep minimal edits and preserve task logic."
                     )
                     task_loop_breaker = get_task_specific_loop_breaker(user_question)
-                    if task_loop_breaker and turn >= 1:
+                    if task_loop_breaker and (turn >= 1 or self._same_preflight_streak >= self._max_same_preflight_streak):
                         preflight_feedback += task_loop_breaker
+                    if self._same_preflight_streak >= self._max_same_preflight_streak:
+                        preflight_feedback = (
+                            self._build_preflight_loop_breaker_feedback(preflight_issue)
+                            + "\n\n"
+                            + preflight_feedback
+                        )
                     self._log_to_file(
                         f"\n**Preflight blocked (Turn {turn + 1}):**\n{preflight_issue}\n"
                     )
@@ -593,6 +835,8 @@ class ExecutionRuntime(StageRuntime):
                     })
 
                     if is_execution_error:
+                        self._last_preflight_signature = None
+                        self._same_preflight_streak = 0
                         error_signature = self._update_error_streak(execution_result)
                         targeted_feedback = self._build_bounded_error_feedback(execution_result)
                         if targeted_feedback is None:
@@ -637,6 +881,8 @@ class ExecutionRuntime(StageRuntime):
 
                     self._last_error_signature = None
                     self._same_error_streak = 0
+                    self._last_preflight_signature = None
+                    self._same_preflight_streak = 0
 
                     # Auto-stop when we see a successful save in stdout (avoids Turn2+ repeat path)
                     saved_path = self._extract_saved_path_from_result(execution_result)
@@ -691,7 +937,7 @@ class ExecutionRuntime(StageRuntime):
 
                     text_answer = self._extract_text_answer_from_result(execution_result)
                     if text_answer is not None and (
-                        self._question_matches_family(user_question, "missing_data_scan", "identifier_format_scan")
+                        self._is_text_output_skill(user_question)
                         or (
                             output_contract.get("requires_detailed_table") is False
                             and output_contract.get("requires_highlight") is False
@@ -720,6 +966,8 @@ class ExecutionRuntime(StageRuntime):
                     self.conversation_history.append({"role": "user", "content": observation})
 
                 except Exception as e:
+                    self._last_preflight_signature = None
+                    self._same_preflight_streak = 0
                     error_message = f"Code execution error: {str(e)}"
                     logger.error(f"Execution error: {error_message}")
 
@@ -775,7 +1023,17 @@ class ExecutionRuntime(StageRuntime):
                         }
 
             except Exception as e:
+                self._llm_error_streak += 1
                 logger.error(f"LLM Error: {str(e)}")
+                self._log_to_file(
+                    f"\n**LLM error (Turn {turn + 1}):**\n{str(e)}\n"
+                )
+                if self._llm_error_streak <= self._max_llm_error_retries:
+                    self.conversation_history = [
+                        self._get_system_prompt(),
+                        self._create_llm_recovery_prompt(user_question),
+                    ]
+                    continue
                 return {
                     "success": False,
                     "answer": f"LLM communication error: {str(e)}",

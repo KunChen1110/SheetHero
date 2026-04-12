@@ -2,10 +2,10 @@
 
 This document summarizes the current backend coverage that is suitable for fine-tuning data construction.
 
-The current system is no longer best described as a collection of task-specific handlers. After the `v4.0` backend work, the project is better understood as a **family-based spreadsheet pipeline** with:
+The current system is no longer best described as a collection of task-specific handlers. After the `v4.0` backend work, the project is better understood as a **skill-based spreadsheet pipeline** with:
 - benchmark-driven diagnose and QA improvement
 - helper-first deterministic execution for covered workflow families
-- synthetic family regression for abstract spreadsheet capabilities
+- synthetic skill regression for abstract spreadsheet capabilities
 
 Therefore, this document now organizes fine-tuning coverage in three layers:
 1. dataset task coverage
@@ -151,7 +151,7 @@ Target behavior:
 ### Layer B: Family-routing and grounded planning examples
 Source:
 - representative task logs
-- synthetic family regression prompts
+- synthetic skill regression prompts
 - paraphrased versions of current benchmark tasks
 
 Target behavior:
@@ -198,7 +198,7 @@ If only a smaller high-confidence subset is needed first, the recommended set is
 ### Why this subset
 - It covers merge, fill, schedule, join, regression, correlation, dashboard, and diagnostic text output.
 - It covers both spreadsheet-output and text-output behaviors.
-- It aligns well with the current deterministic family-based backend rather than older ad hoc execution behavior.
+- It aligns well with the current deterministic skill-based backend rather than older ad hoc execution behavior.
 
 ---
 
@@ -227,7 +227,7 @@ At the current project stage, the most valuable fine-tuning coverage is no longe
 The stronger view is:
 - benchmark tasks provide anchor examples
 - diagnose benchmark provides structured QA supervision
-- synthetic family regression defines abstract capability coverage
+- synthetic skill regression defines abstract capability coverage
 
 This means the current fine-tuning story should be presented as:
 

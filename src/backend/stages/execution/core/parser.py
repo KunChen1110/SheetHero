@@ -9,10 +9,37 @@ from ...base.response_parser import BaseResponseParser
 class ExecutionResponseParser(BaseResponseParser):
     """Parse assistant responses into thought, code, and final answers."""
 
+    @staticmethod
+    def _looks_like_bare_code(content: str) -> bool:
+        lines = [line.rstrip() for line in content.splitlines() if line.strip()]
+        if not lines:
+            return False
+
+        code_like = re.compile(
+            r"^\s*(#|import\s+\w+|from\s+\w+\s+import|tables\s*=|all_files\s*=|"
+            r"create_output_sheet\s*\(|write_dataframe_to_sheet\s*\(|saved_file\s*=|"
+            r"print\s*\(|for\s+\w+\s+in\s+|if\s+.+:|elif\s+.+:|else:|try:|except\b|"
+            r"with\s+.+:|def\s+\w+\s*\(|[A-Za-z_]\w*\s*=)"
+        )
+
+        first_line = lines[0].strip()
+        if not code_like.match(first_line):
+            return False
+
+        code_like_count = sum(1 for line in lines[:8] if code_like.match(line.strip()))
+        return code_like_count >= max(2, min(len(lines), 3))
+
+    @staticmethod
+    def _strip_think_blocks(content: str) -> str:
+        cleaned = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r"^\s*\w*<think>\s*", "", cleaned, flags=re.IGNORECASE)
+        return cleaned.strip()
+
     def parse(self, content: str) -> Tuple[Optional[str], Optional[str]]:
         """Extract thought and code from LLM response."""
         if not content:
             return None, None
+        content = self._strip_think_blocks(content)
 
         begin_solution_match = re.search(
             r"BEGIN SOLUTION\s*(.*?)\s*END SOLUTION",
@@ -39,10 +66,7 @@ class ExecutionResponseParser(BaseResponseParser):
                 return None, code
 
         # Last resort for bounded mode style outputs: content may be plain code without fences.
-        if re.search(
-            r"(^|\n)\s*(import\s+\w+|from\s+\w+\s+import|tables\s*=|all_files\s*=|create_output_sheet\s*\(|write_dataframe_to_sheet\s*\()",
-            content,
-        ):
+        if self._looks_like_bare_code(content):
             return None, content.strip()
 
         if "Final Answer:" in content:
