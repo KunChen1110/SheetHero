@@ -141,13 +141,15 @@ class PromptBuilder:
         })
 
     def build_diagnose_prioritize_prompt(self, user_task: str,
-                                         questions: list[str]) -> str:
+                                         questions: list[str],
+                                         understanding_output: str = "") -> str:
         candidates = "\n".join(f"{idx}. {question}" for idx, question in enumerate(questions, start=1))
         if not candidates:
             candidates = "(none)"
         return self._render(self._diagnose.prioritize_prompt, {
             "user_task": user_task,
             "candidate_questions": candidates,
+            "understanding_output": understanding_output or "(not available)",
         })
 
     def build_diagnose_router_prompt(self, user_question: str,

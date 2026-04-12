@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.task_skills import detect_skill, select_helper
+from src.backend.skills import detect_skill, select_helper
 
 
 def test_merge_detected_from_generic_question():
@@ -62,6 +62,14 @@ def test_helper_selection_merge_join():
     assert helper.name == "build_relational_join_enrichment_report"
 
 
+def test_helper_selection_multi_key_join_from_explicit_two_key_phrase():
+    skill = detect_skill("join the spreadsheet tables by the shared student id and semester keys")
+    assert skill is not None
+    helper = select_helper(skill, "join the spreadsheet tables by the shared student id and semester keys")
+    assert helper is not None
+    assert helper.name == "build_multi_key_relational_join_report"
+
+
 def test_helper_selection_fill():
     skill = detect_skill("fill any missing data using information from the reference file")
     assert skill is not None
@@ -94,6 +102,16 @@ def test_helper_selection_correlation():
     assert helper.name == "build_correlation_matrix_table"
 
 
+def test_helper_selection_target_feature_correlation():
+    question = (
+        "Calculate the correlation coefficient between survival and other factors "
+        "such as sex, age, fare, cabin, and embarked using the Titanic dataset."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert helper.name == "compute_feature_correlations"
+
+
 def test_helper_selection_cycle():
     skill = detect_skill("determine which graphs contain a cycle")
     helper = select_helper(skill, "determine which graphs contain a cycle")
@@ -110,6 +128,27 @@ def test_helper_selection_allocation():
     skill = detect_skill("allocate students to rooms based on capacity limits")
     helper = select_helper(skill, "allocate students to rooms based on capacity limits")
     assert helper.name == "build_capacity_constrained_allocation_report"
+
+
+def test_rank_detected_from_generic_weight_formula():
+    skill = detect_skill(
+        "Score each applicant using 0.5 * experience + 0.3 * skills + 0.2 * interview score, then rank them."
+    )
+    assert skill is not None
+    assert skill.name == "rank"
+
+
+def test_helper_selection_cash_flow_efficiency():
+    question = (
+        "Evaluate the cash flow efficiency by calculating operating cash flow to net income "
+        "and free cash flow."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "financial"
+    assert helper is not None
+    assert helper.name == "build_cash_flow_efficiency_report"
 
 
 if __name__ == "__main__":

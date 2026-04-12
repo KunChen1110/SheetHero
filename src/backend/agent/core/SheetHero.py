@@ -51,6 +51,19 @@ def _resolve_openai_timeout(timeout: int | None, base_url: str, deployment: str)
     return None if parsed_timeout <= 0 else max(1, parsed_timeout)
 
 
+def _resolve_client_timeout_model(config: Config) -> str:
+    stage_models = [
+        config.resolve_stage_deployment("understanding"),
+        config.resolve_stage_deployment("qa"),
+        config.resolve_stage_deployment("cleaning"),
+        config.resolve_stage_deployment("execution"),
+    ]
+    for model_name in stage_models:
+        if _is_thinking_model(model_name):
+            return model_name
+    return config.deployment
+
+
 class SheetHero:
     def __init__(self, excel_paths: Union[str, List[str]],
                  config: Config,
@@ -86,7 +99,11 @@ class SheetHero:
         # Use a harmless placeholder when caller chooses base_url-only mode.
         client_kwargs = {
             "api_key": api_key or "local-key",
-            "timeout": _resolve_openai_timeout(self.config.timeout, base_url, self.config.deployment),
+            "timeout": _resolve_openai_timeout(
+                self.config.timeout,
+                base_url,
+                _resolve_client_timeout_model(self.config),
+            ),
             "max_retries": max(0, int(self.config.max_retries)),
         }
         if base_url:
@@ -104,22 +121,27 @@ class SheetHero:
             load_excel=load_excel and self.has_excel
         )
 
+        understanding_deployment = self.config.resolve_stage_deployment("understanding")
+        qa_deployment = self.config.resolve_stage_deployment("qa")
+        cleaning_deployment = self.config.resolve_stage_deployment("cleaning")
+        execution_deployment = self.config.resolve_stage_deployment("execution")
+
         # initialize modules
         self.understanding_module = UnderstandingStage(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
         )
         self.interact_module = InteractStage(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
         )
         self.diagnose_module = DiagnoseStage(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             self.excel_paths,
             sandbox=self.sandbox,
             token_budget=self.config.total_token_budget,
@@ -128,13 +150,13 @@ class SheetHero:
         )
         self.diagnose_router = DiagnoseRouter(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
         )
         self.execution_module = ExecutionStage(
             self.client,
-            self.config.deployment,
+            execution_deployment,
             self.sandbox,
             excel_context_execution="",
             output_instruction=self.output_instruction,
@@ -143,26 +165,26 @@ class SheetHero:
         )
         self.validation_module = ValidationStage(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             "",
             progress_log_file=self.progress_logger.file,
             prompt_profile=self.prompt_profile,
         )
         self.final_response_module = FinalResponseStage(
             self.client,
-            self.config.deployment,
+            understanding_deployment,
             progress_logger=self.progress_logger,
         )
         self.qa_stage = QualityAssuranceStage(
             self.client,
-            self.config.deployment,
+            qa_deployment,
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
         )
         self.qa_stage.max_qa_rounds = self.config.max_qa_rounds
         self.cleaning_module = DataCleaningStage(
             self.client,
-            self.config.deployment,
+            cleaning_deployment,
             token_budget=self.config.total_token_budget,
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
@@ -335,6 +357,94 @@ class SheetHero:
         session.state = "diagnosing"
         return {"type": "progress", "stage": "diagnosing"}
 
+    @staticmethod
+    def _enrich_diagnose_issues(question_list: list, workbook_view: dict) -> list:
+        """Convert plain-string diagnose issues to structured dicts with details_markdown preview."""
+        import re as _re
+        # Pattern 1 (verbose): "In file tc02_input01.csv, sheet tc02_input01, column Email, ..."
+        # Pattern 2 (compact): "tc02_input01.csv, tc02_input01, Email, ..."
+        _PATTERN = _re.compile(
+            r"(?:In\s+file\s+)?(?P<file>[\w.\-]+\.(?:csv|xlsx|xls)),\s*(?:sheet\s+)?(?P<sheet>[\w.\-]+),\s*(?:column\s+)?(?P<column>[^,]+?)\s*,",
+            _re.IGNORECASE,
+        )
+        # Matches a quoted or parenthesized value: 'X', "X", or (X)
+        _VALUE_PATTERN = _re.compile(r"(?:['\"](?P<val1>[^'\"]+)['\"]|\((?P<val2>[^)]+)\))")
+        coerced_view = DiagnoseRouter._coerce_workbook_view(workbook_view)
+
+        enriched = []
+        for issue in question_list:
+            if isinstance(issue, dict):
+                enriched.append(issue)
+                continue
+            description = str(issue).strip()
+            match = _PATTERN.search(description)
+            if not match:
+                enriched.append({"description": description, "question": "", "details_markdown": ""})
+                continue
+
+            file_name = match.group("file").strip()
+            sheet_name = match.group("sheet").strip()
+            column = match.group("column").strip()
+            sheet_key = f"{file_name}::{sheet_name}"
+            desc_lower = description.lower()
+
+            # Classify the issue type
+            is_missing = "missing" in desc_lower
+            is_mismatch = any(kw in desc_lower for kw in ("not match", "not listed", "does not match", "mismatch"))
+
+            df = coerced_view.get(sheet_key)
+            details_markdown = ""
+            row_indices: list[int] = []
+
+            if df is not None and not df.empty and column in df.columns:
+                if is_missing:
+                    # Find the first row with a missing value in this column
+                    for idx in range(len(df)):
+                        if DiagnoseRouter._is_missing_value(df.iloc[idx][column]):
+                            row_indices.append(idx)
+                            break
+                elif is_mismatch:
+                    # Find the first row whose column value matches the quoted value in the description
+                    quoted = _VALUE_PATTERN.search(description)
+                    if quoted:
+                        bad_val = (quoted.group("val1") or quoted.group("val2") or "").strip()
+                        for idx in range(len(df)):
+                            cell = str(df.iloc[idx][column]).strip()
+                            if cell == bad_val:
+                                row_indices.append(idx)
+                                break
+
+                if not row_indices and len(df) > 0:
+                    row_indices = [0]
+
+                if row_indices:
+                    details_markdown = DiagnoseRouter._build_markdown_preview(
+                        df, row_indices, focus_columns=[column]
+                    )
+
+            # Build a clear, actionable question for cross-reference mismatches
+            question = ""
+            if is_mismatch:
+                quoted = _VALUE_PATTERN.search(description)
+                bad_val = (quoted.group("val1") or quoted.group("val2") or "").strip() if quoted else "this value"
+                question = (
+                    f"The value \"{bad_val}\" in column `{column}` doesn't match any known entry. "
+                    "Should we keep it as-is, skip rows with this value, or correct it to something else?"
+                )
+
+            issue_type = "missing_value" if is_missing else "data_issue"
+            enriched.append({
+                "description": description,
+                "question": question,
+                "details_markdown": details_markdown,
+                "issue_type": issue_type,
+                "metadata": {
+                    "sheet_key": sheet_key,
+                    "column": column,
+                },
+            })
+        return enriched
+
     def _handle_diagnosing(self, session: SheetHeroSession, current_request: str) -> Dict[str, Any]:
         if not self.config.enable_diagnose:
             append_ui_thought(
@@ -358,10 +468,12 @@ class SheetHero:
             if decision.issues:
                 question_list = decision.issues
             else:
-                question_list = self.diagnose_module.run_readonly(
+                raw_questions = self.diagnose_module.run_readonly(
                     workbooks=wb_view,
-                    user_task=current_request
+                    user_task=current_request,
+                    understanding_output=session.understanding or ""
                 )
+                question_list = self._enrich_diagnose_issues(raw_questions, wb_view)
             append_ui_thought(session, "diagnosing", "done", question_list)
 
             self.qa_stage.reset()
@@ -572,27 +684,16 @@ class SheetHero:
             execution_result=execution_result,
         )
 
-        rendered_text = None
-        truncated = False
-        preview_rows = None
-        total_rows = None
-        if execution_result.get("_text_preview_only"):
-            rendered_text = final_answer
-            truncated = bool(execution_result.get("_text_preview_truncated", False))
-            preview_rows = execution_result.get("_text_preview_rows")
-            total_rows = execution_result.get("_text_total_rows")
-            short_answer = None
-
         session.result = {
             "execution_result": execution_result,
             "validation_result": validation_result,
             "final_answer": final_answer,
             "short_answer": short_answer,
             "edited_existing_file": self._output_existed_before,
-            "rendered_text": rendered_text,
-            "truncated": truncated,
-            "preview_rows": preview_rows,
-            "total_rows": total_rows,
+            "rendered_text": None,
+            "truncated": False,
+            "preview_rows": None,
+            "total_rows": None,
         }
 
         extracted_context = ContextExtractor.extract_workbook_purpose_domain(

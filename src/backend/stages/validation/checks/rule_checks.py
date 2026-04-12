@@ -1,8 +1,16 @@
 """Rule-based post-LLM validation checks."""
 
+import inspect
 from typing import TYPE_CHECKING, Any, Dict
 
-from ....task_skills import detect_skill, select_helper
+from ....skills import (
+    detect_skill,
+    get_helper_code_inspector_name,
+    get_helper_output_mode,
+    get_helper_rule_inspector_name,
+    get_helper_saved_workbook_inspector_name,
+    select_helper,
+)
 
 if TYPE_CHECKING:
     from ..runtime import ValidationRuntime
@@ -13,6 +21,35 @@ class ValidationRuleCheckAdvisor:
 
     def __init__(self, runtime: "ValidationRuntime"):
         self.runtime = runtime
+
+    def _run_runtime_inspector(
+        self,
+        inspector_name: str | None,
+        *args,
+    ) -> list[str]:
+        if not inspector_name:
+            return []
+        inspector = getattr(self.runtime, inspector_name, None)
+        if not callable(inspector):
+            return []
+        positional_count = len(
+            [
+                parameter
+                for parameter in inspect.signature(inspector).parameters.values()
+                if parameter.kind in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+        )
+        issues = inspector(*args[:positional_count])
+        return list(issues or [])
+
+    @staticmethod
+    def _helper_expects_text_answer(helper) -> bool:
+        if helper is None:
+            return False
+        return get_helper_output_mode(helper.name) == "text"
 
     def apply(
         self,
@@ -44,9 +81,16 @@ class ValidationRuleCheckAdvisor:
                     "Final answer is a file path but no 'Workbook saved to:' line found in execution output. "
                     "Execution must use save_workbook_to(output_path) and produce save confirmation."
                 )
-        elif _skill is not None and _skill.name == "schedule":
+            hard_issues.extend(
+                runtime._inspect_saved_generic_workbook(
+                    final_answer,
+                    need_detail=need_detail,
+                    need_summary=need_summary,
+                )
+            )
+        elif _helper is not None and not self._helper_expects_text_answer(_helper):
             hard_issues.append(
-                "Scheduling task did not finish with a saved output workbook path."
+                "Helper-driven workbook task did not finish with a saved output workbook path."
             )
 
         rows_written = runtime._extract_rows_written(latest_result)
@@ -98,43 +142,27 @@ class ValidationRuleCheckAdvisor:
                 f"{runtime._format_write_range(previous)} vs {runtime._format_write_range(current)}."
             )
 
-        if _helper is not None and _helper.name == "fit_linear_regression_weights":
-            reported_columns = runtime._extract_reported_columns(all_results)
-            expected_predictors = runtime._expected_regression_predictors(reported_columns)
-            if expected_predictors:
-                feature_cols = runtime._extract_feature_cols_from_code(all_code)
-                missing_from_feature_cols: list[str] = []
-                if feature_cols:
-                    used = {c.lower() for c in feature_cols}
-                    missing_from_feature_cols = [
-                        p for p in expected_predictors
-                        if p.lower() not in used
-                    ]
-                weight_labels = runtime._extract_weight_labels(all_results)
-                missing_from_weights: list[str] = []
-                if weight_labels:
-                    present_labels = {w.lower() for w in weight_labels}
-                    missing_from_weights = [
-                        p for p in expected_predictors
-                        if p.lower() not in present_labels
-                    ]
-
-                missing = missing_from_feature_cols or missing_from_weights
-                if missing:
-                    hard_issues.append(
-                        "Regression feature coverage incomplete. Missing predictor(s): "
-                        + ", ".join(missing[:6])
-                    )
-
-        if _skill is not None and _skill.name == "schedule":
-            hard_issues.extend(runtime._collect_schedule_code_issues(all_code))
-            if max_written_columns and max_written_columns < 5:
-                hard_issues.append(
-                    "Scheduling output appears to have fewer than 5 columns; expected "
-                    "`Task ID`, `Task Name`, `Priority`, `Start Time`, `End Time`."
+        if _helper is not None:
+            hard_issues.extend(
+                self._run_runtime_inspector(
+                    get_helper_rule_inspector_name(_helper.name),
+                    all_results,
+                    all_code,
                 )
+            )
+            hard_issues.extend(
+                self._run_runtime_inspector(
+                    get_helper_code_inspector_name(_helper.name),
+                    all_code,
+                )
+            )
             if final_answer and runtime._looks_like_file_path(final_answer):
-                hard_issues.extend(runtime._inspect_saved_schedule_workbook(final_answer))
+                hard_issues.extend(
+                    self._run_runtime_inspector(
+                        get_helper_saved_workbook_inspector_name(_helper.name),
+                        final_answer,
+                    )
+                )
 
         if validation_result.get("validation_passed") and validation_result.get("issues_found"):
             hard_issues.append("Validator marked PASSED but still reported issues_found.")

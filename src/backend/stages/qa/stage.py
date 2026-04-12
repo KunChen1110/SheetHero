@@ -691,7 +691,7 @@ class QualityAssuranceStage(Stage):
         return ""
 
     @staticmethod
-    def _groupable_missing_value_key(problem: Any) -> Optional[tuple[str, str, str]]:
+    def _groupable_missing_value_key(problem: Any) -> Optional[tuple[str, str]]:
         if not isinstance(problem, dict):
             return None
         if str(problem.get("issue_type") or "") != "missing_value":
@@ -707,12 +707,13 @@ class QualityAssuranceStage(Stage):
             return None
         if "depends on" in description or "depends on" in question:
             return None
-        return (str(problem.get("issue_type") or ""), sheet_key, column)
+        # Group by (issue_type, column) across all files — same column name in multiple
+        # files warrants a single user decision.
+        return (str(problem.get("issue_type") or ""), column)
 
     def _build_grouped_missing_value_problem(self, problems: list[Dict[str, Any]]) -> Dict[str, Any]:
         first = deepcopy(problems[0])
         metadata = deepcopy(first.get("metadata") or {})
-        sheet_key = str(metadata.get("sheet_key") or "current sheet")
         column = str(metadata.get("column") or "value")
         affected_rows = [
             int(row)
@@ -722,31 +723,46 @@ class QualityAssuranceStage(Stage):
             )
             if row is not None
         ]
+        # Collect distinct sheet/file keys across all grouped problems.
+        seen_sheets: list[str] = []
+        for p in problems:
+            sk = str((p.get("metadata") or {}).get("sheet_key") or "")
+            if sk and sk not in seen_sheets:
+                seen_sheets.append(sk)
+        primary_sheet_key = seen_sheets[0] if seen_sheets else str(metadata.get("sheet_key") or "current sheet")
         issue_group = QAIssueGroup(
             issue_type="missing_value_policy",
-            sheet_key=sheet_key,
+            sheet_key=primary_sheet_key,
             column=column,
             affected_rows=tuple(affected_rows),
         )
         metadata["affected_rows"] = list(issue_group.affected_rows)
-        first["id"] = f"missing_value::{sheet_key}::{column}"
+        metadata["sheet_key"] = primary_sheet_key
+        first["id"] = f"missing_value::{primary_sheet_key}::{column}"
         first["issue_type"] = issue_group.issue_type
-        first["description"] = f"Column `{column}` has multiple missing values."
-        first["question"] = (
-            f"For missing `{column}` values, should I leave them blank, fill a default value, or drop those rows?"
-        )
+        if len(seen_sheets) > 1:
+            first["description"] = f"Column `{column}` has missing values across multiple files."
+            first["question"] = (
+                f"For missing `{column}` values (across multiple files), "
+                "should I leave them blank, fill a default value, or drop those rows?"
+            )
+        else:
+            first["description"] = f"Column `{column}` has multiple missing values."
+            first["question"] = (
+                f"For missing `{column}` values, should I leave them blank, fill a default value, or drop those rows?"
+            )
         first["metadata"] = metadata
         return first
 
     def _group_policy_questions(self, question_list: list) -> list:
-        grouped_problems: dict[tuple[str, str, str], list[Dict[str, Any]]] = {}
+        grouped_problems: dict[tuple[str, str], list[Dict[str, Any]]] = {}
         for item in question_list:
             key = self._groupable_missing_value_key(item)
             if key is None:
                 continue
             grouped_problems.setdefault(key, []).append(item)
 
-        emitted_group_keys: set[tuple[str, str, str]] = set()
+        emitted_group_keys: set[tuple[str, str]] = set()
         output: list = []
         for item in question_list:
             key = self._groupable_missing_value_key(item)
@@ -826,7 +842,7 @@ class QualityAssuranceStage(Stage):
 
         decision = self._parse_match_action(content)
         self._last_structured_decision = decision
-        match = bool(decision.get("match"))
+        match = decision.get("match") == "YES"
         action = self._coerce_action_from_structured_decision(problem, decision)
         feedback = "" if match else self._build_match_feedback(problem, decision)
         return match, action, feedback

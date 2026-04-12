@@ -1,10 +1,16 @@
-"""Generic execution preflight checks shared across task families."""
+"""Generic execution preflight checks shared across skills."""
 
 import ast
 import re
 from typing import TYPE_CHECKING, Optional
 
-from ....task_skills import detect_skill, select_helper, build_loop_breaker, build_execution_strict_rules, get_helper_runtime_mode
+from ....skills import (
+    all_helper_names,
+    build_execution_strict_rules,
+    build_loop_breaker,
+    detect_skills,
+    select_helper,
+)
 
 if TYPE_CHECKING:
     from ..runtime import ExecutionRuntime
@@ -21,28 +27,14 @@ class ExecutionGenericPreflightAdvisor:
         if not code:
             return "PREFLIGHT_LINEAR: empty code block."
         lower = code.lower()
-        skill = detect_skill(user_question)
+        all_matched_skills = detect_skills(user_question)
+        skill = all_matched_skills[0] if all_matched_skills else None
         helper = select_helper(skill, user_question) if skill else None
         helper_name = helper.name if helper else ""
         uses_registered_helper = bool(helper_name and f"{helper_name.lower()}(" in lower)
         uses_load_all_tables = "load_all_tables(" in lower
         # Check for any known helper function call in the code
-        _ALL_KNOWN_HELPERS = (
-            "build_region_growth_analysis", "build_financial_dashboard_report",
-            "build_candidate_screening_report", "build_inventory_eoq_report",
-            "build_hospital_utilisation_report", "build_market_share_shipment_report",
-            "build_cash_flow_efficiency_report", "build_diabetes_region_report",
-            "build_mobile_reviews_summary_report", "build_store_feature_analysis_report",
-            "build_ecommerce_merge_report", "build_missing_data_report",
-            "build_room_format_report", "build_relational_assignment_schedule_report",
-            "build_dependency_schedule", "build_correlation_matrix_table",
-            "build_cycle_detection_report", "build_grouped_aggregation_ranking_report",
-            "build_time_series_aggregation_report", "build_multi_key_relational_join_report",
-            "build_relational_join_enrichment_report", "build_capacity_constrained_allocation_report",
-            "fit_linear_regression_weights", "concat_tables_with_same_headers",
-            "fill_missing_from_reference",
-        )
-        uses_any_known_helper = any(f"{h}(" in lower for h in _ALL_KNOWN_HELPERS)
+        uses_any_known_helper = any(f"{helper_name_candidate.lower()}(" in lower for helper_name_candidate in all_helper_names())
 
         top_level_returns = [
             line.strip()
@@ -63,28 +55,42 @@ class ExecutionGenericPreflightAdvisor:
             ast.parse(code)
         except SyntaxError as exc:
             line_info = f" on line {exc.lineno}" if exc.lineno else ""
-            return (
+            guidance = (
                 f"PREFLIGHT_LINEAR: generated code has a syntax error{line_info}.\n"
                 f"- Parser message: {exc.msg}\n"
                 "- Return one full corrected code block.\n"
                 "- Keep string quoting simple and avoid nested double quotes inside f-strings."
             )
-
-        if skill is not None and helper_name and not uses_registered_helper:
-            skill_hint = (build_loop_breaker(skill, helper) or build_execution_strict_rules(skill, helper) or "").strip()
-            helper_block = (
-                f"PREFLIGHT_SKILL_HELPER: detected the `{skill.name}` skill, so execution must call the runtime helper `{helper_name}(...)`.\n"
-                f"- Required helper: `{helper_name}(...)`\n"
-                "- Do not replace the helper with ad-hoc pandas logic, manual joins, or manual date parsing.\n"
-            )
-            if skill_hint:
-                helper_block += f"{skill_hint}\n"
-            return helper_block.rstrip()
+            if skill is not None and helper is not None:
+                loop_breaker = build_loop_breaker(
+                    skill, helper,
+                    extra_skills=all_matched_skills,
+                    user_question=user_question,
+                ).strip()
+                if loop_breaker:
+                    guidance += f"\n{loop_breaker}"
+            return guidance
 
         if helper is not None and helper.self_loading and uses_registered_helper:
+            positional_arg_match = re.search(
+                rf"{re.escape(helper_name)}\s*\(\s*(?!\)|\w+\s*=)([^,)]+)",
+                code,
+                flags=re.IGNORECASE,
+            )
+            if positional_arg_match:
+                skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
+                helper_block = (
+                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` must not be called with positional arguments.\n"
+                    "- This helper discovers the runtime tables on its own.\n"
+                    "- Call it as `report = "
+                    f"{helper_name}()` or use only optional named args like `range_ref=...`.\n"
+                )
+                if skill_hint:
+                    helper_block += f"{skill_hint}\n"
+                return helper_block.rstrip()
             manual_reader_patterns = ("read_table_multi(", "find_table_by_headers(", "load_all_tables(")
             if any(pattern in lower for pattern in manual_reader_patterns):
-                skill_hint = (build_loop_breaker(skill, helper) or build_execution_strict_rules(skill, helper) or "").strip()
+                skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
                 helper_block = (
                     f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{skill.name}` skill.\n"
                     "- Remove manual `read_table_multi(...)`, `find_table_by_headers(...)`, and `load_all_tables(...)` calls from execution code.\n"
@@ -94,9 +100,9 @@ class ExecutionGenericPreflightAdvisor:
                     helper_block += f"{skill_hint}\n"
                 return helper_block.rstrip()
 
-        family_grounding_issue = self.family_helper_header_grounding_guard(code_action, user_question)
-        if family_grounding_issue is not None:
-            return family_grounding_issue
+        skill_grounding_issue = self.skill_helper_header_grounding_guard(code_action, user_question)
+        if skill_grounding_issue is not None:
+            return skill_grounding_issue
 
         if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_registered_helper and not uses_any_known_helper:
             return (
@@ -191,8 +197,9 @@ class ExecutionGenericPreflightAdvisor:
 
         return None
 
-    def family_helper_header_grounding_guard(self, code_action: str, user_question: str) -> Optional[str]:
-        skill = detect_skill(user_question)
+    def skill_helper_header_grounding_guard(self, code_action: str, user_question: str) -> Optional[str]:
+        all_matched_skills = detect_skills(user_question)
+        skill = all_matched_skills[0] if all_matched_skills else None
         if skill is None:
             return None
         helper = select_helper(skill, user_question)
@@ -237,8 +244,8 @@ class ExecutionGenericPreflightAdvisor:
             "- Replace those arguments with real headers from the workbook.\n"
             "- If the correct grouping/value/date column is obvious but uncertain, prefer `group_cols=None` or `value_col=None`.\n"
         )
-        suggested_call = infer.build_family_grounded_call_hint(skill.name, user_question, observed_headers)
+        suggested_call = infer.build_skill_grounded_call_hint(helper.name, user_question, observed_headers)
         if suggested_call:
             guidance += f"- Recommended grounded helper call:\n  `{suggested_call}`\n"
-        guidance += build_loop_breaker(skill, helper)
+        guidance += build_loop_breaker(skill, helper, extra_skills=all_matched_skills, user_question=user_question)
         return guidance.rstrip()

@@ -1,6 +1,6 @@
 """Skill-based loop breaker providers."""
 
-from ....task_skills import detect_skill, select_helper, build_loop_breaker
+from ....skills import detect_skill, select_helper, build_loop_breaker
 
 
 def get_task_specific_loop_breaker(user_question: str) -> str:

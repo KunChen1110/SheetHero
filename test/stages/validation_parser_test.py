@@ -1,4 +1,4 @@
-from src.backend.stages.validation.parser import ValidationResponseParser
+from src.backend.stages.validation.core.parser import ValidationResponseParser
 
 
 def test_parse_json_validation_payload():

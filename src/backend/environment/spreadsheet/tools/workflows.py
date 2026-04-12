@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from collections import deque
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -52,6 +52,225 @@ def _is_year_like(value: Any) -> bool:
         return False
     year = int(text)
     return 1900 <= year <= 2100
+
+
+def _select_contiguous_labeled_columns(
+    header_row: Sequence[Any],
+    start_col_idx: int,
+    stop_markers: Sequence[str] = (),
+) -> list[tuple[int, str]]:
+    """Return the first contiguous block of non-empty labels after ``start_col_idx``."""
+    selected: list[tuple[int, str]] = []
+    normalized_stops = tuple(_normalize_header_name(marker) for marker in stop_markers if marker)
+    for col_idx in range(start_col_idx, len(header_row)):
+        label = _normalize_cell_text(header_row[col_idx])
+        if not label:
+            if selected:
+                break
+            continue
+        normalized_label = _normalize_header_name(label)
+        if normalized_stops and normalized_label in normalized_stops:
+            break
+        selected.append((col_idx, label))
+    return selected
+
+
+def _find_first_period_cell(
+    rows: Sequence[Sequence[Any]],
+    is_period_value: Callable[[Any], bool],
+) -> tuple[int, int] | None:
+    """Find the first row/column whose first non-empty cell matches a period predicate."""
+    for row_idx, row in enumerate(rows):
+        non_empty = [(col_idx, value) for col_idx, value in enumerate(row) if _normalize_cell_text(value)]
+        if not non_empty:
+            continue
+        first_non_empty_idx, first_non_empty_value = non_empty[0]
+        if is_period_value(first_non_empty_value):
+            return row_idx, first_non_empty_idx
+    return None
+
+
+def _extract_period_records(
+    rows: Sequence[Sequence[Any]],
+    period_col_idx: int,
+    labeled_columns: Sequence[tuple[int, str]],
+    is_period_value: Callable[[Any], bool],
+    period_transform: Callable[[Any], Any] | None = None,
+    period_key: str = "Year",
+) -> list[dict[str, Any]]:
+    """Extract a contiguous period/value block into records."""
+    records: list[dict[str, Any]] = []
+    transform = period_transform or (lambda value: value)
+    for row in rows:
+        if period_col_idx >= len(row) or not is_period_value(row[period_col_idx]):
+            if records:
+                break
+            continue
+        period_value = transform(row[period_col_idx])
+        record: dict[str, Any] = {period_key: period_value}
+        for col_idx, label in labeled_columns:
+            record[label] = row[col_idx] if col_idx < len(row) else None
+        records.append(record)
+    return records
+
+
+def _merge_on_shared_period(
+    left_records: Sequence[dict[str, Any]] | pd.DataFrame,
+    right_records: Sequence[dict[str, Any]] | pd.DataFrame,
+    period_col: str,
+) -> pd.DataFrame:
+    """Inner-join two period-indexed datasets and require at least one shared period."""
+    left_df = left_records.copy() if isinstance(left_records, pd.DataFrame) else pd.DataFrame(left_records)
+    right_df = right_records.copy() if isinstance(right_records, pd.DataFrame) else pd.DataFrame(right_records)
+    overlap_df = left_df.merge(right_df, on=period_col, how="inner")
+    if overlap_df.empty:
+        raise ValueError(f"No overlapping period was found on `{period_col}`.")
+    return overlap_df
+
+
+def _build_grouped_assignment_join(
+    assignment_df: pd.DataFrame,
+    assignment_col: str,
+    entity_col: str,
+    schedule_df: pd.DataFrame,
+    resource_col: str,
+    schedule_cols: Sequence[str],
+) -> pd.DataFrame:
+    """Group assigned entities by resource and join them onto schedule rows."""
+    grouped_entities = (
+        assignment_df.groupby(assignment_col, sort=False)[entity_col]
+        .apply(lambda values: ", ".join(value for value in values if _normalize_cell_text(value)))
+        .reset_index()
+        .rename(columns={assignment_col: resource_col})
+    )
+    selected_schedule_cols = [resource_col] + [column for column in schedule_cols if column != resource_col]
+    output_df = schedule_df[selected_schedule_cols].copy()
+    output_df = output_df.merge(grouped_entities, on=resource_col, how="left")
+    output_df[entity_col] = output_df[entity_col].fillna("")
+    sort_cols = [resource_col] + [column for column in schedule_cols if column in output_df.columns]
+    return output_df.sort_values(by=sort_cols, kind="stable").reset_index(drop=True)
+
+
+def _build_weighted_period_output(
+    overlap_df: pd.DataFrame,
+    period_col: str,
+    value_columns: Sequence[str],
+    weight_col: str,
+    output_period_col: str,
+    output_label_template: str = "{name}",
+    scale: float = 100.0,
+    round_digits: int = 2,
+) -> pd.DataFrame:
+    """Scale per-period value columns by a shared weight column into a new output table."""
+    output_df = pd.DataFrame({output_period_col: overlap_df[period_col]})
+    weights = pd.to_numeric(overlap_df[weight_col], errors="coerce").fillna(0).astype(float)
+    for column in value_columns:
+        values = pd.to_numeric(overlap_df[column], errors="coerce").fillna(0).astype(float)
+        output_df[output_label_template.format(name=column)] = ((values * weights) / scale).round(round_digits)
+    return output_df
+
+
+def select_contiguous_labeled_columns(
+    header_row: Sequence[Any],
+    start_col_idx: int,
+    stop_markers: Sequence[str] = (),
+) -> list[tuple[int, str]]:
+    """Public wrapper for selecting a contiguous labeled column block."""
+    return _select_contiguous_labeled_columns(
+        header_row,
+        start_col_idx=start_col_idx,
+        stop_markers=stop_markers,
+    )
+
+
+def find_first_period_cell(
+    rows: Sequence[Sequence[Any]],
+    match_regex: str,
+) -> tuple[int, int] | None:
+    """Public wrapper that finds the first period-like cell by regex."""
+    pattern = re.compile(match_regex)
+    return _find_first_period_cell(
+        rows,
+        is_period_value=lambda value: bool(pattern.match(_normalize_cell_text(value))),
+    )
+
+
+def extract_period_records(
+    rows: Sequence[Sequence[Any]],
+    period_col_idx: int,
+    labeled_columns: Sequence[tuple[int, str]],
+    match_regex: str,
+    cast_period: str | None = None,
+    period_key: str = "Year",
+) -> list[dict[str, Any]]:
+    """Public wrapper that turns a contiguous period/value block into records."""
+    pattern = re.compile(match_regex)
+
+    def _transform_period(value: Any) -> Any:
+        normalized = _normalize_cell_text(value)
+        if cast_period == "int":
+            return int(normalized)
+        return normalized
+
+    return _extract_period_records(
+        rows,
+        period_col_idx=period_col_idx,
+        labeled_columns=labeled_columns,
+        is_period_value=lambda value: bool(pattern.match(_normalize_cell_text(value))),
+        period_transform=_transform_period,
+        period_key=period_key,
+    )
+
+
+def merge_on_shared_period(
+    left_records: Sequence[dict[str, Any]] | pd.DataFrame,
+    right_records: Sequence[dict[str, Any]] | pd.DataFrame,
+    period_col: str,
+) -> pd.DataFrame:
+    """Public wrapper for joining two period-indexed datasets."""
+    return _merge_on_shared_period(left_records, right_records, period_col=period_col)
+
+
+def build_grouped_assignment_join(
+    assignment_df: pd.DataFrame,
+    assignment_col: str,
+    entity_col: str,
+    schedule_df: pd.DataFrame,
+    resource_col: str,
+    schedule_cols: Sequence[str],
+) -> pd.DataFrame:
+    """Public wrapper for grouped assignment schedule joins."""
+    return _build_grouped_assignment_join(
+        assignment_df=assignment_df,
+        assignment_col=assignment_col,
+        entity_col=entity_col,
+        schedule_df=schedule_df,
+        resource_col=resource_col,
+        schedule_cols=schedule_cols,
+    )
+
+
+def build_weighted_period_output(
+    overlap_df: pd.DataFrame,
+    period_col: str,
+    value_columns: Sequence[str],
+    weight_col: str,
+    output_period_col: str,
+    output_label_template: str = "{name}",
+    scale: float = 100.0,
+    round_digits: int = 2,
+) -> pd.DataFrame:
+    """Public wrapper for scaling value columns by a shared period weight."""
+    return _build_weighted_period_output(
+        overlap_df,
+        period_col=period_col,
+        value_columns=value_columns,
+        weight_col=weight_col,
+        output_period_col=output_period_col,
+        output_label_template=output_label_template,
+        scale=scale,
+        round_digits=round_digits,
+    )
 
 
 def _resolve_column_name(columns: Iterable[Any], requested_name: str) -> str:
@@ -104,25 +323,67 @@ def _prepare_numeric_feature_frame(
     return working, actual_target_col, actual_feature_cols
 
 
+def _is_identifier_like_column(series: pd.Series, column_name: str) -> bool:
+    normalized = _normalize_header_name(column_name)
+    header_markers = (
+        "room",
+        "venue",
+        "location",
+        "seat",
+        "desk",
+        "lab",
+        "code",
+        "identifier",
+        "id",
+    )
+    if any(marker in normalized for marker in header_markers):
+        return True
+
+    non_empty = [_normalize_cell_text(value) for value in series.tolist() if _normalize_cell_text(value)]
+    if len(non_empty) < 2:
+        return False
+    code_like = [value for value in non_empty[:20] if re.search(r"[A-Za-z]\s*\d", value)]
+    return len(code_like) >= 2
+
+
 def load_all_tables(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z200",
     require_primary_key: bool = True,
     stop_at_note_row: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Load the first visible table from every workbook into a standard structure."""
+    """Load the best visible table from every workbook into a standard structure."""
     tables: List[Dict[str, Any]] = []
     for file_path in list_all_workbooks(world):
         wb = get_workbook(world, file_path)
-        sheet_name = wb.sheetnames[0]
-        table = read_table_multi(
-            world,
-            file_path,
-            sheet_name,
-            range_ref,
-            require_primary_key,
-            stop_at_note_row,
-        )
+        best_table: Dict[str, Any] | None = None
+        best_score: tuple[int, int, int] | None = None
+
+        for sheet_name in wb.sheetnames:
+            table = read_table_multi(
+                world,
+                file_path,
+                sheet_name,
+                range_ref,
+                require_primary_key,
+                stop_at_note_row,
+            )
+            header = table.get("header", [])
+            if not header:
+                continue
+            score = (
+                1 if str(sheet_name).strip().lower() == "data" else 0,
+                len(header),
+                len(table.get("rows", [])),
+            )
+            if best_score is None or score > best_score:
+                best_score = score
+                best_table = table
+
+        if best_table is None:
+            continue
+
+        table = best_table
         header = table.get("header", [])
         if not header:
             continue
@@ -347,13 +608,38 @@ def infer_common_keys(
 
 
 def concat_tables_with_same_headers(
-    tables: Sequence[Dict[str, Any]],
+    tables: Sequence[Any],
     sort_by: Sequence[str] | None = None,
     ignore_index: bool = True,
 ) -> Dict[str, Any]:
-    """Vertically combine tables that share the same normalized header set."""
+    """Vertically combine tables that share the same normalized header set.
+
+    Accepts any of the following per-table formats:
+    - dict with ``df`` key (from ``load_all_tables()``)
+    - dict with ``rows``/``header`` keys (from ``read_table_multi()``)
+    - bare ``pd.DataFrame``
+    """
     if not tables:
         raise ValueError("No tables provided for concatenation.")
+
+    def _normalise_entry(entry: Any, index: int) -> Dict[str, Any]:
+        """Convert any supported format into ``{"df": ..., "header": [...]}``."""
+        if isinstance(entry, pd.DataFrame):
+            return {"df": entry, "header": list(entry.columns)}
+        if isinstance(entry, dict):
+            # read_table_multi() output: has "rows" and "header"
+            if "rows" in entry and "header" in entry and "df" not in entry:
+                df = pd.DataFrame(entry["rows"], columns=entry["header"])
+                return {"df": df, "header": list(entry["header"]), **{k: v for k, v in entry.items() if k not in ("rows", "header")}}
+            # load_all_tables() output: has "df"
+            if "df" in entry:
+                return entry
+        raise TypeError(
+            f"Table {index}: unsupported format {type(entry).__name__}. "
+            "Pass a DataFrame, a read_table_multi() result, or a load_all_tables() entry."
+        )
+
+    normalised = [_normalise_entry(t, i + 1) for i, t in enumerate(tables)]
 
     def _resolve_header(table: Dict[str, Any]) -> list[str]:
         header = list(table.get("header", []) or [])
@@ -364,14 +650,14 @@ def concat_tables_with_same_headers(
             return [str(col) for col in df.columns]
         return []
 
-    first_header_actual = _resolve_header(tables[0])
+    first_header_actual = _resolve_header(normalised[0])
     first_header = [_normalize_header_name(col) for col in first_header_actual]
     if not first_header:
         raise ValueError("Tables must include headers for concatenation.")
 
     dataframes: list[pd.DataFrame] = []
     sources: list[str] = []
-    for index, table in enumerate(tables, start=1):
+    for index, table in enumerate(normalised, start=1):
         header = _resolve_header(table)
         normalized_header = [_normalize_header_name(col) for col in header]
         if normalized_header != first_header:
@@ -764,71 +1050,88 @@ def build_room_format_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z200",
 ) -> Dict[str, Any]:
-    """Describe room-identifier format inconsistencies in natural language."""
+    """Describe identifier-format inconsistencies in natural language."""
     tables = load_all_tables(
         world,
         range_ref=range_ref,
         require_primary_key=False,
         stop_at_note_row=True,
     )
-    room_table = find_table_by_headers(
-        tables,
-        required_headers=["Room"],
-    )
-    df = room_table["df"].copy()
-    room_col = _resolve_column_name(df.columns, "Room")
-    raw_values = [_normalize_cell_text(v) for v in df[room_col].tolist()]
-    raw_values = [value for value in raw_values if value]
+    candidate_columns: list[tuple[str, str, list[str]]] = []
+    for table in tables:
+        df = table["df"].copy()
+        for column_name in map(str, df.columns):
+            if not _is_identifier_like_column(df[column_name], column_name):
+                continue
+            raw_values = [_normalize_cell_text(v) for v in df[column_name].tolist()]
+            raw_values = [value for value in raw_values if value]
+            if len(raw_values) < 2:
+                continue
+            candidate_columns.append((table["file_name"], column_name, raw_values))
 
-    if not raw_values:
+    if not candidate_columns:
         return {
-            "answer": "No room identifiers found in the spreadsheet.",
+            "answer": "No identifier-like columns with obvious format inconsistencies were found.",
             "variants": {},
         }
 
-    variant_map: dict[str, set[str]] = {}
-    for value in raw_values:
-        canonical = re.sub(r"\s+", "", value).upper()
-        variant_map.setdefault(canonical, set()).add(value)
+    for _file_name, column_name, raw_values in candidate_columns:
+        variant_map: dict[str, set[str]] = {}
+        for value in raw_values:
+            canonical = re.sub(r"\s+", "", value).upper()
+            variant_map.setdefault(canonical, set()).add(value)
 
-    duplicate_variant_groups = {
-        canonical: sorted(variants)
-        for canonical, variants in variant_map.items()
-        if len(variants) > 1
-    }
-    if duplicate_variant_groups:
-        canonical, variants = sorted(
-            duplicate_variant_groups.items(),
-            key=lambda item: (-len(item[1]), item[0]),
-        )[0]
-        sample = ", ".join(f"`{variant}`" for variant in variants[:3])
-        answer = (
-            f"The `Room` column contains inconsistent variants for the same room code {canonical}: {sample}. "
-            f"Should Room be standardized as `{canonical}`, `{canonical[0]} {canonical[1:]}`, or lowercase `{canonical.lower()}`?"
-        )
-        return {
-            "answer": answer,
-            "variants": duplicate_variant_groups,
+        duplicate_variant_groups = {
+            canonical: sorted(variants)
+            for canonical, variants in variant_map.items()
+            if len(variants) > 1
         }
+        if duplicate_variant_groups:
+            canonical, variants = sorted(
+                duplicate_variant_groups.items(),
+                key=lambda item: (-len(item[1]), item[0]),
+            )[0]
+            display_variants = variants[:3]
+            sample = ", ".join(f"`{variant}`" for variant in display_variants)
+            preferred = min(display_variants, key=lambda value: (len(value), value.lower()))
+            answer = (
+                f"The `{column_name}` column contains inconsistent variants for the same identifier `{canonical}`: {sample}. "
+                f"Should `{column_name}` be standardized as `{preferred}`?"
+            )
+            return {
+                "answer": answer,
+                "variants": duplicate_variant_groups,
+            }
 
-    has_spaced = any(" " in value for value in raw_values)
-    has_lower = any(any(ch.islower() for ch in value) for value in raw_values)
-    has_upper = any(any(ch.isupper() for ch in value) for value in raw_values)
-    code_like_values = [value for value in raw_values if re.search(r"[A-Za-z]\s*\d", value)]
-
-    if (has_spaced and (has_lower or has_upper)) or (has_lower and has_upper and code_like_values):
-        sample = ", ".join(f"`{value}`" for value in code_like_values[:3])
-        answer = (
-            f"The `Room` column uses inconsistent formatting for room identifiers, for example {sample}. "
-            "Should Room be standardized as `C 80`, `C80`, or `c80`?"
-        )
-        return {
-            "answer": answer,
-            "variants": {re.sub(r'\\s+', '', value).upper(): [value] for value in code_like_values[:3]},
-        }
+    for _file_name, column_name, raw_values in candidate_columns:
+        code_like_values = [value for value in raw_values if re.search(r"[A-Za-z]\s*\d", value)]
+        has_spaced = any(" " in value for value in code_like_values)
+        has_compact = any(" " not in value for value in code_like_values)
+        has_lower = any(any(ch.islower() for ch in value) for value in code_like_values)
+        has_upper = any(any(ch.isupper() for ch in value) for value in code_like_values)
+        if len(code_like_values) >= 2 and ((has_spaced and has_compact) or (has_lower and has_upper)):
+            sample_values: list[str] = []
+            for value in code_like_values:
+                if value not in sample_values:
+                    sample_values.append(value)
+                if len(sample_values) >= 3:
+                    break
+            sample = ", ".join(f"`{value}`" for value in sample_values)
+            preferred = min(sample_values, key=lambda value: (len(value), value.lower()))
+            answer = (
+                f"The `{column_name}` column uses inconsistent identifier formatting, for example {sample}. "
+                f"Should `{column_name}` be standardized as `{preferred}`?"
+            )
+            return {
+                "answer": answer,
+                "variants": {
+                    re.sub(r"\s+", "", value).upper(): [value]
+                    for value in sample_values
+                },
+            }
 
     return {
-        "answer": "No obvious room identifier inconsistencies were found.",
+        "answer": "No obvious identifier-format inconsistencies were found.",
         "variants": {},
     }
 
@@ -995,19 +1298,14 @@ def build_relational_assignment_schedule_report(
     ].copy()
     schedule_df = schedule_df[schedule_df[resource_col].astype(bool)].copy()
 
-    grouped_entities = (
-        assignment_df.groupby(assignment_col, sort=False)[entity_col]
-        .apply(lambda values: ", ".join(value for value in values if _normalize_cell_text(value)))
-        .reset_index()
-        .rename(columns={assignment_col: resource_col})
+    output_df = _build_grouped_assignment_join(
+        assignment_df=assignment_df,
+        assignment_col=assignment_col,
+        entity_col=entity_col,
+        schedule_df=schedule_df,
+        resource_col=resource_col,
+        schedule_cols=schedule_cols,
     )
-
-    selected_schedule_cols = [resource_col] + [column for column in schedule_cols if column != resource_col]
-    output_df = schedule_df[selected_schedule_cols].copy()
-    output_df = output_df.merge(grouped_entities, on=resource_col, how="left")
-    output_df[entity_col] = output_df[entity_col].fillna("")
-    sort_cols = [resource_col] + [column for column in schedule_cols if column in output_df.columns]
-    output_df = output_df.sort_values(by=sort_cols, kind="stable").reset_index(drop=True)
 
     detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
     return {
@@ -1277,6 +1575,87 @@ def build_capacity_constrained_allocation_report(
     }
 
 
+def compute_ratio_column(
+    df: pd.DataFrame,
+    numerator_col: str,
+    denominator_col: str,
+    output_col: str = "ratio",
+) -> pd.DataFrame:
+    """Add a ratio column: output_col = numerator_col / denominator_col.
+
+    Both source columns are coerced to numeric. Division-by-zero rows become NaN.
+    Does not load data, write output, or format — pure DataFrame transformation.
+    """
+    df = df.copy()
+    num = pd.to_numeric(df[numerator_col], errors="coerce")
+    den = pd.to_numeric(df[denominator_col], errors="coerce").replace(0, np.nan)
+    df[output_col] = (num / den).round(4)
+    return df
+
+
+def compute_weighted_score(
+    df: pd.DataFrame,
+    score_cols: List[str],
+    weights: List[float] | None = None,
+    output_col: str = "score",
+) -> pd.DataFrame:
+    """Add a weighted composite score column.
+
+    Weights are normalized to sum to 1. Missing values are treated as 0.
+    Does not load data, write output, or format — pure DataFrame transformation.
+    """
+    df = df.copy()
+    if not weights:
+        weights = [1.0 / len(score_cols)] * len(score_cols)
+    total = sum(weights) or 1.0
+    norm = [w / total for w in weights]
+    score = sum(
+        pd.to_numeric(df[col], errors="coerce").fillna(0.0) * w
+        for col, w in zip(score_cols, norm)
+    )
+    df[output_col] = score.round(4)
+    return df
+
+
+def compute_percentage_share(
+    df: pd.DataFrame,
+    value_col: str,
+    output_col: str = "share_pct",
+    group_col: str | None = None,
+) -> pd.DataFrame:
+    """Add a percentage share column (value / total * 100).
+
+    If group_col is given, share is computed within each group.
+    Does not load data, write output, or format — pure DataFrame transformation.
+    """
+    df = df.copy()
+    values = pd.to_numeric(df[value_col], errors="coerce").fillna(0.0)
+    if group_col:
+        totals = values.groupby(df[group_col]).transform("sum").replace(0, np.nan)
+    else:
+        totals = values.sum() or np.nan
+    df[output_col] = (values / totals * 100).round(2)
+    return df
+
+
+def add_rank_column(
+    df: pd.DataFrame,
+    sort_col: str,
+    ascending: bool = False,
+    rank_col: str = "rank",
+) -> pd.DataFrame:
+    """Add a 1-based integer rank column and sort the DataFrame by sort_col.
+
+    Does not load data, write output, or format — pure DataFrame transformation.
+    """
+    df = df.copy()
+    numeric_vals = pd.to_numeric(df[sort_col], errors="coerce")
+    df[rank_col] = numeric_vals.rank(
+        method="min", ascending=ascending, na_option="bottom"
+    ).astype("Int64")
+    return df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
+
+
 def summarize_numeric_column(
     df: pd.DataFrame,
     value_col: str,
@@ -1305,6 +1684,9 @@ def summarize_numeric_column(
             actual_value_col = _resolve_column_name(df.columns, requested_value_col)
         except ValueError:
             actual_value_col = _infer_value_col()
+    # Reset index so output_row_numbers are always contiguous 0-based,
+    # matching the row positions written by write_dataframe_to_sheet.
+    df = df.reset_index(drop=True)
     numeric_series = pd.to_numeric(df[actual_value_col], errors="coerce")
     if numeric_series.dropna().empty:
         raise ValueError(f"Column `{actual_value_col}` has no numeric values.")
@@ -1359,49 +1741,34 @@ def build_region_growth_analysis(
     for row_idx in range(1, max_row + 1):
         raw_rows.append([ws.cell(row=row_idx, column=col_idx).value for col_idx in range(1, max_col + 1)])
 
-    first_year_row_idx = None
-    year_col_idx = None
-    for row_idx, row in enumerate(raw_rows):
-        non_empty = [(col_idx, value) for col_idx, value in enumerate(row) if _normalize_cell_text(value)]
-        if not non_empty:
-            continue
-        first_non_empty_idx, first_non_empty_value = non_empty[0]
-        if _is_year_like(first_non_empty_value):
-            first_year_row_idx = row_idx
-            year_col_idx = first_non_empty_idx
-            break
-
-    if first_year_row_idx is None or year_col_idx is None or first_year_row_idx == 0:
+    first_period_cell = _find_first_period_cell(raw_rows, is_period_value=_is_year_like)
+    if first_period_cell is None:
+        raise ValueError("Could not identify the first year row and the preceding region header row.")
+    first_year_row_idx, year_col_idx = first_period_cell
+    if first_year_row_idx == 0:
         raise ValueError("Could not identify the first year row and the preceding region header row.")
 
     header_row = raw_rows[first_year_row_idx - 1]
-    region_columns: list[tuple[int, str]] = []
-    for col_idx in range(year_col_idx + 1, len(header_row)):
-        label = _normalize_cell_text(header_row[col_idx])
-        if not label:
-            if region_columns:
-                break
-            continue
-        lower_label = label.lower()
-        if lower_label.startswith("in %") or lower_label == "in %":
-            break
-        region_columns.append((col_idx, label))
+    region_columns = _select_contiguous_labeled_columns(
+        header_row,
+        start_col_idx=year_col_idx + 1,
+        stop_markers=("in %",),
+    )
 
     if not region_columns:
         raise ValueError("No region columns found in the row above the first year row.")
 
-    records: list[dict[str, Any]] = []
-    for row in raw_rows[first_year_row_idx:]:
-        if year_col_idx >= len(row) or not _is_year_like(row[year_col_idx]):
-            if records:
-                break
-            continue
-        year = int(_normalize_cell_text(row[year_col_idx]))
-        record: dict[str, Any] = {"Year": year}
-        for col_idx, region_name in region_columns:
-            value = row[col_idx] if col_idx < len(row) else None
-            record[region_name] = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-        records.append(record)
+    records = _extract_period_records(
+        raw_rows[first_year_row_idx:],
+        period_col_idx=year_col_idx,
+        labeled_columns=region_columns,
+        is_period_value=_is_year_like,
+        period_transform=lambda value: int(_normalize_cell_text(value)),
+        period_key="Year",
+    )
+    for record in records:
+        for _col_idx, region_name in region_columns:
+            record[region_name] = pd.to_numeric(pd.Series([record[region_name]]), errors="coerce").iloc[0]
 
     if not records:
         raise ValueError("No yearly records were parsed from the region table.")
@@ -1411,18 +1778,28 @@ def build_region_growth_analysis(
     if chart_df.empty:
         raise ValueError(f"No rows found for years {start_year}-{end_year}.")
 
+    actual_years = sorted(int(value) for value in chart_df["Year"].dropna().tolist())
+    actual_start_year = actual_years[0]
+    actual_end_year = actual_years[-1]
+
     result_rows: list[dict[str, Any]] = []
-    avg_col = f"Avg Penetration ({start_year}-{end_year})"
-    growth_col = f"Growth ({start_year}-{end_year})"
+    avg_col = f"Avg Penetration ({actual_start_year}-{actual_end_year})"
+    growth_col = f"Growth ({actual_start_year}-{actual_end_year})"
     for _, region_name in region_columns:
         series = pd.to_numeric(chart_df[region_name], errors="coerce")
         if series.dropna().empty:
             continue
+        start_value = float(series.iloc[0])
+        end_value = float(series.iloc[-1])
+        if start_value != 0:
+            growth_value = round(((end_value - start_value) / start_value) * 100.0, 2)
+        else:
+            growth_value = round(end_value - start_value, 2)
         result_rows.append(
             {
                 "Region": region_name,
                 avg_col: round(float(series.mean()), 2),
-                growth_col: round(float(series.iloc[-1] - series.iloc[0]), 2),
+                growth_col: growth_value,
             }
         )
 
@@ -1448,9 +1825,13 @@ def build_region_growth_analysis(
             "Fastest Growth Region": ", ".join(fastest_regions),
             growth_col: max_growth,
         },
+        "fastest_growth_region": ", ".join(fastest_regions),
+        "growth_column": growth_col,
+        "average_column": avg_col,
         "fastest_growth_rows": fastest_growth_rows,
-        "start_year": start_year,
-        "end_year": end_year,
+        "start_year": actual_start_year,
+        "end_year": actual_end_year,
+        "used_years": actual_years,
     }
 
 
@@ -2048,24 +2429,23 @@ def build_market_share_shipment_report(
                 )
                 if quarter_col_idx is None:
                     quarter_col_idx = 1
-                brand_columns: list[tuple[int, str]] = []
-                for col_idx in range(quarter_col_idx + 1, len(header_row)):
-                    label = header_row[col_idx]
-                    if not label or label.lower().startswith("in %"):
-                        break
-                    brand_columns.append((col_idx, label))
-                records: list[dict[str, Any]] = []
-                for row in norm_rows[header_idx + 1:]:
-                    if quarter_col_idx >= len(row) or not quarter_pattern.match(row[quarter_col_idx]):
-                        if records:
-                            break
-                        continue
-                    record = {"Time": row[quarter_col_idx]}
-                    for col_idx, label in brand_columns:
-                        value = row[col_idx] if col_idx < len(row) else ""
-                        numeric = pd.to_numeric(pd.Series([value.replace("%", "")]), errors="coerce").iloc[0]
+                brand_columns = _select_contiguous_labeled_columns(
+                    header_row,
+                    start_col_idx=quarter_col_idx + 1,
+                    stop_markers=("in %",),
+                )
+                records = _extract_period_records(
+                    norm_rows[header_idx + 1:],
+                    period_col_idx=quarter_col_idx,
+                    labeled_columns=brand_columns,
+                    is_period_value=lambda value: bool(quarter_pattern.match(_normalize_cell_text(value))),
+                    period_transform=_normalize_cell_text,
+                    period_key="Time",
+                )
+                for record in records:
+                    for _col_idx, label in brand_columns:
+                        numeric = pd.to_numeric(pd.Series([str(record[label]).replace("%", "")]), errors="coerce").iloc[0]
                         record[label] = 0.0 if pd.isna(numeric) else float(numeric)
-                    records.append(record)
                 if records:
                     market_share_df = pd.DataFrame(records)
 
@@ -2093,18 +2473,20 @@ def build_market_share_shipment_report(
     if market_share_df is None or shipment_df is None:
         raise ValueError("Could not identify both market-share and shipment tables from the loaded workbooks.")
 
-    overlap_df = market_share_df.merge(shipment_df, on="Time", how="inner")
-    if overlap_df.empty:
-        raise ValueError("No overlapping quarter period was found between market share and shipment tables.")
+    try:
+        overlap_df = _merge_on_shared_period(market_share_df, shipment_df, period_col="Time")
+    except ValueError as exc:
+        raise ValueError("No overlapping quarter period was found between market share and shipment tables.") from exc
 
     brand_columns = [col for col in market_share_df.columns if col != "Time"]
-    output_df = pd.DataFrame({"Year": overlap_df["Time"]})
-    for brand in brand_columns:
-        output_df[f"{brand} (Unit shipment)"] = (
-            pd.to_numeric(overlap_df[brand], errors="coerce").fillna(0).astype(float)
-            * pd.to_numeric(overlap_df["Shipment"], errors="coerce").fillna(0).astype(float)
-            / 100.0
-        ).round(2)
+    output_df = _build_weighted_period_output(
+        overlap_df,
+        period_col="Time",
+        value_columns=brand_columns,
+        weight_col="Shipment",
+        output_period_col="Year",
+        output_label_template="{name} (Unit shipment)",
+    )
 
     detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
     return {
@@ -3007,13 +3389,15 @@ def compute_feature_correlations(
 
 def build_correlation_matrix_table(
     df: pd.DataFrame,
-    numeric_columns: Sequence[str],
+    numeric_columns: Sequence[str] | None = None,
     filter_column: str | None = None,
     filter_value: Any | None = None,
     round_digits: int = 2,
 ) -> Dict[str, Any]:
     """Build a labeled correlation matrix table for selected numeric columns."""
     working_df = df.copy()
+    if numeric_columns is None:
+        numeric_columns = working_df.select_dtypes(include="number").columns.tolist()
     if filter_column is not None:
         actual_filter_col = _resolve_column_name(working_df.columns, filter_column)
         normalized_filter = _normalize_cell_text(filter_value).lower()
@@ -3333,6 +3717,12 @@ def build_dependency_schedule(
 
 
 __all__ = [
+    "select_contiguous_labeled_columns",
+    "find_first_period_cell",
+    "extract_period_records",
+    "merge_on_shared_period",
+    "build_grouped_assignment_join",
+    "build_weighted_period_output",
     "load_all_tables",
     "find_table_by_headers",
     "infer_common_key",

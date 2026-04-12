@@ -13,10 +13,12 @@ logger = LoggerRegistry.setup_logger(__name__)
 class InteractStage(Stage):
     """Lightweight LLM pass-through for text-only interactions."""
 
-    def __init__(self, client, deployment: str, progress_logger=None):
+    def __init__(self, client, deployment: str, progress_logger=None,
+                 prompt_profile: str = "online_rich"):
         self.client = client
         self.deployment = deployment
         self.progress_logger = progress_logger
+        self._is_offline = prompt_profile == "offline_strict"
 
     def run(self, user_message: str) -> str:
         prompt_text = (
@@ -30,7 +32,10 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT PROMPT]", prompt_text])
             )
-        response = call_llm(self.client, self.deployment, messages)
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 256
+        response = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         if self.progress_logger:
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT OUTPUT]", response or ""])
@@ -71,7 +76,10 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT CONTEXT PROMPT]", prompt_text])
             )
-        response = call_llm(self.client, self.deployment, messages)
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 256
+        response = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         summary = (response or "").strip()
         if self.progress_logger:
             self.progress_logger.log_raw(
@@ -89,7 +97,10 @@ class InteractStage(Stage):
             self.progress_logger.log_raw(
                 "\n".join(["### [INTERACT ROUTER PROMPT]", prompt_text])
             )
-        response = call_llm(self.client, self.deployment, messages)
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 64
+        response = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         parsed = self._parse_yes_no(response or "")
         if parsed is None:
             return default

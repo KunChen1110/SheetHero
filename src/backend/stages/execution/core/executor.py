@@ -4,6 +4,8 @@ import re
 import traceback
 from typing import Optional
 
+from ....environment.sandbox.runner import SandboxExecutionError
+
 
 # Forbidden patterns for bounded/offline mode (no pd.read_excel, openpyxl, literal paths)
 # Path rules: only forbid string *literals* (e.g. "/Users/...") so list_all_workbooks() return values are allowed
@@ -101,7 +103,16 @@ class CodeExecutor:
                 result = "Code executed successfully (no output)"
 
         except Exception as e:
-            result = f"Execution error: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+            stdout_output = getattr(e, "stdout", "")
+            stderr_output = getattr(e, "stderr", "")
+            if stdout_output:
+                result += f"Output:\n{stdout_output}\n"
+            if stderr_output:
+                result += f"Errors/Warnings:\n{stderr_output}\n"
+            if isinstance(e, SandboxExecutionError):
+                result += f"Execution error: {str(e)}\nTraceback:\n{e.traceback_text}"
+            else:
+                result += f"Execution error: {str(e)}\nTraceback:\n{traceback.format_exc()}"
 
         if len(result) <= 10000:
             return result

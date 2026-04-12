@@ -174,6 +174,11 @@ class ExecutionQuestionInferenceAdvisor:
     ) -> RuntimeExecutionPlan:
         mentioned = self.headers_mentioned_in_question(observed_headers, user_question)
 
+        def _exclude_as_non_feature(header: str) -> bool:
+            normalized = self.normalize_header_name_for_grounding(header)
+            tokens = set(normalized.split())
+            return bool(tokens & {"id", "date", "time", "timestamp", "note", "comment"})
+
         if helper_name == "compute_feature_correlations":
             question = self.normalize_question_text(user_question)
             feature_cols = tuple(
@@ -226,6 +231,35 @@ class ExecutionQuestionInferenceAdvisor:
                 categorical_cols_to_encode=feature_cols,
                 numeric_cols_to_coerce=feature_cols,
                 output_contract={"kind": "ranked_rows", "sheet_name": "Output"},
+            )
+
+        if helper_name == "fit_linear_regression_weights":
+            predictor_candidates = [
+                header for header in observed_headers
+                if not _exclude_as_non_feature(header)
+                and not header_is_target_like(header)
+            ]
+            target_candidates = [
+                header for header in observed_headers
+                if header not in predictor_candidates and not _exclude_as_non_feature(header)
+            ]
+            target_col = next((header for header in target_candidates if header_is_target_like(header)), None)
+            if target_col is None:
+                target_col = next((header for header in observed_headers if header_is_target_like(header)), None)
+            if target_col is None:
+                target_col = next((header for header in target_candidates), None)
+            feature_cols = tuple(
+                header for header in observed_headers
+                if header != target_col and not _exclude_as_non_feature(header)
+            )
+            return RuntimeExecutionPlan(
+                skill_name=skill_name,
+                task_type="regression",
+                table_roles={"primary_table": "runtime_selected"},
+                target_col=target_col,
+                feature_cols=feature_cols,
+                numeric_cols_to_coerce=feature_cols + ((target_col,) if target_col else ()),
+                output_contract={"kind": "coefficient_table", "sheet_name": "Output"},
             )
 
         return RuntimeExecutionPlan(

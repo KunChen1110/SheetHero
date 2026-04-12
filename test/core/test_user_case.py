@@ -20,6 +20,7 @@ Outputs:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import shutil
@@ -105,6 +106,10 @@ def run_single_test(test_n: int, output_mode: str) -> Dict[str, Any]:
         str(DATASET_DIR),
     ]
 
+    offline_model = os.getenv("SHEETHERO_OFFLINE_MODEL", "").strip()
+    if offline_model:
+        cmd.extend(["--offline-model", offline_model])
+
     proc = subprocess.run(
         cmd,
         capture_output=True,
@@ -171,10 +176,10 @@ def find_latest_logger_for_test(test_n: int) -> Path | None:
     """
     Find the latest logger markdown file for a given test number.
 
-    Log files follow the pattern: sheethero_tcXX_*.md under src/backend/loggers.
+    Log files follow the pattern: sheethero_tcXX_*.md under artifacts/loggers.
     Returns the most recent one, or None if not found.
     """
-    log_dir = PROJECT_ROOT / "src" / "backend" / "loggers"
+    log_dir = PROJECT_ROOT / "artifacts" / "loggers"
     if not log_dir.exists():
         return None
 
