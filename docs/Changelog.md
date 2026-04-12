@@ -300,7 +300,7 @@
 
 ## 23/3/2026
 ### --- Added ---
-- Added a centralized task-family registry in `src/backend/task_families.py`
+- Added a centralized family registry in `src/backend/task_families.py`
   - Introduced abstract spreadsheet capability families instead of relying on scattered task-specific branching.
   - Centralized family-level policy for:
     - helper selection
@@ -335,9 +335,9 @@
   - `build_multi_key_relational_join_report(...)`
   - `build_capacity_constrained_allocation_report(...)`
 
-- Added synthetic family regression coverage
-  - Added `test/utils/run_family_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
-  - Added CLI support for one-command execution via `!FamilySyntheticTest`.
+- Added synthetic skill regression coverage
+  - Added `test/utils/run_skill_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
+  - Added CLI support for one-command execution via `!SkillSyntheticTest`.
 
 ### --- Changed ---
 - Reworked the backend from task-oriented patches to family-oriented architecture
@@ -346,10 +346,10 @@
 
 - Strengthened deterministic execution and reduced LLM dependence
   - For covered families, execution now prefers deterministic helper-first fast paths before invoking model-generated code.
-  - Reduced runtime latency and improved reliability for covered spreadsheet task families.
+  - Reduced runtime latency and improved reliability for covered spreadsheet skills.
 
 - Strengthened family-aware validation
-  - Added family-specific deterministic workbook inspectors for:
+  - Added skill-specific deterministic workbook inspectors for:
     - grouped aggregation
     - temporal aggregation
     - relational join
@@ -373,7 +373,7 @@
 
 ### --- Fixed ---
 - Fixed validation mismatches for deterministic allocation outputs
-  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a family-specific summary row is already valid.
+  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a skill-specific summary row is already valid.
 
 - Fixed large-task architectural drift
   - Moved additional execution/validation family routing logic into centralized registry mappings to reduce duplicated branching and future regression risk.
@@ -389,7 +389,7 @@
 
 ### --- Added ---
 - Added `v4.1` version documentation in `docs/VersionHistory.md`
-  - Documented the local-model upgrade as a validated runtime iteration after the family-based architecture introduced in `v4.0`.
+  - Documented the local-model upgrade as a validated runtime iteration after the skill-based architecture introduced in `v4.0`.
   - Recorded benchmark- and CLI-based regression validation as part of the version narrative.
 
 ### --- Fixed ---
@@ -425,11 +425,11 @@
   - Covered deterministic text-mode paths no longer save workbooks to disk before rendering the response.
 
 - Reorganized execution-stage internals into clearer submodules
-  - Grouped family-specific execution logic under `src/backend/stages/execution/family/`.
+  - Grouped skill-specific execution logic under `src/backend/stages/execution/skill/`.
   - Split large runtime responsibilities into:
-    - family fast paths
-    - family preflight
-    - family prompt augmentation
+    - skill fast paths
+    - skill preflight
+    - skill prompt augmentation
     - generic preflight
     - question-to-helper argument inference
   - Reduced `src/backend/stages/execution/runtime.py` to orchestration-focused responsibilities.
@@ -470,3 +470,40 @@
 
 ### --- Fixed ---
 - Updated `docs/SoftwareManualPlan.md` to reflect the unified architecture: single execution path, consistent stage inheritance, and `call_llm()` shared utility.
+
+## 11/04/2026
+### --- Added ---
+- Added runtime execution plan inference for skill prompts and repair guidance.
+- Added structured QA issue grouping and cleaning policy plans for repeated missing-value decisions.
+
+### --- Changed ---
+- Statistical correlation guidance now uses runtime-inferred target and feature columns instead of testcase-shaped prompt recipes.
+- Cleaning now consumes structured policy plans before any LLM-generated cleaning code.
+
+
+## 12/04/2026
+### --- Added ---
+- Added `skills/` package: `SkillSpec`, `HelperSpec`, keyword-based detectors, skill registry, strategy docs, and helper metadata (grounding requirements, expected result keys, bounded error signatures, preflight guard names).
+- Added `RuntimeExecutionPlan` — schema-grounded execution plan inferred from observed workbook headers and detected skill; injected into LLM prompts to prevent hallucinated column references.
+- Added `WorkflowStep` and `compose_skill_plan()` for deterministic step ordering (load → merge → aggregate → sort/rank → highlight → output).
+- Added `ExecutionSkillPreflightAdvisor`, `ExecutionGenericPreflightAdvisor` under `stages/execution/skill/` (migrated and extended from `execution/family/`).
+- Added `stages/execution/skill/__init__.py` and `ExecutionQuestionInferenceAdvisor.infer_runtime_plan()` for schema-grounded column inference.
+- Added structured cleaning policy plans: QA decisions now produce deterministic actions and LLM-driven policy rules consumed by `DataCleaningStage`.
+- Added comprehensive test suites: `test_detector_precision.py`, `test_skill_composition.py`, `test_execution_preflight.py`, `test_execution_runtime_fallback.py`, `test_execution_prompt_compaction.py`, `test_error_feedback.py`, `test_validation_deterministic.py`, `test_validation_rule_checks.py`, `test_validation_runtime.py`, `test_final_response_stage.py`, `test_execution_error_capture.py`, `test_workflows.py`, `test_diagnose_router.py`, `test_runner_config.py`.
+- Added `run_skill_synthetic_regression.py` replacing the family-based regression runner.
+
+### --- Changed ---
+- Migrated all execution advisor logic from `stages/execution/family/` to `stages/execution/skill/`; `ExecutionSkillPromptAdvisor` now composes prompts dynamically from skill metadata instead of hardcoded family fragments.
+- Simplified `prompt_texts_offline.py` and `prompt_texts_online.py` by removing hardcoded family-specific prompt fragments; skill guidance is now injected dynamically via `build_skill_hint()` / `build_compact_skill_workflow()`.
+- `UnderstandingStage` now detects skill + helper and injects skill workflow hint before calling the LLM.
+- `ExecutionRuntime` turn loop now runs the full advisor pipeline: prompt augmentation → forbidden check → generic preflight → skill preflight → sandbox → output contract → error feedback.
+- `DiagnoseRouter` simplified to evidence-based + optional LLM confirmation; removed hardcoded task-type branches.
+- `QualityAssuranceStage` now finalises decisions as structured policy plans instead of free-form notes.
+- Updated `docs/VersionHistory.md` with v5.0 entry.
+- Updated `docs/FineTuningTaskCoverage.md` and `docs/ProjectPositioning.md` to reflect skill-based architecture.
+
+### --- Removed ---
+- Deleted `src/backend/task_skills.py` (legacy family registry, ~457 lines).
+- Deleted `stages/execution/family/` module entirely: `fast_path.py` (~524 lines), `preflight.py` (~608 lines), `generic_preflight.py` (~244 lines), `question_inference.py` (~422 lines), `prompt.py`, `__init__.py`.
+- Deleted `test/utils/run_family_synthetic_regression.py` (~1146 lines).
+

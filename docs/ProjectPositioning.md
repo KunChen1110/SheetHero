@@ -29,7 +29,7 @@ A purely prompt-driven or one-shot code generation design was insufficient becau
 - local models are more error-prone in code generation
 - validation based only on natural language is unreliable
 
-As a result, the project evolved from a prototype-style LLM workflow into a multi-stage, family-based spreadsheet system.
+As a result, the project evolved from a prototype-style LLM workflow into a multi-stage, skill-based spreadsheet system.
 
 ### 3. Stage-Based Evolution Process
 
@@ -82,7 +82,7 @@ This stage significantly improved:
 - correctness on structured tasks
 - robustness in offline/local-model settings
 
-#### Stage 4: Family-Based Systematization
+#### Stage 4: Skill-Based Systematization
 The latest stage is the most important architectural shift.
 
 Instead of organizing the system around individual benchmark tasks, the backend now organizes logic around abstract spreadsheet capability families. These families represent reusable task structures rather than individual cases.
@@ -107,18 +107,18 @@ This transition matters because it changes the system from:
 
 to:
 
-`family-based spreadsheet reasoning`
+`skill-based spreadsheet reasoning`
 
 This is the main reason the current system is more extensible and better aligned with software engineering principles than an ad hoc benchmark solver.
 
 ### 4. Current System Positioning
 The current system should be described as a:
 
-**family-based spreadsheet agent with deterministic execution and validation support**
+**skill-based spreadsheet agent with deterministic execution and validation support**
 
 This is a more accurate and defensible description than claiming that it can already solve arbitrary office tasks end to end. A more balanced way to position it is:
 
-> the system was originally scoped as an LLM-assisted spreadsheet processing tool, and it has now evolved into a family-based spreadsheet agent that can generalize across multiple structured spreadsheet task families.
+> the system was originally scoped as an LLM-assisted spreadsheet processing tool, and it has now evolved into a skill-based spreadsheet agent that can generalize across multiple structured spreadsheet skills.
 
 In practice, the system is now strongest when a user request falls into a covered spreadsheet family and the input tables are structurally reasonable.
 
@@ -132,12 +132,12 @@ For such tasks, the system can often rely on:
 At the current stage, the project can reasonably claim that it supports:
 - multi-stage spreadsheet task processing
 - family-aware diagnose and QA
-- deterministic helper-first execution for covered task families
+- deterministic helper-first execution for covered skills
 - deterministic validation for covered output structures
 - benchmark-backed diagnose coverage
-- synthetic family regression beyond the original task dataset
+- synthetic skill regression beyond the original task dataset
 
-This is a strong engineering result for a course project because the system is no longer only a testcase runner. It has begun to generalize at the task-family level.
+This is a strong engineering result for a course project because the system is no longer only a testcase runner. It has begun to generalize at the skill level.
 
 ### 6. What It Should Not Overclaim
 The system should not be presented as:
@@ -147,7 +147,7 @@ The system should not be presented as:
 
 The more accurate statement is:
 
-> The current system generalizes across multiple abstract spreadsheet task families, but it is still family-based rather than open-world.
+> The current system generalizes across multiple abstract spreadsheet skills, but it is still skill-based rather than open-world.
 
 That framing is technically honest and aligns with the current implementation.
 
@@ -157,7 +157,7 @@ From a course-project perspective, the current system demonstrates:
 - a clear transition from prompt-heavy prototype to structured software system
 - separation of concerns across stages
 - practical handling of ambiguity through QA
-- measurable evaluation through dataset tasks, diagnose benchmarks, and synthetic family regression
+- measurable evaluation through dataset tasks, diagnose benchmarks, and synthetic skill regression
 - conscious limitation handling rather than unsupported claims
 
 That is a stronger project outcome than a system that only appears flexible in demos but is not internally structured or defensible.

@@ -26,8 +26,9 @@ class DiagnoseStage(Stage):
         self.token_budget = token_budget
         self.progress_logger = progress_logger
         self.prompt_builder = PromptBuilder(profile=prompt_profile)
+        self._is_offline = prompt_profile == "offline_strict"
 
-    def run_readonly(self, workbooks, user_task: str = "") -> List[str]:
+    def run_readonly(self, workbooks, user_task: str = "", understanding_output: str = "") -> List[str]:
         workbook_source = workbooks or {}
         geom_debug_enabled = os.getenv("DIAGNOSE_GEOM_DEBUG") == "1"
         debug_lines: List[str] = []
@@ -56,8 +57,11 @@ class DiagnoseStage(Stage):
             if debug_sections:
                 self.progress_logger.log_raw("\n\n".join(debug_sections))
 
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 512
         try:
-            content = call_llm(self.client, self.deployment, messages)
+            content = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         except Exception:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE ERROR]\nLLM request failed.")
@@ -69,7 +73,7 @@ class DiagnoseStage(Stage):
         questions = self._parse_json_list(content) or []
 
         
-        prioritized = self._prioritize_questions(user_task, questions)
+        prioritized = self._prioritize_questions(user_task, questions, understanding_output)
         if self.progress_logger and prioritized is not None:
             self.progress_logger.log_raw(
                 "\n".join(["### [DIAGNOSE PRIORITIZE OUTPUT]",
@@ -79,13 +83,16 @@ class DiagnoseStage(Stage):
             logger.info(f"Question list generated with {len(questions)} item(s).")
         return prioritized if prioritized is not None else questions
 
-    def _prioritize_questions(self, user_task: str, questions: List[str]) -> Optional[List[str]]:
+    def _prioritize_questions(self, user_task: str, questions: List[str], understanding_output: str = "") -> Optional[List[str]]:
         if not questions:
             return []
-        prompt_text = self.prompt_builder.build_diagnose_prioritize_prompt(user_task, questions)
+        prompt_text = self.prompt_builder.build_diagnose_prioritize_prompt(user_task, questions, understanding_output)
         messages = [{"role": "user", "content": prompt_text}]
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 512
         try:
-            content = call_llm(self.client, self.deployment, messages)
+            content = call_llm(self.client, self.deployment, messages, **llm_kwargs)
         except Exception:
             if self.progress_logger:
                 self.progress_logger.log_raw("### [DIAGNOSE PRIORITIZE ERROR]\nLLM request failed.")

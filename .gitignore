@@ -20,3 +20,4 @@ artifacts/
 
 # Local example lock files
 *.~lock*
+autonomous-upgrade/

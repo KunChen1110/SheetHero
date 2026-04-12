@@ -18,6 +18,12 @@ from ..spreadsheet.tools import (
     get_sheet_from_workbook,
     inspector_multi,
     read_table_multi,
+    select_contiguous_labeled_columns,
+    find_first_period_cell,
+    extract_period_records,
+    merge_on_shared_period,
+    build_grouped_assignment_join,
+    build_weighted_period_output,
     load_all_tables,
     find_table_by_headers,
     infer_common_key,
@@ -38,20 +44,16 @@ from ..spreadsheet.tools import (
     build_region_growth_analysis,
     build_market_share_shipment_report,
     build_cash_flow_efficiency_report,
-    build_diabetes_region_report,
-    build_mobile_reviews_summary_report,
-    build_store_feature_analysis_report,
-    build_ecommerce_merge_report,
-    build_financial_dashboard_report,
-    build_candidate_screening_report,
-    build_inventory_eoq_report,
-    build_hospital_utilisation_report,
     build_group_summary,
     build_grouped_aggregation_ranking_report,
     build_time_series_aggregation_report,
     compute_feature_correlations,
     build_correlation_matrix_table,
     fit_linear_regression_weights,
+    compute_ratio_column,
+    compute_weighted_score,
+    compute_percentage_share,
+    add_rank_column,
     diagnose_format_inconsistencies,
 )
 
@@ -119,6 +121,41 @@ class SpreadsheetNamespace:
                 stop_at_note_row,
             )
 
+        def _build_region_growth_analysis(
+            file_path=None,
+            sheet_name="Data",
+            start_year=2020,
+            end_year=2024,
+            years=None,
+            **kwargs,
+        ):
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs.keys()))
+                raise TypeError(
+                    "build_region_growth_analysis() got unexpected keyword argument(s): "
+                    f"{unknown}"
+                )
+            if isinstance(years, (list, tuple)) and years:
+                normalized_years = [
+                    int(value) for value in years
+                    if str(value).strip().isdigit()
+                ]
+                if normalized_years:
+                    start_year = min(normalized_years)
+                    end_year = max(normalized_years)
+            resolved_path = (
+                file_path
+                if isinstance(file_path, str) and file_path
+                else (workbook_paths[0] if workbook_paths else "")
+            )
+            return build_region_growth_analysis(
+                w,
+                resolved_path,
+                sheet_name,
+                start_year,
+                end_year,
+            )
+
         return SimpleNamespace(
             # ----- read / inspect -----
             get_sheet=self.reader.get_sheet,
@@ -159,6 +196,12 @@ class SpreadsheetNamespace:
             get_sheet_from_workbook=lambda fp, sn: get_sheet_from_workbook(w, fp, sn),
             inspector_multi=lambda fp, rr, sn=None: inspector_multi(w, fp, rr, sn),
             read_table_multi=_read_table_multi,
+            select_contiguous_labeled_columns=select_contiguous_labeled_columns,
+            find_first_period_cell=find_first_period_cell,
+            extract_period_records=extract_period_records,
+            merge_on_shared_period=merge_on_shared_period,
+            build_grouped_assignment_join=build_grouped_assignment_join,
+            build_weighted_period_output=build_weighted_period_output,
             load_all_tables=lambda range_ref="A1:Z200", require_primary_key=True, stop_at_note_row=True: load_all_tables(
                 w,
                 range_ref,
@@ -196,42 +239,16 @@ class SpreadsheetNamespace:
             build_capacity_constrained_allocation_report=lambda range_ref="A1:Z200000": build_capacity_constrained_allocation_report(
                 w, range_ref=range_ref
             ),
-            build_relational_assignment_schedule_report=lambda range_ref="A1:Z200": build_relational_assignment_schedule_report(
+            build_relational_assignment_schedule_report=lambda *args, range_ref="A1:Z200", **kwargs: build_relational_assignment_schedule_report(
                 w, range_ref=range_ref
             ),
             summarize_numeric_column=summarize_numeric_column,
-            build_region_growth_analysis=lambda file_path, sheet_name="Data", start_year=2020, end_year=2024: build_region_growth_analysis(
-                w, file_path, sheet_name, start_year, end_year
-            ),
+            build_region_growth_analysis=_build_region_growth_analysis,
             build_market_share_shipment_report=lambda range_ref="A1:Z300": build_market_share_shipment_report(
                 w, range_ref=range_ref
             ),
             build_cash_flow_efficiency_report=lambda file_path=None: build_cash_flow_efficiency_report(
                 w, file_path=file_path
-            ),
-            build_diabetes_region_report=lambda range_ref="A1:Z200": build_diabetes_region_report(
-                w, range_ref=range_ref
-            ),
-            build_mobile_reviews_summary_report=lambda range_ref="A1:Y50000": build_mobile_reviews_summary_report(
-                w, range_ref=range_ref
-            ),
-            build_store_feature_analysis_report=lambda range_ref="A1:Z100000": build_store_feature_analysis_report(
-                w, range_ref=range_ref
-            ),
-            build_ecommerce_merge_report=lambda range_ref="A1:Z200000": build_ecommerce_merge_report(
-                w, range_ref=range_ref
-            ),
-            build_financial_dashboard_report=lambda range_ref="A1:Z200": build_financial_dashboard_report(
-                w, range_ref=range_ref
-            ),
-            build_candidate_screening_report=lambda range_ref="A1:Z50": build_candidate_screening_report(
-                w, range_ref=range_ref
-            ),
-            build_inventory_eoq_report=lambda range_ref="A1:Z50": build_inventory_eoq_report(
-                w, range_ref=range_ref
-            ),
-            build_hospital_utilisation_report=lambda range_ref="A1:Z10000": build_hospital_utilisation_report(
-                w, range_ref=range_ref
             ),
             build_group_summary=build_group_summary,
             build_grouped_aggregation_ranking_report=lambda file_path=None, sheet_name=None, range_ref="A1:Z200000", group_cols=None, value_col=None, aggregate="mean", top_n=None, sort_desc=True, round_digits=4: build_grouped_aggregation_ranking_report(
@@ -262,6 +279,10 @@ class SpreadsheetNamespace:
             compute_feature_correlations=compute_feature_correlations,
             build_correlation_matrix_table=build_correlation_matrix_table,
             fit_linear_regression_weights=fit_linear_regression_weights,
+            compute_ratio_column=compute_ratio_column,
+            compute_weighted_score=compute_weighted_score,
+            compute_percentage_share=compute_percentage_share,
+            add_rank_column=add_rank_column,
 
             # ----- diagnose -----
             diagnose_format_inconsistencies=diagnose_format_inconsistencies,

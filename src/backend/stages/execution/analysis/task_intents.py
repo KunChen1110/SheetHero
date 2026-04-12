@@ -347,42 +347,6 @@ def is_cycle_detection_request(user_question: str) -> bool:
     return "contain a cycle" in q or "contains a cycle" in q or ("cycle" in q and "graph" in q)
 
 
-def is_financial_dashboard_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = (
-        "gross profit",
-        "net profit",
-        "gross profit margin",
-        "net profit margin",
-        "customer acquisition cost",
-        "marketing efficiency ratio",
-    )
-    return sum(1 for marker in markers if marker in q) >= 4
-
-
-def is_candidate_screening_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = (
-        "rank the candidates",
-        "candidate information",
-        "working experience",
-        "number of skills",
-        "personality score",
-    )
-    return sum(1 for marker in markers if marker in q) >= 4
-
-
-def is_inventory_eoq_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    return ("economic order quantity" in q or "eoq" in q) and "reorder point" in q
-
-
-def is_hospital_utilisation_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = ("staff utilisation", "service utilisation", "patient load", "department")
-    return sum(1 for marker in markers if marker in q) >= 3
-
-
 def is_market_share_shipment_request(user_question: str) -> bool:
     q = (user_question or "").lower()
     markers = ("market share", "smartphone", "shipment", "overlapping time period")
@@ -487,57 +451,6 @@ def is_cash_flow_efficiency_request(user_question: str) -> bool:
     return sum(1 for marker in markers if marker in q) >= 2
 
 
-def is_diabetes_region_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = ("diabetics worldwide by region", "share of global", "avg expenditure per person", "diabetes-related health expenditure")
-    return sum(1 for marker in markers if marker in q) >= 2
-
-
-def is_mobile_reviews_summary_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = ("smartphone reviews", "average rating", "number of reviews", "country", "brand")
-    return sum(1 for marker in markers if marker in q) >= 4
-
-
-def is_store_feature_analysis_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    markers = ("store type", "holiday", "weekly sales", "feature1", "feature2")
-    return sum(1 for marker in markers if marker in q) >= 3
-
-
-def is_ecommerce_merge_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    if "e-commerce" in q and "merge" in q and ("product category" in q or "category names" in q) and "translate" in q:
-        return True
-    markers = (
-        "e-commerce",
-        "customers",
-        "orders",
-        "payments",
-        "reviews",
-        "products",
-        "merge into a single table",
-        "translate the product category names into english",
-    )
-    return sum(1 for marker in markers if marker in q) >= 4
-
-
-def is_same_schema_merge_summary_request(user_question: str) -> bool:
-    q = (user_question or "").lower()
-    return (
-        "merge" in q
-        and ("average" in q or "total" in q or "sum" in q)
-        and (
-            "highlight" in q
-            or "highlighted" in q
-            or "red" in q
-            or "most" in q
-            or "max" in q
-            or "highest" in q
-            or "lowest" in q
-        )
-    )
-
 
 def is_dependency_schedule_request(user_question: str) -> bool:
     q = (user_question or "").lower()
@@ -557,8 +470,11 @@ def is_dependency_schedule_request(user_question: str) -> bool:
 
 def header_is_target_like(header: str) -> bool:
     h = (header or "").strip().lower()
-    target_markers = ("sales", "target", "label", "outcome", "revenue", "y")
-    return any(m in h for m in target_markers)
+    tokenized = re.sub(r"[_\W]+", " ", h, flags=re.UNICODE).split()
+    target_markers = ("sales", "target", "label", "outcome", "revenue")
+    if any(marker in h for marker in target_markers):
+        return True
+    return h == "y" or "y" in tokenized
 
 
 def header_is_non_feature_like(header: str) -> bool:
