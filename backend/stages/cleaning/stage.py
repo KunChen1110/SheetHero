@@ -20,6 +20,10 @@ _FILL_MISSING_ACTION_RE = re.compile(
     r" in `(?P<sheet_key>[^`]+)` with (?P<value>.+?)\.$"
 )
 
+_DROP_ROW_ACTION_RE = re.compile(
+    r"^Drop rows in `(?P<sheet_key>[^`]+)` where `(?P<column>[^`]+)` == (?P<value>.+?)\.$"
+)
+
 
 class DataCleaningStage(Stage):
     """Cleaning stage driven by action list (LLM-produced)."""
@@ -115,8 +119,16 @@ class DataCleaningStage(Stage):
         if self.progress_logger:
             self.progress_logger.log_raw("### [CLEANING CODE]\n" + code)
 
+        def _make_find_workbook(wb_dict: Dict[str, Any]):
+            def find_workbook(name: str):
+                for path, wb in wb_dict.items():
+                    if path == name or path.endswith("/" + name) or path.endswith("\\" + name):
+                        return wb
+                return None
+            return find_workbook
+
         try:
-            result = sandbox.run(code)
+            result = sandbox.run(code, extra_globals={"find_workbook": _make_find_workbook(workbooks)})
             stdout = (result or {}).get("stdout", "")
             stderr = (result or {}).get("stderr", "")
 
@@ -165,6 +177,11 @@ class DataCleaningStage(Stage):
         action: str,
     ) -> Optional[tuple[str, str]]:
         text = str(action or "").strip()
+
+        drop_match = _DROP_ROW_ACTION_RE.match(text)
+        if drop_match:
+            return self._apply_drop_rows_action(workbooks, drop_match, text)
+
         match = _FILL_MISSING_ACTION_RE.match(text)
         if not match:
             return None
@@ -192,6 +209,39 @@ class DataCleaningStage(Stage):
                 f"Skipped deterministic fill for `{column_name}` at Excel row {excel_row} in `{sheet_key}` because the cell already has a value."
             )
         cell.value = parsed_value
+        return "applied_actions", text
+
+    def _apply_drop_rows_action(
+        self,
+        workbooks: Dict[str, Any],
+        match: re.Match,
+        text: str,
+    ) -> tuple[str, str]:
+        sheet_key = match.group("sheet_key").strip()
+        column_name = match.group("column").strip()
+        target_value = match.group("value").strip()
+
+        workbook, worksheet = self._resolve_sheet(workbooks, sheet_key)
+        if workbook is None or worksheet is None:
+            return "skipped_actions", f"Could not resolve sheet `{sheet_key}` for action: {text}"
+
+        column_index = self._find_column_index(worksheet, column_name)
+        if column_index is None:
+            return "skipped_actions", f"Could not resolve column `{column_name}` in `{sheet_key}`."
+
+        # Collect rows to delete (bottom-up to preserve indices)
+        rows_to_delete = []
+        for row_idx in range(worksheet.max_row, 1, -1):  # skip header row 1
+            cell = worksheet.cell(row=row_idx, column=column_index)
+            if str(cell.value or "").strip() == target_value:
+                rows_to_delete.append(row_idx)
+
+        if not rows_to_delete:
+            return "skipped_actions", f"No rows found in `{sheet_key}` where `{column_name}` == {target_value}."
+
+        for row_idx in rows_to_delete:
+            worksheet.delete_rows(row_idx)
+
         return "applied_actions", text
 
     @staticmethod
