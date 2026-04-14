@@ -1,0 +1,64 @@
+{
+  "name": "sheet-hero",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/main/electron.ts",
+  "scripts": {
+    "build:backend": "cd ../.. && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && cp dist/sheet-hero-backend src/sheet-hero/python-dist/sheet-hero-backend",
+    "build:electron": "vite build && electron-builder",
+    "build": "npm run build:backend && npm run build:electron",
+    "preview": "vite preview",
+    "lint": "eslint",
+    "dev:frontend": "vite",
+    "dev:backend": "python ../../main.py",
+    "dev:electron": "electron .",
+    "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\" "
+  },
+  "dependencies": {
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.24",
+    "concurrently": "^9.2.1",
+    "electron": "^40.1.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript-eslint": "^8.54.0",
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.sheethero.app",
+    "productName": "SheetHero",
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "extraResources": [
+      {
+      "from": "python-dist/sheet-hero-backend",
+      "to": "sheet-hero-backend"
+      }
+    ],
+    "files": [
+      "src/main/**/*",
+      "dist/renderer/**/*"
+    ]
+  }
+}
