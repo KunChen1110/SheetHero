@@ -81,6 +81,13 @@ class SheetHero:
 
         if self.output_preferences.get("mode") == "file":
             self._output_path = self.output_preferences.get("file_path")
+            # If caller passed a directory instead of a file path, generate a filename inside it
+            if self._output_path and os.path.isdir(self._output_path):
+                base_name = (
+                    os.path.splitext(os.path.basename(self.excel_paths[0]))[0]
+                    if self.excel_paths else "sheethero"
+                )
+                self._output_path = os.path.join(self._output_path, f"{base_name}_output.xlsx")
         else:
             self._output_path = build_default_output_path(self.excel_paths, __file__)
         self._output_existed_before = os.path.exists(self._output_path)
@@ -189,6 +196,7 @@ class SheetHero:
             progress_logger=self.progress_logger,
             prompt_profile=self.prompt_profile,
         )
+        print("DEBUG SheetHero logger file =", self.progress_logger.file)
 
     def _resolve_prompt_profile(self) -> str:
         """Select prompt profile for current runtime."""
@@ -719,6 +727,8 @@ class SheetHero:
         session.pending_execution_context = None
         self.qa_stage.reset()
         log_final_report(self.progress_logger, session)
+        if self.progress_logger:
+            self.progress_logger.close()
         return {"type": "final", "result": session.result}
 
     def _get_context_paths(self, session: SheetHeroSession) -> List[str]:
