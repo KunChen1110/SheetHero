@@ -71,8 +71,9 @@ def build_default_output_path(excel_paths: list[str], module_file: str) -> str:
     first_input = excel_paths[0] if excel_paths else "output"
     base_name = os.path.splitext(os.path.basename(first_input))[0]
     task_dir = os.path.basename(os.path.dirname(first_input)) or "output"
+    # SheetHero.py lives at backend/agent/core/ → go up 3 levels to reach project root
     project_root = os.path.abspath(
-        os.path.join(os.path.dirname(module_file), "../../../..")
+        os.path.join(os.path.dirname(module_file), "../../..")
     )
     artifacts_dir = os.path.join(project_root, "artifacts", task_dir)
     os.makedirs(artifacts_dir, exist_ok=True)
