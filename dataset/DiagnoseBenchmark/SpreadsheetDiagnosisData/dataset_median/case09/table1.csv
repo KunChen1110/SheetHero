@@ -1,0 +1,26 @@
+ListingID,PropertyType,City,Neighborhood,Price_USD,Bedrooms,Bathrooms,Area_sqft,Year_Built,Days_on_Market
+LST8001,Apartment,New York,Downtown,2749858.0,5,1,2752,2003,136
+LST8002,House,Los Angeles,Midtown,2566863.0,1,1,852,2010,130
+LST8003,Condo,Chicago,Uptown,986794.0,5,2,1273,1995,134
+LST8004,Townhouse,Houston,Suburbs,1741798.0,2,4,972,2007,115
+LST8005,Villa,Miami,Waterfront,2897380.0,4,2,2702,2001,117
+LST8006,Apartment,Seattle,Arts District,2126320.0,5,4,3355,1994,6
+LST8007,House,Boston,Financial District,1597238.0,1,2,2968,1979,12
+LST8008,Condo,Denver,University Area,1684647.0,1,1,4428,1979,121
+LST8009,Townhouse,Atlanta,Historic Quarter,449965.0,4,2,3749,1983,165
+LST8010,Villa,San Francisco,Tech Hub,3431750.0,4,3,4250,1999,115
+LST8011,Apartment,New York,Downtown,3089304.0,4,4,928,2018,170
+LST8012,House,Los Angeles,Midtown,3104844.0,2,3,1085,1986,138
+LST8013,Condo,Chicago,Uptown,1588135.0,2,2,4019,1975,6
+LST8014,Townhouse,Houston,Suburbs,3432246.0,4,4,2778,1999,59
+LST8015,Villa,Miami,Waterfront,1129663.0,3,2,1729,1987,29
+LST8016,Apartment,Seattle,Arts District,451485.0,4,1,1585,1988,18
+LST8017,House,Boston,Financial District,667825.0,1,4,3048,2018,13
+LST8018,Condo,Denver,University Area,1120913.0,1,4,2397,1989,139
+LST8019,Townhouse,Atlanta,Historic Quarter,1034398.0,1,2,2663,1993,60
+LST8020,Villa,San Francisco,Tech Hub,2919727.0,5,3,2965,2013,173
+LST8021,Apartment,New York,Downtown,2927905.0,2,3,4189,1984,170
+LST8022,House,Los Angeles,Midtown,1991941.0,4,3,1727,1978,143
+LST8023,Condo,Chicago,Uptown,3337839.0,2,4,2876,2006,13
+LST8024,Townhouse,Houston,Suburbs,3412714.0,4,3,3452,2001,105
+LST8025,Villa,Miami,Waterfront,820035.0,4,2,3690,2009,122

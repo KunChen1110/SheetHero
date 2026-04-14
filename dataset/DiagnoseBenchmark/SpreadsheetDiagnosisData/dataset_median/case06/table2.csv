@@ -1,0 +1,11 @@
+Department,DeptCode,VP_Name,Headcount,Annual_Budget_USD,Location,Established_Year,Cost_Center
+Engineering,ENG,Sarah Chen,180,24000000,San Francisco,2005,CC001
+Marketing,MKT,Tom Bradley,45,8500000,New York,2005,CC002
+Finance,FIN,Alex Rivera,35,6000000,New York,2005,CC003
+Sales,SLS,Diana Fox,95,15000000,Chicago,2006,CC004
+Operations,OPS,Mark Liu,120,18000000,Austin,2007,CC005
+HR,HR,Grace Kim,28,4200000,New York,2005,CC006
+Legal,LGL,Ryan Cole,18,5800000,Washington DC,2008,CC007
+Product,PRD,Nina Patel,55,9500000,San Francisco,2010,CC008
+Customer Success,CS,Omar Hassan,72,7800000,Austin,2012,CC009
+IT,IT,Lily Zhang,40,11000000,Seattle,2005,CC010

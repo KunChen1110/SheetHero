@@ -10,9 +10,10 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ..log.logger_registry import LoggerRegistry
+from ..stages.base.llm_utils import call_llm
 from ..prompt.prompt_builder import PromptBuilder
-from ..task_families import should_skip_diagnose
 from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
+from ..skills import detect_skill
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -50,6 +51,7 @@ class DiagnoseRouter:
         self.deployment = deployment
         self.progress_logger = progress_logger
         self.prompt_builder = PromptBuilder(profile=prompt_profile)
+        self._is_offline = prompt_profile == "offline_strict"
 
     def decide(self, user_question: str, understanding_output: str,
                workbook_view) -> DiagnoseDecision:
@@ -59,12 +61,6 @@ class DiagnoseRouter:
             reasons = [f"data_evidence:{len(evidence_issues)}"]
             issues = evidence_issues
         else:
-            should_diagnose = self._deterministic_fallback_decision(user_question)
-            reasons = [f"deterministic:{'YES' if should_diagnose else 'NO'}"]
-            issues = []
-
-        use_llm_fallback = os.getenv("SHEETHERO_ROUTER_LLM_FALLBACK", "0").strip() == "1"
-        if use_llm_fallback and not evidence_issues:
             prompt = self.prompt_builder.build_diagnose_router_prompt(
                 user_question=user_question,
                 understanding_output=understanding_output
@@ -73,6 +69,10 @@ class DiagnoseRouter:
             if llm_decision is not None:
                 should_diagnose = llm_decision
                 reasons = [f"llm:{'YES' if should_diagnose else 'NO'}"]
+            else:
+                should_diagnose = False
+                reasons = ["llm:UNAVAILABLE"]
+            issues = []
 
         if self.progress_logger:
             self.progress_logger.log(
@@ -90,47 +90,6 @@ class DiagnoseRouter:
             reasons=reasons,
             issues=issues,
         )
-
-    @staticmethod
-    def _deterministic_fallback_decision(user_question: str) -> Optional[bool]:
-        text = (user_question or "").strip().lower()
-        if not text:
-            return False
-
-        def has_phrase(phrase: str) -> bool:
-            escaped = re.escape(phrase.lower())
-            return re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", text) is not None
-
-        if ("fill any missing" in text or "fill missing" in text) and "using" in text and "file" in text:
-            return False
-
-        candidate_screening_markers = (
-            "rank the candidates",
-            "candidate information",
-            "working experience",
-            "personality score",
-        )
-        if sum(1 for marker in candidate_screening_markers if marker in text) >= 3:
-            return False
-
-        explicit_cleaning_markers = (
-            "clean",
-            "cleaning",
-            "normalize",
-            "normalise",
-            "standardize",
-            "standardise",
-            "deduplicate",
-            "de-duplicate",
-            "fix data",
-            "impute",
-            "fill blank",
-            "fill blanks",
-            "remove duplicates",
-            "resolve inconsistency",
-            "resolve inconsistencies",
-        )
-        return any(has_phrase(marker) for marker in explicit_cleaning_markers)
 
     @staticmethod
     def _normalize_header_name(text: str) -> str:
@@ -157,11 +116,40 @@ class DiagnoseRouter:
     @classmethod
     def _is_self_reporting_issue_task(cls, user_question: str) -> bool:
         q = (user_question or "").lower()
-        if "missing data" in q and ("identify where" in q or "where values are missing" in q or "check the file" in q):
-            return True
-        if "room identifiers" in q or "room identifier" in q or "c80" in q or "c 80" in q:
-            return True
-        return False
+        skill = detect_skill(user_question)
+        if skill is None or skill.output_mode != "text":
+            return False
+
+        reporting_markers = (
+            "identify",
+            "find",
+            "locate",
+            "report",
+            "scan",
+            "check",
+            "detect",
+            "audit",
+            "inspect",
+            "which",
+            "show",
+        )
+        remediation_markers = (
+            "clean",
+            "fix",
+            "correct",
+            "normalize",
+            "normalise",
+            "standardize",
+            "standardise",
+            "fill",
+            "impute",
+            "replace",
+            "resolve",
+            "repair",
+        )
+        return any(marker in q for marker in reporting_markers) and not any(
+            marker in q for marker in remediation_markers
+        )
 
     @classmethod
     def _coerce_workbook_view(cls, workbook_view) -> Dict[str, pd.DataFrame]:
@@ -269,6 +257,25 @@ class DiagnoseRouter:
                 scored.append((score, column_name))
         scored.sort(key=lambda item: (-item[0], item[1].lower()))
         return [column_name for _, column_name in scored[:4]]
+
+    @classmethod
+    def _is_low_confidence_table(cls, df: pd.DataFrame) -> bool:
+        if df is None or not hasattr(df, "columns"):
+            return False
+
+        normalized_headers = [
+            cls._normalize_header_name(str(column_name))
+            for column_name in getattr(df, "columns", [])
+            if cls._normalize_header_name(str(column_name))
+        ]
+        overflow_rows = getattr(df, "attrs", {}).get("overflow_excel_rows") or []
+        overflow_count = len(overflow_rows) if isinstance(overflow_rows, list) else 0
+
+        if len(normalized_headers) <= 1 and (len(df) >= 5 or overflow_count >= 2):
+            return True
+        if overflow_count >= max(3, len(df) // 2):
+            return True
+        return False
 
     @classmethod
     def _is_missing_value(cls, value: Any) -> bool:
@@ -514,7 +521,19 @@ class DiagnoseRouter:
 
     @classmethod
     def _extract_requested_years(cls, user_question: str) -> List[int]:
-        years = sorted({int(token) for token in re.findall(r"\b(19\d{2}|20\d{2})\b", user_question or "")})
+        text = user_question or ""
+        range_matches = list(
+            re.finditer(r"\b(19\d{2}|20\d{2})\s*(?:-|–|to)\s*(19\d{2}|20\d{2})\b", text, flags=re.IGNORECASE)
+        )
+        if range_matches:
+            latest = range_matches[-1]
+            start_year = int(latest.group(1))
+            end_year = int(latest.group(2))
+            if start_year <= end_year and end_year - start_year <= 10:
+                return list(range(start_year, end_year + 1))
+            return sorted({start_year, end_year})
+
+        years = sorted({int(token) for token in re.findall(r"\b(19\d{2}|20\d{2})\b", text)})
         return years
 
     @classmethod
@@ -1028,7 +1047,7 @@ class DiagnoseRouter:
     @classmethod
     def _is_entity_descriptor_header(cls, column_name: str) -> bool:
         normalized = cls._normalize_header_name(column_name)
-        if normalized in {"name", "email", "room", "code", "identifier", "id"}:
+        if normalized in {"name", "email", "room", "code", "identifier", "id", "role", "title", "position", "department"}:
             return True
         if any(token in normalized for token in ("employee id", "customer id", "order id")):
             return True
@@ -1036,7 +1055,7 @@ class DiagnoseRouter:
             return True
         return any(
             re.search(rf"(^| ){token}($| )", normalized)
-            for token in ("name", "email", "code", "identifier", "id")
+            for token in ("name", "email", "code", "identifier", "id", "role", "title", "position", "department")
         )
 
     @classmethod
@@ -1054,6 +1073,9 @@ class DiagnoseRouter:
 
         for key_col in key_columns:
             for descriptor_col in [col for col in descriptor_columns if col != key_col]:
+                normalized_descriptor = cls._normalize_header_name(descriptor_col)
+                if normalized_descriptor in {"role", "title", "position", "department"}:
+                    continue
                 working = df[[key_col, descriptor_col]].copy()
                 row_index_column = "___router_row_index___"
                 working[row_index_column] = list(range(len(df)))
@@ -1487,6 +1509,7 @@ class DiagnoseRouter:
                 continue
             file_name, sheet_name = cls._extract_sheet_parts(sheet_key)
             latest_available = max(available_years)
+            available_requested_years = sorted(requested_set & available_set)
             details_lines = [
                 "Context preview:",
                 f"Requested years: {', '.join(str(year) for year in requested_years)}",
@@ -1495,11 +1518,22 @@ class DiagnoseRouter:
             description = (
                 f"In sheet `{sheet_key}`, requested period values {missing_years} are missing from the available data."
             )
-            question = (
-                f"I noticed that `{file_name}` / `{sheet_name}` does not contain the requested year(s) "
-                f"{', '.join(str(year) for year in missing_years)}. "
-                f"The latest available year is `{latest_available}`. Should I use the latest available year instead and state that assumption in the result?"
-            )
+            if available_requested_years:
+                first_available = min(available_requested_years)
+                last_available = max(available_requested_years)
+                question = (
+                    f"I noticed that `{file_name}` / `{sheet_name}` does not contain the requested year(s) "
+                    f"{', '.join(str(year) for year in missing_years)}. "
+                    f"Within the requested span, the available years are `{first_available}` to `{last_available}`. "
+                    "Should I shrink the analysis window to the available requested years, interpolate the missing years, "
+                    "or state that the requested period is unavailable?"
+                )
+            else:
+                question = (
+                    f"I noticed that `{file_name}` / `{sheet_name}` does not contain the requested year(s) "
+                    f"{', '.join(str(year) for year in missing_years)}. "
+                    f"The latest available year is `{latest_available}`. Should I use the latest available year instead and state that assumption in the result?"
+                )
             issues.append(
                 cls._make_issue(
                     issue_type="missing_period_endpoint",
@@ -1511,6 +1545,7 @@ class DiagnoseRouter:
                         "sheet_key": sheet_key,
                         "requested_years": requested_years,
                         "available_years": available_years,
+                        "available_requested_years": available_requested_years,
                     },
                 )
             )
@@ -1719,9 +1754,6 @@ class DiagnoseRouter:
     def _detect_blocking_data_issues(cls, workbook_view, user_question: str) -> List[Dict[str, Any]]:
         if cls._is_self_reporting_issue_task(user_question):
             return []
-        if should_skip_diagnose(user_question):
-            return []
-
         coerced = cls._coerce_workbook_view(workbook_view)
         if not coerced:
             return []
@@ -1734,8 +1766,15 @@ class DiagnoseRouter:
         for detector in cross_sheet_detectors:
             found = detector(coerced, user_question)
             issues.extend(found)
+            if any(issue.get("issue_type") == "missing_period_endpoint" for issue in found):
+                return found[:1]
             if len(issues) >= 4:
                 return issues[:4]
+
+        low_confidence_sheets = {
+            sheet_key for sheet_key, df in coerced.items()
+            if cls._is_low_confidence_table(df)
+        }
 
         row_alignment_sheets: set[str] = set()
         for sheet_key, df in coerced.items():
@@ -1757,7 +1796,7 @@ class DiagnoseRouter:
             (cls._detect_conflicting_key_mapping_issues, False),
         )
         for sheet_key, df in coerced.items():
-            if sheet_key in row_alignment_sheets:
+            if sheet_key in row_alignment_sheets or sheet_key in low_confidence_sheets:
                 continue
             for detector, needs_question in detectors:
                 if needs_question:
@@ -1771,12 +1810,12 @@ class DiagnoseRouter:
 
     def _ask_llm(self, prompt: str) -> Optional[bool]:
         messages = [{"role": "user", "content": prompt}]
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 64
         try:
-            response = self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-            )
-            content = (response.choices[0].message.content or "").strip()
+            content = call_llm(self.client, self.deployment, messages, **llm_kwargs)
+            content = content.strip()
         except Exception as exc:
             logger.warning("Diagnose router LLM request failed: %s", exc)
             return None

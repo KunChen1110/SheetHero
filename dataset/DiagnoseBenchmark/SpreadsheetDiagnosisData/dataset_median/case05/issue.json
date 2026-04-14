@@ -1,0 +1,7 @@
+{
+  "issue_type": "inconsistency",
+  "table": "table1.csv",
+  "location": "row=6,column=Satisfaction_Level; row=13,column=Satisfaction_Level; row=19,column=Satisfaction_Level",
+  "description": "Satisfaction_Level uses inconsistent capitalisation: row 6 → 'satisfied' (all lower), row 13 → 'SATISFIED' (all upper), row 19 → 'Very satisfied' (second word lower). Standard encoding is Title Case ('Satisfied', 'Very Satisfied'). GROUP BY will split one category into multiple buckets.",
+  "business_context": "E-commerce post-purchase survey. Inconsistent labels corrupt NPS segmentation and satisfaction-trend dashboards."
+}

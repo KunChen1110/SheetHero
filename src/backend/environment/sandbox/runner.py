@@ -2,6 +2,18 @@
 
 import io
 import sys
+import traceback
+
+
+class SandboxExecutionError(Exception):
+    """Carry partial stdout/stderr when exec() fails."""
+
+    def __init__(self, original_exc: Exception, stdout: str, stderr: str, traceback_text: str):
+        super().__init__(str(original_exc))
+        self.original_exc = original_exc
+        self.stdout = stdout
+        self.stderr = stderr
+        self.traceback_text = traceback_text
 
 
 class SandboxRunner:
@@ -27,6 +39,13 @@ class SandboxRunner:
                 "stdout": stdout_capture.getvalue(),
                 "stderr": stderr_capture.getvalue(),
             }
+        except Exception as exc:
+            raise SandboxExecutionError(
+                original_exc=exc,
+                stdout=stdout_capture.getvalue(),
+                stderr=stderr_capture.getvalue(),
+                traceback_text=traceback.format_exc(),
+            ) from exc
 
         finally:
             sys.stdout = old_stdout

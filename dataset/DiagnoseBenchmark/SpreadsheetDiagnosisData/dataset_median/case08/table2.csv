@@ -1,0 +1,26 @@
+PatientID,Diagnosis_Primary,ICD10_Code,Diagnosis_Date,Severity,Treating_Doctor,Referred_By,Follow_Up_Required
+PAT3001,Hypertension,I10,2023-04-10,Severe,Dr. Brown,Self,False
+PAT3002,Type 2 Diabetes,E11,2023-08-12,Severe,Dr. Jones,GP,False
+PAT3003,Asthma,J45,2023-07-27,Severe,Dr. Williams,Specialist Referral,True
+PAT3004,Coronary Artery Disease,I25,2023-05-23,Mild,Dr. Garcia,Self,False
+PAT3005,Osteoporosis,M81,2023-12-16,mild,Dr. Brown,Specialist Referral,False
+PAT3006,Migraine,G43,2023-03-04,Moderate,Dr. Brown,GP,True
+PAT3007,Appendicitis,K37,2023-11-08,Mild,Dr. Johnson,Self,False
+PAT3008,Pneumonia,J18,2023-12-16,Mild,Dr. Williams,GP,True
+PAT3009,Fractured Femur,S72,2023-07-21,Critical,Dr. Davis,Emergency,False
+PAT3010,Breast Cancer,C50,2023-06-10,Mild,Dr. Johnson,Emergency,True
+PAT3011,Prostate Cancer,C61,2023-03-14,Moderate,Dr. Smith,Self,False
+PAT3012,Stroke,I63,2023-03-24,Severe,Dr. Smith,GP,False
+PAT3013,Heart Failure,I50,2023-10-20,Mild,Dr. Garcia,Specialist Referral,False
+PAT3014,COPD,J44,2023-11-18,Critical,Dr. Williams,Self,False
+PAT3015,Kidney Disease,N18,2023-04-26,Mild,Dr. Garcia,Emergency,False
+PAT3016,Anemia,D50,2023-11-09,Moderate,Dr. Smith,Specialist Referral,False
+PAT3017,Thyroid Disorder,E07,2023-10-22,Moderate,Dr. Williams,Self,False
+PAT3018,Arthritis,M05,2023-09-11,SEVERE,Dr. Miller,GP,True
+PAT3019,Sepsis,A41,2023-03-16,Severe,Dr. Brown,GP,False
+PAT3020,Liver Cirrhosis,K74,2023-07-08,Critical,Dr. Jones,Specialist Referral,False
+PAT3021,Inflammatory Bowel,K50,2023-10-24,Mild,Dr. Jones,Specialist Referral,True
+PAT3022,Celiac Disease,K90,2023-01-22,Mild,Dr. Davis,Specialist Referral,True
+PAT3023,Sleep Apnea,G47,2023-07-22,Severe,Dr. Johnson,Specialist Referral,False
+PAT3024,Gout,M10,2023-10-08,Moderate,Dr. Williams,Self,True
+PAT3025,Psoriasis,L40,2023-08-24,Severe,Dr. Miller,Self,True

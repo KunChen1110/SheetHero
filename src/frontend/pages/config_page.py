@@ -1,22 +1,16 @@
-from tkinter import messagebox
 from typing import List
 
 import customtkinter as ctk
 
+from backend import Config, ConfigFactory
 from frontend.components.colors import *
 from frontend.components.footer_frame import FooterFrame
 
-MIN_TURNS: int = 1
-MAX_TURNS: int = 10
+FRONTEND_SCHEMA = ConfigFactory.get_frontend_schema()
+MIN_TURNS: int = int(FRONTEND_SCHEMA["max_turns"]["minimum"])
+MAX_TURNS: int = int(FRONTEND_SCHEMA["max_turns"]["maximum"])
 
-options: List[str] = [
-    "gpt-4o-mini",
-    "gpt-4-32k",
-    "gpt-4",
-    "gpt-4o",
-]
-
-from frontend.components.colors import GREEN
+options: List[str] = list(FRONTEND_SCHEMA["deployment"]["choices"])
 
 
 # Page for setting up the configuration files for the model
@@ -24,6 +18,10 @@ class ConfigPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        self.diagnose_frame = None
+        self.diagnose_label = None
+        self.diagnose_switch = None
+        self.diagnose_description = None
 
         # Main Label
         self.main_label = None
@@ -65,6 +63,12 @@ class ConfigPage(ctk.CTkFrame):
         self.turns_minus = None
         self.turns_description = None
         self.create_turns_frame()
+
+        # Diagnose Frame
+        self.create_diagnose_frame()
+
+    def on_show(self):
+        self._sync_from_controller()
 
     # Creates the main label
     def create_main_label(self):
@@ -341,6 +345,55 @@ class ConfigPage(ctk.CTkFrame):
             padx=20,
         )
 
+    def create_diagnose_frame(self):
+        self.diagnose_frame = ctk.CTkFrame(
+            master=self,
+            height=40,
+            fg_color="transparent",
+        )
+        self.diagnose_frame.pack(
+            side="top",
+            fill="x",
+            padx=30,
+            pady=2,
+        )
+
+        self.diagnose_label = ctk.CTkLabel(
+            master=self.diagnose_frame,
+            text="Diagnose Before Execution",
+            anchor="w",
+        )
+        self.diagnose_label.pack(
+            side="top",
+            anchor="w",
+            padx=20,
+        )
+
+        self.diagnose_switch = ctk.CTkSwitch(
+            master=self.diagnose_frame,
+            text="Enable diagnose and QA for blocking data issues",
+            onvalue=True,
+            offvalue=False,
+        )
+        self.diagnose_switch.pack(
+            side="top",
+            anchor="w",
+            padx=20,
+            pady=(2, 0),
+        )
+
+        self.diagnose_description = ctk.CTkLabel(
+            master=self.diagnose_frame,
+            text="When enabled, the system can ask concrete questions about blocking data issues before execution.",
+            text_color=VERY_LIGHT_GREY,
+            anchor="w",
+        )
+        self.diagnose_description.pack(
+            side="top",
+            fill="x",
+            padx=20,
+        )
+
 
     # Creates the footer
     def create_footer(self):
@@ -400,14 +453,40 @@ class ConfigPage(ctk.CTkFrame):
      # Triggered when the confirm button is pressed
     def on_confirm_pressed(self):
         api_key = self.api_entry.get().strip()
+        base_url = self.url_entry.get().strip()
 
-        if not api_key:
-            messagebox.showwarning("Warning","Please enter an API key.")
+        # When both empty: use default API key from backend Config (online mode)
+        if not api_key and not base_url:
+            self.controller.api_key = Config().api_key
+            self.controller.base_url = None
+            self.controller.deployment = self.deployment_drop.get()
+            self.controller.enable_diagnose = bool(self.diagnose_switch.get())
+            self.controller.show_page("PromptPage")
             return
 
-
-        self.controller.api_key = api_key
-        self.controller.base_url = self.url_entry.get().strip()
+        # When only Base URL is set (e.g. Ollama): API key optional, use placeholder
+        self.controller.api_key = api_key if api_key else "ollama"
+        self.controller.base_url = base_url or None
         self.controller.deployment = self.deployment_drop.get()
+        self.controller.enable_diagnose = bool(self.diagnose_switch.get())
 
         self.controller.show_page("PromptPage")
+
+    def _sync_from_controller(self):
+        self.api_entry.delete(0, "end")
+        controller_key = str(self.controller.api_key or "")
+        default_key = str(Config().api_key or "")
+        if controller_key and controller_key not in {default_key, "ollama"}:
+            self.api_entry.insert(0, controller_key)
+
+        self.url_entry.delete(0, "end")
+        if self.controller.base_url:
+            self.url_entry.insert(0, str(self.controller.base_url))
+
+        self.deployment_drop.set(str(self.controller.deployment))
+        self.update_turns_number()
+
+        if bool(self.controller.enable_diagnose):
+            self.diagnose_switch.select()
+        else:
+            self.diagnose_switch.deselect()

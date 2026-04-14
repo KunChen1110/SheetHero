@@ -1,0 +1,7 @@
+Date,EmployeeID,Name,Department,Status,Clock_In,Clock_Out,Overtime_hrs
+2024-03-11,E01,Alice Brown,Engineering,Present,09:02,18:15,0.0
+2024-03-11,E02,Bob Davis,Marketing,present,08:55,17:30,0.0
+2024-03-11,E03,Carol Smith,Finance,Absent,,,0.0
+2024-03-11,E04,David Lee,Engineering,PRESENT,09:10,19:45,1.5
+2024-03-11,E05,Eva Wilson,Marketing,Present,08:45,17:20,0.0
+2024-03-11,E06,Frank Taylor,Finance,present,09:00,18:00,0.0
