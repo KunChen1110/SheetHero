@@ -222,7 +222,7 @@ def _handle_output_command(service: SheetHeroService, line: str) -> None:
 
 
 def _load_tasks() -> tuple[list[dict[str, Any]], Path]:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[1]
     candidates = [root / "dataset" / "dataset.json", root / "dataset.json"]
     for json_path in candidates:
         if json_path.exists():
@@ -479,7 +479,8 @@ def _handle_skill_synthetic_command() -> None:
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[2]
+    # backend/main.py lives at team29_project/backend/main.py → parents[1] = team29_project/
+    root = Path(__file__).resolve().parents[1]
     default_output_dir = root / "artifacts" / "output"
 
     config = Config()
