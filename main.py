@@ -4,10 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
 
-from src.backend.agent.core.SheetHero import SheetHero
-from src.backend.config.settings import Config
-from src.backend.service.sheethero_service import SheetHeroService
-from src.backend.service.stream_dialogue_driver import StreamDialogueDriver
+from backend.agent.core.SheetHero import SheetHero
+from backend.config.settings import Config
+from backend.service.sheethero_service import SheetHeroService
+from backend.service.stream_dialogue_driver import StreamDialogueDriver
 
 sessions: dict[str, StreamDialogueDriver] = {}
 
