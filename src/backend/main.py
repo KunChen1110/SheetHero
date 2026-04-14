@@ -6,6 +6,7 @@ import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib import request, error
 
 from .config.settings import Config
 from .diagnose_benchmark import run_diagnose_benchmark
@@ -40,9 +41,43 @@ def _print_llm_config(config: Config) -> None:
     print(
         "[llm config] "
         f"deployment={config.deployment}, "
+        f"understanding={config.resolve_stage_deployment('understanding')}, "
+        f"qa={config.resolve_stage_deployment('qa')}, "
+        f"cleaning={config.resolve_stage_deployment('cleaning')}, "
+        f"execution={config.resolve_stage_deployment('execution')}, "
         f"base_url={base_url}, "
         f"api_key={_mask_key(config.api_key)}"
     )
+
+
+def _fetch_offline_model_names() -> list[str]:
+    try:
+        with request.urlopen("http://localhost:11434/v1/models", timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, error.URLError):
+        return []
+    models = payload.get("data") if isinstance(payload, dict) else []
+    names: list[str] = []
+    for item in models if isinstance(models, list) else []:
+        model_id = str((item or {}).get("id") or "").strip()
+        if model_id:
+            names.append(model_id)
+    return sorted(dict.fromkeys(names))
+
+
+def _prompt_for_offline_model(prompt_text: str = "Model full name") -> str:
+    models = _fetch_offline_model_names()
+    if models:
+        print("Available offline models:")
+        for idx, model_name in enumerate(models, start=1):
+            print(f"{idx:>2}. {model_name}")
+        raw = input(f"{prompt_text} (number or full name): ").strip()
+        if raw.isdigit():
+            index = int(raw)
+            if 1 <= index <= len(models):
+                return models[index - 1]
+        return raw
+    return input(f"{prompt_text} (e.g. qwen3:8b): ").strip()
 
 
 def _print_output_config(config: Config) -> None:
@@ -57,7 +92,16 @@ def _print_output_config(config: Config) -> None:
 def _handle_llm_command(service: SheetHeroService, line: str) -> None:
     parser = argparse.ArgumentParser(prog="!llm", add_help=False)
     parser.add_argument("--show", action="store_true")
+    parser.add_argument("--list-offline", action="store_true")
     parser.add_argument("--switch--offline", dest="switch_offline",
+                        nargs="?", const="__PROMPT__", default=None)
+    parser.add_argument("--switch--offline-understanding", dest="switch_offline_understanding",
+                        nargs="?", const="__PROMPT__", default=None)
+    parser.add_argument("--switch--offline-qa", dest="switch_offline_qa",
+                        nargs="?", const="__PROMPT__", default=None)
+    parser.add_argument("--switch--offline-cleaning", dest="switch_offline_cleaning",
+                        nargs="?", const="__PROMPT__", default=None)
+    parser.add_argument("--switch--offline-execution", dest="switch_offline_execution",
                         nargs="?", const="__PROMPT__", default=None)
 
     try:
@@ -69,27 +113,71 @@ def _handle_llm_command(service: SheetHeroService, line: str) -> None:
         )
         return
 
-    has_update = args.switch_offline is not None
+    has_update = any(
+        value is not None
+        for value in (
+            args.switch_offline,
+            args.switch_offline_understanding,
+            args.switch_offline_qa,
+            args.switch_offline_cleaning,
+            args.switch_offline_execution,
+        )
+    )
+    if args.list_offline:
+        models = _fetch_offline_model_names()
+        if not models:
+            print("No offline models found at http://localhost:11434/v1/models")
+        else:
+            print("Available offline models:")
+            for idx, model_name in enumerate(models, start=1):
+                print(f"{idx:>2}. {model_name}")
     if args.show:
         _print_llm_config(service.config)
-    if not args.show and not has_update:
+    if not args.show and not args.list_offline and not has_update:
         print("Error: usage `!llm --show` or `!llm --switch--offline <model_full_name>`")
         return
+    if args.list_offline and not has_update:
+        return
 
-    if has_update:
-        model_name = args.switch_offline
+    def _resolve_model_name(raw_value: str | None) -> str:
+        model_name = raw_value
         if model_name == "__PROMPT__":
-            model_name = input("Model full name (e.g. qwen3:8b): ").strip()
+            model_name = _prompt_for_offline_model("Model full name")
         else:
             model_name = (model_name or "").strip()
+        return model_name
 
-        if not model_name:
+    if has_update:
+        global_model_name = _resolve_model_name(args.switch_offline)
+        understanding_model_name = _resolve_model_name(args.switch_offline_understanding)
+        qa_model_name = _resolve_model_name(args.switch_offline_qa)
+        cleaning_model_name = _resolve_model_name(args.switch_offline_cleaning)
+        execution_model_name = _resolve_model_name(args.switch_offline_execution)
+
+        model_names = [
+            global_model_name,
+            understanding_model_name,
+            qa_model_name,
+            cleaning_model_name,
+            execution_model_name,
+        ]
+        if not any(model_names):
             print("Error: model full name is required.")
             return
 
         service.config.api_key = ""
         service.config.base_url = "http://localhost:11434/v1"
-        service.config.deployment = model_name
+        if global_model_name:
+            service.config.deployment = global_model_name
+            service.config.set_all_stage_deployments(global_model_name)
+        if understanding_model_name:
+            service.config.understanding_deployment = understanding_model_name
+        if qa_model_name:
+            service.config.qa_deployment = qa_model_name
+        if cleaning_model_name:
+            service.config.cleaning_deployment = cleaning_model_name
+        if execution_model_name:
+            service.config.execution_deployment = execution_model_name
         print("[llm switched] offline mode enabled.")
         _print_llm_config(service.config)
 
@@ -378,16 +466,16 @@ def _handle_diagnose_benchmark_command(line: str) -> None:
     )
 
 
-def _handle_family_synthetic_command() -> None:
+def _handle_skill_synthetic_command() -> None:
     root = Path(__file__).resolve().parents[2]
-    script_path = root / "test" / "utils" / "run_family_synthetic_regression.py"
-    print("[family synthetic] running abstract family regression...")
+    script_path = root / "test" / "utils" / "run_skill_synthetic_regression.py"
+    print("[skill synthetic] running abstract skill regression...")
     try:
         runpy.run_path(str(script_path), run_name="__main__")
-        print("[family synthetic] passed")
+        print("[skill synthetic] passed")
         return
     except Exception as exc:
-        print(f"[family synthetic] failed: {exc}")
+        print(f"[skill synthetic] failed: {exc}")
 
 
 def main() -> None:
@@ -407,14 +495,16 @@ def main() -> None:
     print("Type `!dataset --list` to list dataset tasks.")
     print("Type `!dataset --index N --output_path Task01_output.xlsx` to load and run a dataset task.")
     print("Type `!llm --show` to view active model endpoint settings.")
+    print("Type `!llm --list-offline` to list local offline models from Ollama.")
     print("Type `!llm --switch--offline <model_full_name>` to switch to local LLM.")
+    print("Type `!llm --switch--offline-understanding/qa/cleaning/execution <model_full_name>` to split models by stage.")
     print("Type `!output --show` to view output mode settings.")
     print("Type `!output file|text` to switch output mode.")
     print("Type `!DiagnosebenchmarkTest` to run the small diagnose benchmark.")
     print("Type `!DiagnosebenchmarkTest median` to run the medium diagnose benchmark.")
     print("Type `!DiagnosebenchmarkTest all` to run all diagnose benchmark cases.")
     print("Type `!DiagnosebenchmarkTest --limit N` to run only the first N benchmark cases.")
-    print("Type `!FamilySyntheticTest` to run the abstract family synthetic regression.")
+    print("Type `!SkillSyntheticTest` to run the abstract skill synthetic regression.")
     _print_llm_config(config)
 
     while True:
@@ -440,8 +530,8 @@ def main() -> None:
             _handle_diagnose_benchmark_command(line)
             continue
 
-        if line.lower().startswith("!familysynthetictest"):
-            _handle_family_synthetic_command()
+        if line.lower().startswith("!skillsynthetictest"):
+            _handle_skill_synthetic_command()
             continue
 
         if line.startswith("!llm"):

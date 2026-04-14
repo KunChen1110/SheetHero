@@ -2,6 +2,7 @@ import platform
 import subprocess
 import textwrap
 from tkinter import messagebox
+import re
 
 import threading
 from typing import List, Optional
@@ -10,7 +11,7 @@ import customtkinter as ctk
 import os
 
 from backend import Config
-from backend import SheetHero
+from backend import SheetHeroService
 
 from frontend.components.colors import *
 from frontend.components.file_display import FileDisplay
@@ -19,6 +20,10 @@ from frontend.components.chat_bubble import ChatBubble
 
 # Opens a file specific to user's operating system
 def open_file(path: str):
+    if not path or not os.path.exists(path):
+        messagebox.showerror("File Not Found", f"The file does not exist:\n{path}")
+        return
+
     system = platform.system()
     # Windows open file
     if system == "Windows":
@@ -36,11 +41,54 @@ def open_file(path: str):
             subprocess.run(["less",path])
 
 
+def _extract_saved_file_from_execution_results(result: dict) -> Optional[str]:
+    """Get last saved xlsx path from execution step outputs."""
+    try:
+        all_exec = result.get("all_execution_results") or []
+        for exec_result in reversed(all_exec):
+            summary = (exec_result or {}).get("execution_summary") or {}
+            steps = summary.get("execution_steps") or []
+            for step in reversed(steps):
+                result_text = str((step or {}).get("result") or "")
+                for pattern in (r"Workbook saved to:\s*(.+?)(?:\n|$)", r"SAVED_FILE:\s*(.+?)(?:\n|$)"):
+                    match = re.search(pattern, result_text)
+                    if match:
+                        candidate = match.group(1).strip()
+                        if candidate and os.path.exists(candidate):
+                            return candidate
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_output_file_path(result: dict, configured_output_path: Optional[str]) -> Optional[str]:
+    """Resolve the best output file path for the Open Excel Output button."""
+    # 1) Prefer validated answer if it is an existing file
+    answer = str(result.get("answer") or "").strip()
+    if answer and os.path.exists(answer):
+        return answer
+
+    # 2) Use configured output path (file or directory)
+    if configured_output_path:
+        configured_output_path = os.path.expanduser(configured_output_path)
+        if os.path.isfile(configured_output_path):
+            return configured_output_path
+        if os.path.isdir(configured_output_path):
+            candidate = os.path.join(configured_output_path, "output.xlsx")
+            if os.path.isfile(candidate):
+                return candidate
+
+    # 3) Parse execution logs for saved path
+    return _extract_saved_file_from_execution_results(result)
+
+
 # Page for prompting the model with selected files and config settings
 class PromptPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        self._service: Optional[SheetHeroService] = None
+        self._awaiting_clarification = False
 
         # Finish Button
         self.footer = None
@@ -189,6 +237,8 @@ class PromptPage(ctk.CTkFrame):
 
     # Triggered when the back button is pressed
     def on_back_pressed(self):
+        self._service = None
+        self._awaiting_clarification = False
         self.controller.show_page("ConfigPage")
 
 
@@ -282,6 +332,7 @@ class PromptPage(ctk.CTkFrame):
         self.add_chat_bubble(f"Thinking...",False)
         self.prompt_entry.delete("1.0", "end")
         self.finish_button.configure(state="disabled")
+        is_clarification_reply = self._awaiting_clarification and self._service is not None
 
         # Starts a threaded worker to allow the UI to be used during the agent running
         def worker():
@@ -299,64 +350,79 @@ class PromptPage(ctk.CTkFrame):
                 config.base_url = base_url
                 config.deployment = deployment
                 config.max_turns = max_turns
+                config.enable_diagnose = bool(self.controller.enable_diagnose)
                 config.output_mode = "file"
                 config.output_file = export_path
 
-                # Create and run the agent
-                agent = SheetHero(
-                    excel_paths=selected_files,
-                    config=config
-                )
-                result = agent.run(
-                    user_question=prompt
-                )
-
-                # Get the result from the agent
-                result_text = textwrap.dedent(
-                f"""
-                Success:{'✅' if result['success'] else '❌'}
-                Confidence: {result['confidence_score']:.2f}/1.0
-                Iterations: {result['total_iterations']}
-                Duration: {result['total_duration']:.2f}s
-                """)
-
-                # Send if there are issues
-                if result['issues_found']:
-                    result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
-
-                # Send if there is feedback
-                if result.get('improvement_feedback'):
-                    result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
-
-                # If it succeeds, create buttons to link the markdown and excel
-                if result['success']:
-                    buttons = []
-
-                    if result.get("verbose_log_path"):
-                        buttons.append((
-                            "Open Markdown Log",
-                            lambda path=result["verbose_log_path"]: open_file(path)
-                        ))
-
-                    if config.output_file and os.path.exists(config.output_file):
-                        buttons.append((
-                            "Open Excel Output",
-                            lambda path=config.output_file: open_file(result['answer'])
-                        ))
-
-                    # Send the result, with the buttons if there are any.
-                    self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
+                if not is_clarification_reply or self._service is None:
+                    self._service = SheetHeroService(config=config)
+                    response = self._service.submit_turn(prompt, selected_files)
                 else:
+                    response = self._service.submit_clarification(prompt)
 
-                    # Send the error
-                    self.add_chat_bubble(f"{result_text}", False)
+                response_type = str(response.get("type") or "")
+                if response_type == "clarification":
+                    self._awaiting_clarification = True
+                    self.add_chat_bubble(str(response.get("message") or "Please clarify your answer."), False)
+                    details_markdown = str(response.get("details_markdown") or "").strip()
+                    if details_markdown:
+                        self.add_chat_bubble(details_markdown, False)
+                elif response_type == "final":
+                    self._awaiting_clarification = False
+                    result = response.get("result") if isinstance(response.get("result"), dict) else {}
+                    if not isinstance(result, dict):
+                        result = {}
+
+                    if {"success", "confidence_score", "total_iterations", "total_duration"} <= set(result.keys()):
+                        result_text = textwrap.dedent(
+                        f"""
+                        Success:{'✅' if result['success'] else '❌'}
+                        Confidence: {result['confidence_score']:.2f}/1.0
+                        Iterations: {result['total_iterations']}
+                        Duration: {result['total_duration']:.2f}s
+                        """)
+
+                        if result.get('issues_found'):
+                            result_text += "\nIssues Found:\n" + "\n".join([f" - {i}" for i in result['issues_found']])
+
+                        if result.get('improvement_feedback'):
+                            result_text += f"\n\nImprovement Feedback:\n{result['improvement_feedback']}"
+
+                        short_answer = str(result.get("short_answer") or response.get("message") or "").strip()
+                        if short_answer:
+                            result_text += f"\n\nSummary:\n{short_answer}"
+
+                        buttons = []
+                        if result.get("verbose_log_path"):
+                            buttons.append((
+                                "Open Markdown Log",
+                                lambda path=result["verbose_log_path"]: open_file(path)
+                            ))
+
+                        output_file_path = _resolve_output_file_path(result, config.output_file)
+                        if output_file_path and os.path.exists(output_file_path):
+                            buttons.append((
+                                "Open Excel Output",
+                                lambda path=output_file_path: open_file(path)
+                            ))
+
+                        self.add_chat_bubble(f"{result_text}", False, buttons=buttons)
+                    else:
+                        message = str(response.get("message") or result.get("final_answer") or "Completed.")
+                        self.add_chat_bubble(message, False)
+                    self._service = None
+                else:
+                    self._awaiting_clarification = False
+                    self._service = None
+                    self.add_chat_bubble(str(response.get("message") or "Unknown error."), False)
 
             # Send error if fails
             except Exception as error:
+                self._awaiting_clarification = False
+                self._service = None
                 self.add_chat_bubble(f"Error: {error}",False)
 
             self.finish_button.configure(state="enabled")
 
         # Start the worker on another thread
         threading.Thread(target=worker, daemon=True).start()
-

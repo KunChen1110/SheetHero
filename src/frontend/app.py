@@ -4,6 +4,7 @@ import os
 from tkinterdnd2 import TkinterDnD
 from typing import Optional, List
 
+from backend import ConfigFactory
 from frontend.pages.upload_page import UploadPage
 from frontend.pages.config_page import ConfigPage
 from frontend.pages.prompt_page import PromptPage
@@ -21,12 +22,14 @@ class App(TkinterDnD.Tk):
         self.minsize(width=720,height=480)
 
         # Backend variables
+        frontend_defaults = ConfigFactory.get_frontend_defaults()
         self.export_path: str = os.path.join(os.path.expanduser("~"), "Documents")
         self.selected_files: List[str] = []
-        self.api_key: str = ""
-        self.base_url: Optional[str] = None
-        self.deployment: str = "gpt-4o-mini"
-        self.max_turns: int = 3
+        self.api_key: str = str(frontend_defaults["api_key"] or "")
+        self.base_url: Optional[str] = frontend_defaults["base_url"]
+        self.deployment: str = str(frontend_defaults["deployment"])
+        self.max_turns: int = int(frontend_defaults["max_turns"])
+        self.enable_diagnose: bool = bool(frontend_defaults["enable_diagnose"])
 
         container = ctk.CTkFrame(self)
         container.pack(fill="both", expand=True)

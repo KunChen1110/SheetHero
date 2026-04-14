@@ -1,0 +1,23 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "inconsistency",
+    "locations": [
+      "row=2,column=Priority",
+      "row=4,column=Priority",
+      "row=7,column=Priority"
+    ],
+    "description": "Priority uses mixed capitalisation: rows 2 and 7 have 'high' (all lower), row 4 has 'HIGH' (all upper). Standard is Title Case 'High'/'Medium'/'Low'. SLA breach monitoring will miss high-priority tickets with wrong case.",
+    "business_context": "Support ticket SLA system. Inconsistent priority labels cause high-priority tickets to be excluded from escalation triggers."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=2,column=Resolution_Time_hrs",
+      "row=4,column=Resolution_Time_hrs"
+    ],
+    "description": "Resolution_Time_hrs missing for tickets T002 and T004. T002 (Resolved) should have a value; T004 (Open) may be legitimately blank but is required for SLA tracking. Expected T002≈6–8h based on ticket complexity.",
+    "business_context": "Customer support KPI dashboard. Missing resolution times skew average handle time and SLA compliance metrics."
+  }
+]

@@ -1,7 +1,11 @@
-.idea/workspace.xml
-.idea/inspectionProfiles/Project_Default.xml
-*.xml
+.DS_Store
+
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
 venv/
 .venv/
 env/
@@ -28,3 +32,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+artifacts/
+*.~lock*
+autonomous-upgrade/

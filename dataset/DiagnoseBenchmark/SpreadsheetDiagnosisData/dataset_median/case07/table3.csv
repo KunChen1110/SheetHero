@@ -1,0 +1,21 @@
+CustomerID,Segment,Country,Join_Date,Total_Orders,Lifetime_Value_USD,Preferred_Category,Email_Opt_In
+CUST5001,VIP,Canada,2022-06-27,83,1529.5,Sports,False
+CUST5002,Inactive,UK,2019-02-23,59,362.51,Clothing,True
+CUST5003,Regular,USA,2020-05-17,51,8408.09,Toys,False
+CUST5004,New,USA,2019-05-12,7,7366.0,Books,False
+CUST5005,VIP,Canada,2021-07-24,57,7609.69,Home & Garden,False
+CUST5006,Regular,Germany,2021-06-26,67,2303.79,Electronics,False
+CUST5007,VIP,Germany,2022-03-18,38,2764.24,Electronics,False
+CUST5008,New,Canada,2021-10-23,55,1458.15,Home & Garden,False
+CUST5009,Inactive,USA,2020-10-14,36,5453.52,Electronics,True
+CUST5010,Inactive,Canada,2022-12-22,21,8101.07,Clothing,False
+CUST5011,VIP,UK,2018-04-25,83,3145.48,Home & Garden,True
+CUST5012,Regular,Germany,2020-06-15,10,4899.64,Toys,False
+CUST5013,Inactive,Canada,2020-04-04,4,6266.45,Home & Garden,False
+CUST5014,VIP,Canada,2020-12-15,28,8469.29,Books,False
+CUST5015,Regular,USA,2019-02-15,23,7643.84,Home & Garden,True
+CUST5016,New,Canada,2018-09-18,38,7581.75,Clothing,True
+CUST5017,New,Australia,2019-02-07,18,2050.42,Home & Garden,True
+CUST5018,New,Australia,2022-06-15,71,1146.57,Electronics,True
+CUST5019,New,Germany,2021-09-14,53,7007.22,Electronics,True
+CUST5020,New,USA,2021-08-22,67,2961.15,Toys,True

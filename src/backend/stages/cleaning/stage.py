@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional
 from ...log.logger_registry import LoggerRegistry
 from ...prompt.prompt_builder import PromptBuilder
 from ..understanding.context_builder import ExcelContextBuilder
+from ..base.stage import Stage
+from ..base.llm_utils import call_llm
+from .policy_executor import apply_policy_plan
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -18,18 +21,35 @@ _FILL_MISSING_ACTION_RE = re.compile(
 )
 
 
-class DataCleaningStage:
+class DataCleaningStage(Stage):
     """Cleaning stage driven by action list (LLM-produced)."""
 
-    def __init__(self, client, deployment: str, token_budget: int = 6000, progress_logger=None):
+    def __init__(self, client, deployment: str, token_budget: int = 6000,
+                 progress_logger=None, prompt_profile: str = "online_rich"):
         self.client = client
         self.deployment = deployment
         self.token_budget = token_budget
         self.progress_logger = progress_logger
         self._schema_changed = False
+        self._is_offline = prompt_profile == "offline_strict"
 
-    def apply(self, sandbox, actions: List[str]) -> Dict[str, Any]:
+    def apply_policy_plans(self, sandbox, policy_plans: List[dict]) -> Dict[str, Any]:
+        workbooks = getattr(sandbox, "workbooks", {}) or {}
+        report = {"applied_actions": [], "skipped_actions": [], "notes": []}
+        for policy_plan in policy_plans or []:
+            report_key, message = apply_policy_plan(workbooks, policy_plan)
+            if message:
+                report[report_key].append(message)
+        return report
+
+    def apply(
+        self,
+        sandbox,
+        actions: List[str],
+        policy_plans: Optional[List[dict]] = None,
+    ) -> Dict[str, Any]:
         actions = actions or []
+        policy_plans = policy_plans or []
         workbooks = getattr(sandbox, "workbooks", {}) or {}
         report = {"applied_actions": [], "skipped_actions": [], "notes": []}
 
@@ -39,9 +59,19 @@ class DataCleaningStage:
         self._log_progress(
             f"[CLEANING] actions={self._truncate(actions)}"
         )
+        if policy_plans:
+            self._log_progress(
+                f"[CLEANING] policy_plans={self._truncate(policy_plans)}"
+            )
+            policy_report = self.apply_policy_plans(sandbox, policy_plans)
+            report["applied_actions"].extend(policy_report.get("applied_actions", []))
+            report["skipped_actions"].extend(policy_report.get("skipped_actions", []))
+            report["notes"].extend(policy_report.get("notes", []))
 
         if not actions:
+            self._schema_changed = bool(report["applied_actions"])
             self._log_progress("[CLEANING] no actions, skipping.")
+            self._log_cleaning_report(report)
             return report
 
         deterministic_report, remaining_actions = self._apply_deterministic_actions(
@@ -72,11 +102,15 @@ class DataCleaningStage:
             self.progress_logger.log_raw("### [CLEANING PROMPT]\n" + prompt_text)
 
         self._log_progress("[CLEANING] generating cleaning code")
-        response = self.client.chat.completions.create(
-            model=self.deployment,
-            messages=[{"role": "user", "content": prompt_text}],
-        )
-        code = (response.choices[0].message.content or "").strip()
+        llm_kwargs = {}
+        if self._is_offline:
+            llm_kwargs["max_tokens"] = 1024
+        try:
+            code = call_llm(self.client, self.deployment, [{"role": "user", "content": prompt_text}], **llm_kwargs)
+        except Exception as exc:
+            report["notes"].append(f"Cleaning code generation failed: {exc}")
+            return report
+        code = self._extract_code(code)
 
         if self.progress_logger:
             self.progress_logger.log_raw("### [CLEANING CODE]\n" + code)
@@ -204,6 +238,31 @@ class DataCleaningStage:
         if cleaned.lower() in {"blank", "empty", "null", "none"}:
             return ""
         return cleaned
+
+    @staticmethod
+    def _extract_code(raw: str) -> str:
+        """Extract executable Python from LLM output that may contain markdown."""
+        raw = (raw or "").strip()
+        # Try to extract from ```python ... ``` fences first
+        blocks = re.findall(r"```python\s*(.*?)```", raw, re.DOTALL | re.IGNORECASE)
+        if blocks:
+            # Use the longest code block (skip short summary blocks)
+            return max(blocks, key=len).strip()
+        # Try generic ``` fences
+        blocks = re.findall(r"```\s*(.*?)```", raw, re.DOTALL)
+        if blocks:
+            return max(blocks, key=len).strip()
+        # No fences — assume the whole response is code, strip markdown artifacts
+        lines = []
+        for line in raw.splitlines():
+            stripped = line.strip()
+            # Skip markdown headers, horizontal rules, emoji lines, blank prose
+            if stripped.startswith("#") or stripped.startswith("---"):
+                continue
+            if stripped.startswith("- ") and not stripped.startswith("- "):
+                continue
+            lines.append(line)
+        return "\n".join(lines).strip()
 
     def last_run_affects_schema(self) -> bool:
         return self._schema_changed
