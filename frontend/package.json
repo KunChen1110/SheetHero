@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/main/electron.ts",
   "scripts": {
-    "build:backend": "cd ../.. && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && cp dist/sheet-hero-backend src/sheet-hero/python-dist/sheet-hero-backend",
+    "build:backend": "cd ../backend && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && cp dist/sheet-hero-backend src/sheet-hero/python-dist/sheet-hero-backend",
     "build:electron": "vite build && electron-builder",
     "build": "npm run build:backend && npm run build:electron",
     "preview": "vite preview",
