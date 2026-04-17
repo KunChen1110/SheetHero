@@ -45,6 +45,13 @@ function parseContextPreview(markdown: string): { label: string; table: ReturnTy
 function MessageContent({ content }: { content: string }) {
   const parsed = parseContextPreview(content);
   if (parsed && parsed.table) {
+    // Extract any trailing text after the last table row
+    const lines = content.split("\n");
+    const lastTableLine = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.trim().startsWith("|")).pop();
+    const trailingNote = lastTableLine
+      ? lines.slice(lastTableLine.i + 1).filter((l) => l.trim()).join(" ")
+      : "";
+
     return (
       <div className="py-1">
         {parsed.label && (
@@ -74,6 +81,9 @@ function MessageContent({ content }: { content: string }) {
             </tbody>
           </table>
         </div>
+        {trailingNote && (
+          <p className="text-xs text-(--sh-grey) mt-2">{trailingNote}</p>
+        )}
       </div>
     );
   }
