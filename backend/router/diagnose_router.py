@@ -13,7 +13,7 @@ from ..log.logger_registry import LoggerRegistry
 from ..stages.base.llm_utils import call_llm
 from ..prompt.prompt_builder import PromptBuilder
 from ..environment.spreadsheet.tools.cross_workbook import extract_sheet_table
-from ..skills import detect_skill
+from ..skills import detect_skills
 
 logger = LoggerRegistry.setup_logger(__name__)
 
@@ -116,8 +116,7 @@ class DiagnoseRouter:
     @classmethod
     def _is_self_reporting_issue_task(cls, user_question: str) -> bool:
         q = (user_question or "").lower()
-        skill = detect_skill(user_question)
-        if skill is None or skill.output_mode != "text":
+        if not any(skill.output_mode == "text" for skill in detect_skills(user_question)):
             return False
 
         reporting_markers = (

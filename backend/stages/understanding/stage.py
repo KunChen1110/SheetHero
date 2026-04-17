@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...log.logger_registry import LoggerRegistry
 from ...skills import (
-    detect_skill,
+    detect_skills,
     select_helper,
     build_skill_hint,
     build_compact_skill_workflow,
@@ -102,15 +102,19 @@ class UnderstandingStage(Stage):
         return understanding_output
 
     def _build_skill_hint(self, user_question: str) -> str:
-        skill = detect_skill(user_question)
-        if skill is None:
+        skills = detect_skills(user_question)
+        if not skills:
             return ""
-        helper = select_helper(skill, user_question)
-        if helper is None:
-            return ""
-        if self.prompt_builder.profile == "offline_strict":
-            return build_compact_skill_workflow(skill, helper)
-        return build_skill_hint(skill, helper)
+        hints = []
+        for skill in skills:
+            helper = select_helper(skill, user_question)
+            if helper is None:
+                continue
+            if self.prompt_builder.profile == "offline_strict":
+                hints.append(build_compact_skill_workflow(skill, helper))
+            else:
+                hints.append(build_skill_hint(skill, helper))
+        return "\n\n".join(hints)
 
     def _create_compact_retry_prompt(
         self,
