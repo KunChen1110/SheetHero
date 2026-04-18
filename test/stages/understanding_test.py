@@ -87,10 +87,10 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.stages.understanding.stage import UnderstandingStage
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.config.settings import Config
+    from backend.stages.understanding.stage import UnderstandingStage
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     config = Config()
     model = args.model or config.deployment
@@ -121,7 +121,7 @@ def main() -> int:
     print("-" * 50)
 
     # Build schema manually (like stage does)
-    from src.backend.environment import Sandbox
+    from backend.environment import Sandbox
 
     sandbox = Sandbox(
         excel_paths=input_paths,

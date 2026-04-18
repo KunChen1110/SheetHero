@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 from contextlib import redirect_stdout
 
-from src.backend.config.settings import Config
+from backend.config.settings import Config
 
 
 def _load_module(name: str, relative_path: str):
@@ -70,7 +70,7 @@ def test_config_honors_stage_specific_environment_overrides(monkeypatch):
 
 
 def test_handle_llm_command_can_switch_execution_model_only():
-    main_module = importlib.import_module("src.backend.main")
+    main_module = importlib.import_module("backend.main")
     config = Config()
     service = type("Service", (), {"config": config})()
 
@@ -82,7 +82,7 @@ def test_handle_llm_command_can_switch_execution_model_only():
 
 
 def test_handle_llm_command_lists_offline_models(monkeypatch):
-    main_module = importlib.import_module("src.backend.main")
+    main_module = importlib.import_module("backend.main")
     config = Config()
     service = type("Service", (), {"config": config})()
 
@@ -103,7 +103,7 @@ def test_handle_llm_command_lists_offline_models(monkeypatch):
 
 
 def test_handle_llm_command_prompt_shows_numbered_models(monkeypatch):
-    main_module = importlib.import_module("src.backend.main")
+    main_module = importlib.import_module("backend.main")
     config = Config()
     service = type("Service", (), {"config": config})()
 
@@ -123,7 +123,7 @@ def test_handle_llm_command_prompt_shows_numbered_models(monkeypatch):
 
 
 def test_sheethero_uses_split_stage_deployments(monkeypatch):
-    from src.backend.agent.core import SheetHero as sheethero_module
+    from backend.agent.core import SheetHero as sheethero_module
 
     class _OpenAIStub:
         def __init__(self, **kwargs):

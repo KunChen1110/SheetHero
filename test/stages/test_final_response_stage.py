@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.final_response.stage import FinalResponseStage
+from backend.stages.final_response.stage import FinalResponseStage
 
 
 def test_question_content_label_uses_helper_metadata_for_multi_key_join():

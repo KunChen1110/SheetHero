@@ -150,11 +150,11 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
-    from src.backend.stages.execution.stage import ExecutionStage
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
+    from backend.stages.execution.stage import ExecutionStage
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     config = Config()
     model = args.model or config.deployment

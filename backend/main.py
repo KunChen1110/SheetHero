@@ -1,7 +1,6 @@
 import argparse
 import json
 import re
-import runpy
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,7 +12,7 @@ from .diagnose_benchmark import run_diagnose_benchmark
 from .service.sheethero_service import SheetHeroService
 from .service.stream_dialogue_driver import StreamDialogueDriver
 
-# CLI backend debug mode: python3 -m src.backend.main
+# CLI backend debug mode: python3 -m backend.main
 @dataclass
 class InputBuffer:
     excel_paths: list[str] = field(default_factory=list)
@@ -411,7 +410,7 @@ def _handle_dataset_command(service: SheetHeroService, buffer: InputBuffer, line
         try:
             tasks, _ = _load_tasks()
             task = tasks[args.index - 1]
-            root = Path(__file__).resolve().parents[2]
+            root = Path(__file__).resolve().parents[1]
             resolved_output = _resolve_dataset_output_path(
                 root=root,
                 task=task,
@@ -466,20 +465,8 @@ def _handle_diagnose_benchmark_command(line: str) -> None:
     )
 
 
-def _handle_skill_synthetic_command() -> None:
-    root = Path(__file__).resolve().parents[2]
-    script_path = root / "test" / "utils" / "run_skill_synthetic_regression.py"
-    print("[skill synthetic] running abstract skill regression...")
-    try:
-        runpy.run_path(str(script_path), run_name="__main__")
-        print("[skill synthetic] passed")
-        return
-    except Exception as exc:
-        print(f"[skill synthetic] failed: {exc}")
-
 
 def main() -> None:
-    # backend/main.py lives at team29_project/backend/main.py → parents[1] = team29_project/
     root = Path(__file__).resolve().parents[1]
     default_output_dir = root / "artifacts" / "output"
 
@@ -505,7 +492,6 @@ def main() -> None:
     print("Type `!DiagnosebenchmarkTest median` to run the medium diagnose benchmark.")
     print("Type `!DiagnosebenchmarkTest all` to run all diagnose benchmark cases.")
     print("Type `!DiagnosebenchmarkTest --limit N` to run only the first N benchmark cases.")
-    print("Type `!SkillSyntheticTest` to run the abstract skill synthetic regression.")
     _print_llm_config(config)
 
     while True:
@@ -529,10 +515,6 @@ def main() -> None:
 
         if line.lower().startswith("!diagnosebenchmarktest"):
             _handle_diagnose_benchmark_command(line)
-            continue
-
-        if line.lower().startswith("!skillsynthetictest"):
-            _handle_skill_synthetic_command()
             continue
 
         if line.startswith("!llm"):

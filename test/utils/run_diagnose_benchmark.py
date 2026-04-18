@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.backend.diagnose_benchmark import DEFAULT_BENCHMARK_ROOT, run_diagnose_benchmark
+from backend.diagnose_benchmark import DEFAULT_BENCHMARK_ROOT, run_diagnose_benchmark
 
 
 def main() -> int:

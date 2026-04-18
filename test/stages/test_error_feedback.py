@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.execution.guards.error_feedback import ExecutionErrorFeedbackBuilder
+from backend.stages.execution.guards.error_feedback import ExecutionErrorFeedbackBuilder
 
 
 def test_market_share_shipment_feedback_uses_helper_metadata_mapping():

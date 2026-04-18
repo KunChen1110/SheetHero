@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.execution.skill.preflight import ExecutionSkillPreflightAdvisor
-from src.backend.stages.execution.skill.generic_preflight import ExecutionGenericPreflightAdvisor
+from backend.stages.execution.skill.preflight import ExecutionSkillPreflightAdvisor
+from backend.stages.execution.skill.generic_preflight import ExecutionGenericPreflightAdvisor
 
 
 class _InferenceStub:
@@ -49,11 +49,11 @@ def test_metadata_routed_preflight_uses_selected_helper_guards(monkeypatch):
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="regression")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="fit_linear_regression_weights"),
     )
 
@@ -76,11 +76,11 @@ def test_regression_preflight_coef_guidance_uses_documented_result_keys(monkeypa
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="regression")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="fit_linear_regression_weights"),
     )
 
@@ -106,11 +106,11 @@ def test_regression_preflight_blocks_target_col_that_conflicts_with_runtime_plan
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="regression")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="fit_linear_regression_weights"),
     )
 
@@ -134,11 +134,11 @@ def test_self_loading_helper_preflight_rejects_filename_arguments(monkeypatch):
     advisor = ExecutionGenericPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.generic_preflight.detect_skills",
+        "backend.stages.execution.skill.generic_preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="schedule", output_mode="workbook")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.generic_preflight.select_helper",
+        "backend.stages.execution.skill.generic_preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(
             name="build_relational_assignment_schedule_report",
             self_loading=True,
@@ -163,11 +163,11 @@ def test_self_loading_helper_preflight_rejects_dataframe_positional_arguments(mo
     advisor = ExecutionGenericPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.generic_preflight.detect_skills",
+        "backend.stages.execution.skill.generic_preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="financial", output_mode="workbook")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.generic_preflight.select_helper",
+        "backend.stages.execution.skill.generic_preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(
             name="build_cash_flow_efficiency_report",
             self_loading=True,
@@ -194,11 +194,11 @@ def test_region_growth_preflight_blocks_manual_header_rebuild(monkeypatch):
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="aggregate")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="build_region_growth_analysis"),
     )
 
@@ -222,11 +222,11 @@ def test_region_growth_preflight_requires_helper_instead_of_manual_header_parsin
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="aggregate")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="build_region_growth_analysis"),
     )
 
@@ -253,11 +253,11 @@ def test_relational_assignment_preflight_blocks_table_order_guess(monkeypatch):
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="schedule")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="build_relational_assignment_schedule_report"),
     )
 
@@ -281,11 +281,11 @@ def test_relational_assignment_preflight_blocks_manual_merge_after_header_select
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="schedule")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="build_relational_assignment_schedule_report"),
     )
 
@@ -308,11 +308,11 @@ def test_same_schema_merge_summary_preflight_prefers_shared_helpers(monkeypatch)
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="merge")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="concat_tables_with_same_headers"),
     )
 
@@ -344,11 +344,11 @@ def test_same_schema_merge_summary_preflight_blocks_undocumented_summary_result_
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="merge")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="concat_tables_with_same_headers"),
     )
 
@@ -399,11 +399,11 @@ def test_market_share_shipment_preflight_blocks_exact_header_and_table_order_gue
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="proportion")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="build_market_share_shipment_report"),
     )
 
@@ -432,11 +432,11 @@ def test_same_schema_merge_summary_preflight_adds_month_filter_guidance_for_nove
     advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
 
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.detect_skills",
+        "backend.stages.execution.skill.preflight.detect_skills",
         lambda _question: [SimpleNamespace(name="merge")],
     )
     monkeypatch.setattr(
-        "src.backend.stages.execution.skill.preflight.select_helper",
+        "backend.stages.execution.skill.preflight.select_helper",
         lambda _skill, _question: SimpleNamespace(name="concat_tables_with_same_headers"),
     )
 

@@ -3,13 +3,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills.helper_metadata import (
+from backend.skills.helper_metadata import (
     get_helper_documented_result_keys,
     get_helper_output_mode,
     get_helper_rule_inspector_name,
     get_helper_saved_workbook_inspector_name,
 )
-from src.backend.stages.validation.checks.deterministic_path import ValidationDeterministicAdvisor
+from backend.stages.validation.checks.deterministic_path import ValidationDeterministicAdvisor
 
 
 class _ValidationRuntimeStub:
