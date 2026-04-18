@@ -126,8 +126,8 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.service.sheethero_service import SheetHeroService
+    from backend.config.settings import Config
+    from backend.service.sheethero_service import SheetHeroService
 
     dataset_dir = Path(args.dataset_dir)
     tasks = _load_tasks(dataset_dir)
