@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills import detect_skill, select_helper
+from backend.skills import detect_skill, select_helper
 
 
 def test_merge_detected_from_generic_question():

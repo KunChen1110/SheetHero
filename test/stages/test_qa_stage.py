@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.qa.stage import QualityAssuranceStage
+from backend.stages.qa.stage import QualityAssuranceStage
 
 
 def test_start_groups_same_missing_value_column_into_one_policy_issue():
@@ -350,7 +350,7 @@ def test_missing_period_endpoint_shift_reply_creates_restricted_window_policy():
 
 
 def test_missing_value_natural_language_reply_uses_llm_semantic_fallback(monkeypatch):
-    from src.backend.stages.qa import stage as qa_stage_module
+    from backend.stages.qa import stage as qa_stage_module
 
     monkeypatch.setattr(
         qa_stage_module,
@@ -395,7 +395,7 @@ def test_missing_value_natural_language_reply_uses_llm_semantic_fallback(monkeyp
 
 
 def test_missing_value_structured_llm_decision_builds_local_action(monkeypatch):
-    from src.backend.stages.qa import stage as qa_stage_module
+    from backend.stages.qa import stage as qa_stage_module
 
     monkeypatch.setattr(
         qa_stage_module,

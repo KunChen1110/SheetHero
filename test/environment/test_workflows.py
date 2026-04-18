@@ -7,8 +7,8 @@ from openpyxl import Workbook
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.environment.spreadsheet.loader import load_world
-from src.backend.environment.spreadsheet.tools.workflows import (
+from backend.environment.spreadsheet.loader import load_world
+from backend.environment.spreadsheet.tools.workflows import (
     _build_weighted_period_output,
     _build_grouped_assignment_join,
     _extract_period_records,

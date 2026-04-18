@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.execution.runtime import ExecutionRuntime
+from backend.stages.execution.runtime import ExecutionRuntime
 
 
 class _SandboxStub:

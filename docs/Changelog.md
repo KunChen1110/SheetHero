@@ -507,3 +507,12 @@
 - Deleted `stages/execution/family/` module entirely: `fast_path.py` (~524 lines), `preflight.py` (~608 lines), `generic_preflight.py` (~244 lines), `question_inference.py` (~422 lines), `prompt.py`, `__init__.py`.
 - Deleted `test/utils/run_family_synthetic_regression.py` (~1146 lines).
 
+## 18/04/2026
+### --- Fixed ---
+- Fixed broken import paths after `src/backend/` → `backend/` restructure
+  - Updated `PROJECT_ROOT` (`parents[2]` → `parents[1]`) in `backend/main.py` and `backend/diagnose_benchmark.py`.
+  - Updated all `from src.backend.*` imports to `from backend.*` across 30 test files.
+  - Updated `mock.patch()` and `importlib.import_module()` string targets in test files.
+
+### --- Removed ---
+- Removed obsolete `!SkillSyntheticTest` CLI command and `test/utils/run_skill_synthetic_regression.py` (depended on deleted deterministic fast-path).
