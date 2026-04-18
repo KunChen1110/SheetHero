@@ -85,9 +85,9 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
-    from src.backend.stages.diagnose.stage import DiagnoseStage
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
+    from backend.stages.diagnose.stage import DiagnoseStage
 
     dataset_dir = Path(args.dataset_dir)
     tasks = _load_tasks(dataset_dir)

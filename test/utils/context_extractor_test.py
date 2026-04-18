@@ -15,7 +15,7 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.agent.utils.context_extractor import ContextExtractor
+    from backend.agent.utils.context_extractor import ContextExtractor
 
     extractor_input = """### 1. **Sheet Summary**:
 

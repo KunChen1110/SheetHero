@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills.helper_metadata import get_helper_rule_inspector_name
-from src.backend.stages.validation.checks.rule_checks import ValidationRuleCheckAdvisor
+from backend.skills.helper_metadata import get_helper_rule_inspector_name
+from backend.stages.validation.checks.rule_checks import ValidationRuleCheckAdvisor
 
 
 class _RuleCheckRuntimeStub:

@@ -3,14 +3,14 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills import (
+from backend.skills import (
     RuntimeExecutionPlan,
     build_execution_strict_rules,
     build_loop_breaker,
     detect_skill,
     select_helper,
 )
-from src.backend.stages.execution.skill.prompt import ExecutionSkillPromptAdvisor
+from backend.stages.execution.skill.prompt import ExecutionSkillPromptAdvisor
 
 
 class _RuntimeStub:

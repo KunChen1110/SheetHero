@@ -10,16 +10,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.backend.environment.spreadsheet.loader import load_world
-from src.backend.environment.sandbox.sandbox import Sandbox
-from src.backend.environment.spreadsheet.tools.workflows import (
+from backend.environment.spreadsheet.loader import load_world
+from backend.environment.sandbox.sandbox import Sandbox
+from backend.environment.spreadsheet.tools.workflows import (
     build_relational_join_enrichment_report,
     build_grouped_aggregation_ranking_report,
     build_time_series_aggregation_report,
 )
-from src.backend.stages.execution.runtime import ExecutionRuntime
-from src.backend.stages.validation.runtime import ValidationRuntime
-from src.backend.task_families import detect_task_family
+from backend.stages.execution.runtime import ExecutionRuntime
+from backend.stages.validation.runtime import ValidationRuntime
+from backend.task_families import detect_task_family
 
 
 def _write_workbook(path: Path, sheet_name: str, rows: list[list[object]]) -> None:

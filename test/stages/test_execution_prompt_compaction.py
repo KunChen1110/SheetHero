@@ -6,17 +6,17 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.config.settings import Config
-from src.backend.environment import Sandbox
-from src.backend.prompt.prompt_builder import PromptBuilder
-from src.backend.agent.core.SheetHero import _resolve_openai_timeout
-from src.backend.stages.base.llm_utils import _resolve_wall_timeout as _resolve_shared_wall_timeout
-from src.backend.stages.execution.core.llm_client import ExecutionLLMClient
-from src.backend.stages.execution.core.llm_client import _resolve_wall_timeout as _resolve_execution_wall_timeout
-from src.backend.stages.execution.core.parser import ExecutionResponseParser
-from src.backend.stages.execution.runtime import ExecutionRuntime
-from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-from src.backend.stages.understanding.stage import UnderstandingStage
+from backend.config.settings import Config
+from backend.environment import Sandbox
+from backend.prompt.prompt_builder import PromptBuilder
+from backend.agent.core.SheetHero import _resolve_openai_timeout
+from backend.stages.base.llm_utils import _resolve_wall_timeout as _resolve_shared_wall_timeout
+from backend.stages.execution.core.llm_client import ExecutionLLMClient
+from backend.stages.execution.core.llm_client import _resolve_wall_timeout as _resolve_execution_wall_timeout
+from backend.stages.execution.core.parser import ExecutionResponseParser
+from backend.stages.execution.runtime import ExecutionRuntime
+from backend.stages.understanding.context_builder import ExcelContextBuilder
+from backend.stages.understanding.stage import UnderstandingStage
 
 
 class _SandboxStub:
@@ -101,7 +101,7 @@ def test_offline_qwen3_understanding_calls_llm_with_compact_context(monkeypatch)
         captured["messages"] = messages
         return "### 1. Sheet Summary\n- Files: spending.xlsx\n### 2. Execution Plan\n- Use runtime schema.\n### 3. Output Contract\nrequires_detailed_table: YES\nrequires_summary_metrics: YES\nrequires_highlight: NO"
 
-    monkeypatch.setattr("src.backend.stages.understanding.stage.call_llm", _fake_call)
+    monkeypatch.setattr("backend.stages.understanding.stage.call_llm", _fake_call)
 
     stage = UnderstandingStage(client=None, deployment="qwen3:8b", prompt_profile="offline_strict")
     stage.run(
@@ -149,7 +149,7 @@ def test_understanding_falls_back_to_minimal_plan_when_llm_call_fails(monkeypatc
     def _raise(*_args, **_kwargs):
         raise RuntimeError("Connection error.")
 
-    monkeypatch.setattr("src.backend.stages.understanding.stage.call_llm", _raise)
+    monkeypatch.setattr("backend.stages.understanding.stage.call_llm", _raise)
 
     stage = UnderstandingStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
     output = stage.run(

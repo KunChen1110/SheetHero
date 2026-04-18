@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from openpyxl import load_workbook
 
-from src.backend.router.diagnose_router import DiagnoseRouter
+from backend.router.diagnose_router import DiagnoseRouter
 
 
 def test_self_reporting_scan_task_skips_router_issue_generation_for_generic_identifier_formats():

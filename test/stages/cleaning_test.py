@@ -115,8 +115,8 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
 
     config = Config()
 
@@ -158,8 +158,8 @@ def main() -> int:
     )
 
     # Build schema with smart limiting
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     workbooks = getattr(sandbox, "workbooks", {}) or {}
 

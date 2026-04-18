@@ -34,8 +34,8 @@ def _silence_loggers():
 
 _silence_loggers()
 
-from src.backend.service.sheethero_service import SheetHeroService
-from src.backend.config.settings import Config
+from backend.service.sheethero_service import SheetHeroService
+from backend.config.settings import Config
 
 _silence_loggers()
 
