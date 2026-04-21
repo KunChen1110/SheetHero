@@ -1,0 +1,8 @@
+Parameter,Value
+Product,A4 Copy Paper (Reams)
+Annual_Demand_units,2400
+Order_Cost_USD,25.00
+Holding_Cost_per_unit_USD,1.50
+Unit_Cost_USD,8.00
+Lead_Time_days,7
+Working_Days_per_year,250
