@@ -110,6 +110,7 @@ def evaluate(
     print(f"   Text:   {text_raw:.1f}/100 raw  ->  {text_score:.1f} weighted pts")
     print(f"   TOTAL:  {total_score:.1f} / 100")
     print(f"   Table feedback: {table_feedback}")
+    print(f"   Text feedback: {text_feedback}")
 
     return result
 
