@@ -43,6 +43,23 @@ class ExecutionSkillPreflightAdvisor:
         helper = select_helper(skill, user_question) if skill else None
         return self._helper_name(helper)
 
+    def _loaded_tables_share_same_schema(self) -> bool:
+        try:
+            tables = self.runtime.world.tables
+        except Exception:
+            return False
+        if not tables or len(tables) < 2:
+            return False
+
+        normalized_headers = []
+        for table in tables:
+            header = list(getattr(table, "header", None) or [])
+            if not header:
+                return False
+            normalized_headers.append([self.runtime.question_inference.normalize_header_name_for_grounding(col) for col in header])
+        first = normalized_headers[0]
+        return all(current == first for current in normalized_headers[1:])
+
     @staticmethod
     def _documented_result_key_lines(helper_name: str) -> list[str]:
         result_var = helper_result_variable_name(helper_name)
@@ -153,6 +170,8 @@ class ExecutionSkillPreflightAdvisor:
         has_merge = any(w in lower_q for w in ("merge", "combine", "concatenate", "concat"))
         if not has_merge:
             return None
+        if not self._loaded_tables_share_same_schema():
+            return None
 
         code = code_action or ""
         lower = code.lower()
@@ -164,21 +183,19 @@ class ExecutionSkillPreflightAdvisor:
 
         # Detect month qualifier so temporal filter guidance can be appended.
         month_num: Optional[int] = None
-        for name in self._MONTH_NAMES:
-            if name in lower_q:
-                from calendar import month_name as _mn
-                # Convert name to number via index (1-based)
-                full_names = [m.lower() for m in _mn]  # ['', 'january', ...]
-                if name in full_names:
-                    month_num = full_names.index(name)
-                else:
-                    _abbr_map = {
-                        "jan": 1, "feb": 2, "mar": 3, "apr": 4,
-                        "jun": 6, "jul": 7, "aug": 8,
-                        "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-                    }
-                    month_num = _abbr_map.get(name)
-                break
+        matched_month = self._question_mentions_month_token(lower_q)
+        if matched_month is not None:
+            from calendar import month_name as _mn
+            full_names = [m.lower() for m in _mn]  # ['', 'january', ...]
+            if matched_month in full_names:
+                month_num = full_names.index(matched_month)
+            else:
+                _abbr_map = {
+                    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+                    "jun": 6, "jul": 7, "aug": 8,
+                    "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+                }
+                month_num = _abbr_map.get(matched_month)
 
         msg = (
             "PREFLIGHT_CONCAT_MERGE: cross-table stacking tasks should use concat_tables_with_same_headers.\n"
@@ -214,6 +231,8 @@ class ExecutionSkillPreflightAdvisor:
             return None
 
         lower_q = (user_question or "").lower()
+        if "market share" in lower_q and "overlapping time period" in lower_q:
+            return None
         has_aggregate = any(w in lower_q for w in (
             "average", "mean", "total", "sum", "count",
             "maximum", "minimum", "highest", "lowest", "median",
@@ -228,7 +247,15 @@ class ExecutionSkillPreflightAdvisor:
 
         undocumented_summary_key = None
         if uses_summary_helper:
-            documented_summary_keys = {"summary", "output_row_numbers"}
+            documented_summary_keys = {
+                "summary",
+                "output_row_numbers",
+                "total",
+                "average",
+                "max_value",
+                "value_col",
+                "max_indices",
+            }
             for key in re.findall(r"summary_result\s*\[\s*['\"]([^'\"]+)['\"]\s*\]", code):
                 if key not in documented_summary_keys:
                     undocumented_summary_key = key
@@ -241,10 +268,10 @@ class ExecutionSkillPreflightAdvisor:
             "PREFLIGHT_AGGREGATE: use summarize_numeric_column for numeric summary tasks.\n"
             "  `summary_result = summarize_numeric_column(df, value_col='...')`\n"
             "  `add_summary_row('Output', len(df) + 2, summary_result['summary'])`\n"
-            "- summary_result keys: 'summary' (dict), 'output_row_numbers' (list of 1-based ints).\n"
+            "- summary_result keys: 'summary', 'output_row_numbers', 'total', 'average', 'max_value', 'value_col', 'max_indices'.\n"
             + (
                 f"- Does not return key '{undocumented_summary_key}'. "
-                "Use 'summary' for totals/averages and 'output_row_numbers' for highlighting.\n"
+                "Use 'total'/'average' for scalar values, 'summary' for add_summary_row(...), and 'output_row_numbers' for highlighting.\n"
                 if undocumented_summary_key else ""
             )
             + "- Do not reassign the name `highlight_rows` to a variable."
@@ -300,6 +327,13 @@ class ExecutionSkillPreflightAdvisor:
         "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     )
 
+    @classmethod
+    def _question_mentions_month_token(cls, lower_q: str) -> str | None:
+        for name in cls._MONTH_NAMES:
+            if re.search(rf"\b{re.escape(name)}\b", lower_q):
+                return name
+        return None
+
     def temporal_filter_guard(
         self,
         code_action: str,
@@ -313,11 +347,15 @@ class ExecutionSkillPreflightAdvisor:
         the unfiltered combined_df, stats and highlight row numbers will be wrong.
         """
         lower_q = (user_question or "").lower()
-        has_month = any(m in lower_q for m in self._MONTH_NAMES)
-        has_period = any(w in lower_q for w in (
-            "in q1", "in q2", "in q3", "in q4", "quarter", "semester",
-            "this year", "last year", "year to date",
-        ))
+        if "market share" in lower_q and "overlapping time period" in lower_q:
+            return None
+        matched_month = self._question_mentions_month_token(lower_q)
+        has_month = matched_month is not None
+        has_period = (
+            bool(re.search(r"\b(?:in|for|during)\s+q[1-4]\b", lower_q))
+            or bool(re.search(r"\b(?:in|for|during)\s+\d{4}\b", lower_q))
+            or any(w in lower_q for w in ("semester", "this year", "last year", "year to date"))
+        )
         if not (has_month or has_period):
             return None
 
@@ -340,11 +378,7 @@ class ExecutionSkillPreflightAdvisor:
             return None
 
         # Determine which month was mentioned for a concrete hint
-        month_hint = ""
-        for name in self._MONTH_NAMES:
-            if name in lower_q:
-                month_hint = name.capitalize()
-                break
+        month_hint = matched_month.capitalize() if matched_month else ""
 
         period_label = f"'{month_hint}'" if month_hint else "the requested period"
         return (
@@ -371,14 +405,14 @@ class ExecutionSkillPreflightAdvisor:
         parts = [p for p in (c, a, t, h) if p]
         return "\n".join(parts) if parts else None
 
-    def market_share_shipment_guard(
+    def weighted_share_value_guard(
         self,
         code_action: str,
         user_question: str,
         helper_name: Optional[str] = None,
     ) -> Optional[str]:
         helper_name = helper_name or self._selected_helper_name(user_question)
-        if helper_name != "build_market_share_shipment_report":
+        if helper_name != "build_weighted_share_value_report":
             return None
 
         code = code_action or ""
@@ -390,7 +424,7 @@ class ExecutionSkillPreflightAdvisor:
         guesses_table_order = bool(
             re.search(r"(share|shipment)_df\s*=\s*tables\[\d+\]\s*\[\s*['\"]df['\"]\s*\]", lower)
         )
-        calls_direct_helper = "build_market_share_shipment_report(" in lower
+        calls_direct_helper = "build_weighted_share_value_report(" in lower
 
         if not (assumes_exact_shipment_header or guesses_table_order or calls_direct_helper):
             return None
@@ -412,6 +446,15 @@ class ExecutionSkillPreflightAdvisor:
             "  `shipment_df = shipment_df.rename(columns={shipment_value_col: 'Shipment'})`\n"
             "  `overlap_df = merge_on_shared_period(share_df, shipment_df[['Time', 'Shipment']], period_col='Time')`"
         )
+
+    # legacy alias retained so older metadata or tests can still resolve it
+    def market_share_shipment_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        return self.weighted_share_value_guard(code_action, user_question, helper_name)
 
     def regression_feature_guard(
         self,

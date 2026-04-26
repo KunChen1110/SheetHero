@@ -12,11 +12,27 @@ import os
 import pandas as pd
 from openai import OpenAI
 
-from loader import load_task_from_dataset, extract_output_from_logger, find_latest_logger, find_dataset
-from normalizer import find_file, excel_to_markdown, detect_structure, normalize_dataframe, get_structural_normalization, apply_structural_normalization
-from scorer import compare_and_score, score_text, decide_weights
+try:
+    from .loader import load_task_from_dataset, extract_output_from_logger, find_latest_logger, find_dataset
+    from .normalizer import find_file, excel_to_markdown, detect_structure, normalize_dataframe, get_structural_normalization, apply_structural_normalization
+    from .scorer import compare_and_score, score_text, decide_weights
+except ImportError:
+    from loader import load_task_from_dataset, extract_output_from_logger, find_latest_logger, find_dataset
+    from normalizer import find_file, excel_to_markdown, detect_structure, normalize_dataframe, get_structural_normalization, apply_structural_normalization
+    from scorer import compare_and_score, score_text, decide_weights
 
-API_KEY = "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"   # replace with your key
+
+def _openai_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        try:
+            from backend.config.settings import Config
+            api_key = (Config().api_key or "").strip()
+        except Exception:
+            api_key = ""
+    if not api_key:
+        raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY or configure backend Config.api_key.")
+    return OpenAI(api_key=api_key)
 
 
 def evaluate(
@@ -30,7 +46,7 @@ def evaluate(
     Evaluate output vs reference Excel. Optionally scores text too.
     Returns result dict with total_score (0-100) and full breakdown.
     """
-    client = OpenAI(api_key=API_KEY)
+    client = _openai_client()
 
     output_path = find_file(output_excel)
     reference_path = find_file(reference_excel)
@@ -115,6 +131,34 @@ def evaluate(
     return result
 
 
+def evaluate_text_only(output_text: str, reference_text: str) -> dict:
+    """Evaluate tasks whose expected result is natural-language text only."""
+    client = _openai_client()
+    print("\nEvaluating text-only output:")
+    print("[1] Scoring text...")
+    text_raw, text_feedback = score_text(client, output_text, reference_text)
+    result = {
+        "total_score": round(text_raw, 2),
+        "table_score": 0.0,
+        "text_score": round(text_raw, 2),
+        "table_raw": 0.0,
+        "text_raw": round(text_raw, 2),
+        "table_weight": 0.0,
+        "text_weight": 1.0,
+        "weight_reasoning": "No reference workbook was provided; text is 100% of score.",
+        "structure_type": "text_only",
+        "table_feedback": "No reference workbook was provided.",
+        "text_feedback": text_feedback,
+    }
+    print("\n📊 RESULTS:")
+    print("   Structure:    text_only")
+    print("   Table weight: 0%  |  Text weight: 100%")
+    print(f"   Text:   {text_raw:.1f}/100 raw  ->  {text_raw:.1f} weighted pts")
+    print(f"   TOTAL:  {text_raw:.1f} / 100")
+    print(f"   Text feedback: {text_feedback}")
+    return result
+
+
 def evaluate_task(
         task_id: str,
         logger_path: str,
@@ -128,6 +172,8 @@ def evaluate_task(
 
     reference_text = task.get("answer", "")
     reference_excel = (task.get("expected_output_file") or [""])[0]
+    if reference_excel and not os.path.isabs(reference_excel):
+        reference_excel = os.path.join(os.path.dirname(os.path.abspath(dataset_path)), reference_excel)
 
     print(f"   Reference text:  {repr(reference_text[:80])}")
     print(f"   Reference Excel: {reference_excel}")
@@ -142,7 +188,11 @@ def evaluate_task(
     print(f"   Output Excel: {output_excel}")
 
     if not reference_excel:
-        raise ValueError(f"No expected_output_file in dataset for task '{task_id}'")
+        if not reference_text.strip():
+            raise ValueError(f"No expected_output_file or answer in dataset for task '{task_id}'")
+        if not output_text.strip():
+            raise ValueError(f"Could not find output text in logger: {logger_path}")
+        return evaluate_text_only(output_text, reference_text)
     if not output_excel:
         raise ValueError(f"Could not find output Excel path in logger: {logger_path}")
 
