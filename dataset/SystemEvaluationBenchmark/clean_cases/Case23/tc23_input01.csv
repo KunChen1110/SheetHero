@@ -1,0 +1,5 @@
+EmpID,Name,Department,JobGrade
+E001,John Smith,Engineering,Senior
+E002,Sarah Jones,,Mid
+E003,Mike Brown,Marketing,Junior
+E004,Lisa Park,Engineering,Senior

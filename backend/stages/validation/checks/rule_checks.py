@@ -9,6 +9,7 @@ from ....skills import (
     get_helper_output_mode,
     get_helper_rule_inspector_name,
     get_helper_saved_workbook_inspector_name,
+    helper_embeds_summary_in_primary_table,
     select_helper,
 )
 
@@ -120,8 +121,18 @@ class ValidationRuleCheckAdvisor:
                     )
 
         if need_summary is True:
-            has_summary_signal = ("added summary row" in lower_results) or (len(rows_written) >= 2)
+            has_summary_signal = (
+                ("added summary row" in lower_results)
+                or (need_detail is not True and max_rows >= 2)
+            )
             if not has_summary_signal and runtime._has_summary_write_signal_from_code(latest_code):
+                has_summary_signal = True
+            if (
+                not has_summary_signal
+                and _helper is not None
+                and helper_embeds_summary_in_primary_table(_helper.name)
+                and max_rows >= 2
+            ):
                 has_summary_signal = True
             if not has_summary_signal and need_detail is True and max_rows >= 20:
                 has_summary_signal = True

@@ -1,0 +1,6 @@
+StoreID,StoreType,Size_sqft,Region
+S01,A,12000,North
+S02,A,14500,South
+S03,A,11000,East
+S04,B,8000,West
+S05,C,5500,Central

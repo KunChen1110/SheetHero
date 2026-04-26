@@ -11,12 +11,20 @@ export interface Chat {
   messages: Message[];
 }
 
+export interface UiThought {
+  stage: string;
+  status: string;
+  content: unknown;
+}
+
 export interface Message {
   id: string;
   role: Role;
   content: string;
   hasOutputFile?: boolean;
   outputPath?: string | null;
+  detailsMarkdown?: string;
+  uiThoughts?: UiThought[];
 }
 
 export interface ExcelFile {

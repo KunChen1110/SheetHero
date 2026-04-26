@@ -42,10 +42,16 @@ from ..spreadsheet.tools import (
     build_relational_assignment_schedule_report,
     summarize_numeric_column,
     build_region_growth_analysis,
-    build_market_share_shipment_report,
+    build_region_share_cost_report,
+    build_two_dimension_mean_count_summary_report,
+    build_multi_source_group_comparison_report,
+    build_weighted_share_value_report,
     build_cash_flow_efficiency_report,
+    build_financial_dashboard_report,
+    build_inventory_eoq_report,
     build_group_summary,
     build_grouped_aggregation_ranking_report,
+    build_multi_source_utilisation_summary_report,
     build_time_series_aggregation_report,
     compute_feature_correlations,
     build_correlation_matrix_table,
@@ -244,11 +250,26 @@ class SpreadsheetNamespace:
             ),
             summarize_numeric_column=summarize_numeric_column,
             build_region_growth_analysis=_build_region_growth_analysis,
-            build_market_share_shipment_report=lambda range_ref="A1:Z300": build_market_share_shipment_report(
+            build_region_share_cost_report=lambda range_ref="A1:Z200000": build_region_share_cost_report(
+                w, range_ref=range_ref
+            ),
+            build_two_dimension_mean_count_summary_report=lambda range_ref="A1:Y50000": build_two_dimension_mean_count_summary_report(
+                w, range_ref=range_ref
+            ),
+            build_multi_source_group_comparison_report=lambda range_ref="A1:Z100000": build_multi_source_group_comparison_report(
+                w, range_ref=range_ref
+            ),
+            build_weighted_share_value_report=lambda range_ref="A1:Z300": build_weighted_share_value_report(
                 w, range_ref=range_ref
             ),
             build_cash_flow_efficiency_report=lambda file_path=None: build_cash_flow_efficiency_report(
                 w, file_path=file_path
+            ),
+            build_financial_dashboard_report=lambda range_ref="A1:Z200000": build_financial_dashboard_report(
+                w, range_ref=range_ref
+            ),
+            build_inventory_eoq_report=lambda range_ref="A1:Z50": build_inventory_eoq_report(
+                w, range_ref=range_ref
             ),
             build_group_summary=build_group_summary,
             build_grouped_aggregation_ranking_report=lambda file_path=None, sheet_name=None, range_ref="A1:Z200000", group_cols=None, value_col=None, aggregate="mean", top_n=None, sort_desc=True, round_digits=4: build_grouped_aggregation_ranking_report(
@@ -262,6 +283,9 @@ class SpreadsheetNamespace:
                 top_n=top_n,
                 sort_desc=sort_desc,
                 round_digits=round_digits,
+            ),
+            build_multi_source_utilisation_summary_report=lambda range_ref="A1:Z10000": build_multi_source_utilisation_summary_report(
+                w, range_ref=range_ref
             ),
             build_time_series_aggregation_report=lambda file_path=None, sheet_name=None, range_ref="A1:Z200000", date_col="Date", value_col=None, period="month", aggregate="mean", window_years=None, period_mode="year_month", sort_desc=True: build_time_series_aggregation_report(
                 w,

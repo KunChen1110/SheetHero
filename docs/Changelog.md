@@ -34,21 +34,21 @@
 ## 11/11/2025
 ### --- Added ---
 - Added 12 test cases for evaluating LLM performance on spreadsheet
-- Documented test results in [DatasetV1.md](/dataset/DatasetV1.md)
+- Documented test results in the dataset notes.
 
 ## 12/11/2025
 ### --- Added ---
 - Added **Titanic correlation analysis script (Test 6)**
   - Calculates Pearson correlation between survival and key factors (Sex, Age, Fare, Cabin, Embarked).
-  - Saved results to [output6.xlsx](/dataset/Task6/output6.xlsx).
+  - Saved results to the dataset task output file.
 
 - Added **Cycle detection script (Test 10)**
   - Detects cycles in 5 directed graph datasets using DFS.
-  - Saved results to [output10.xlsx](/dataset/Task10/output10.xlsx)
+  - Saved results to the dataset task output file.
 
 - Added **Ice-cream sales regression script (Test 7)**
   - Performs multiple linear regression to analyze effects of temperature, price, tourists, and rain on ice cream sales.
-  - Saved results to [output7.xlsx](/dataset/Task7/output7.xlsx)
+  - Saved results to the dataset task output file.
 
 - Added 5 new user cases to the dataset (Tests 16–20) (See [dataset](/dataset))
 
@@ -507,3 +507,31 @@
 - Deleted `stages/execution/family/` module entirely: `fast_path.py` (~524 lines), `preflight.py` (~608 lines), `generic_preflight.py` (~244 lines), `question_inference.py` (~422 lines), `prompt.py`, `__init__.py`.
 - Deleted `test/utils/run_family_synthetic_regression.py` (~1146 lines).
 
+## 18/04/2026
+### --- Fixed ---
+- Fixed broken import paths after `src/backend/` → `backend/` restructure
+  - Updated `PROJECT_ROOT` (`parents[2]` → `parents[1]`) in `backend/main.py` and `backend/diagnose_benchmark.py`.
+  - Updated all `from src.backend.*` imports to `from backend.*` across 30 test files.
+  - Updated `mock.patch()` and `importlib.import_module()` string targets in test files.
+
+### --- Removed ---
+- Removed obsolete `!SkillSyntheticTest` CLI command and `test/utils/run_skill_synthetic_regression.py` (depended on deleted deterministic fast-path).
+
+## 26/04/2026
+### --- Added ---
+- Wired LLM judger into the backend CLI via `!judge dev|evaluation ... --index N`
+  - Calls `evaluate_task` directly from the REPL without spawning a separate process.
+  - Final evaluation benchmark runs (`!benchmark evaluation ...`) now always invoke the judger automatically.
+- Added `evaluate_text_only()` to `Judger/evaluator.py` for tasks whose expected result is plain text rather than a workbook.
+- Added helper timeout fallback codegen in `ExecutionRuntime` — stalled skill runs now recover with a sensible default script instead of timing out silently.
+- Added `sample_rows` to `FinalResponseStage` output summary (up to 3 representative data rows for richer CLI feedback).
+
+### --- Changed ---
+- Fixed Judger imports to work both as a standalone script and as a backend package; hardcoded API key replaced with env/config lookup (`OPENAI_API_KEY` → `Config.api_key`).
+- `DiagnoseRouter` now short-circuits to `should_diagnose=False` before any LLM call when the user question contains no investigation-type keywords, reducing unnecessary inference.
+- Extended skill detectors and workflow helpers with new report builders: weighted share, region share, multi-source comparison, utilisation summary, and two-dimension mean/count.
+- Reorganised benchmark dataset layout: original Task01–Task27 suite moved into `dataset/DevelopmentBenchmark/`; evaluation suite renamed to `dataset/SystemEvaluationBenchmark/`.
+
+### --- Removed ---
+- Removed `backend/task_families.py` (superseded by the skills registry introduced in 12/04/2026).
+- Removed stale top-level dataset docs (`DatasetV1.md`, `JM_ReadMe.md`, `JM_Dataset_Task21-Task26.md`).

@@ -15,10 +15,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _development_dataset_dir() -> Path:
+    return _repo_root() / "dataset" / "DevelopmentBenchmark"
+
+
 def _load_tasks(dataset_dir: Path) -> list[dict]:
     candidates = [
         dataset_dir / "dataset.json",
-        _repo_root() / "dataset" / "dataset.json",
+        _development_dataset_dir() / "dataset.json",
         ]
     for path in candidates:
         if path.exists():
@@ -74,7 +78,7 @@ def main() -> int:
         description="Test UnderstandingStage - generates analysis plan."
     )
     parser.add_argument("--test-id", type=int, required=True, help="Dataset entry index")
-    parser.add_argument("--dataset-dir", type=str, default=str(_repo_root() / "dataset"))
+    parser.add_argument("--dataset-dir", type=str, default=str(_development_dataset_dir()))
     parser.add_argument("--model", type=str, default=None, help="Model override")
     parser.add_argument("--max-files", type=int, default=2, help="Max files in schema")
     parser.add_argument("--token-budget", type=int, default=None, help="Token budget")
@@ -87,10 +91,10 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.stages.understanding.stage import UnderstandingStage
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.config.settings import Config
+    from backend.stages.understanding.stage import UnderstandingStage
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     config = Config()
     model = args.model or config.deployment
@@ -121,7 +125,7 @@ def main() -> int:
     print("-" * 50)
 
     # Build schema manually (like stage does)
-    from src.backend.environment import Sandbox
+    from backend.environment import Sandbox
 
     sandbox = Sandbox(
         excel_paths=input_paths,

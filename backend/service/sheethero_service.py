@@ -37,13 +37,8 @@ class SheetHeroService:
         self._memory = DialogueMemory()
 
     def submit_turn(self, prompt: str, excel_paths: list[str]) -> Dict[str, object]:
-        # Clarification must continue via submit_clarification().
-        if self._session is not None and self._session.state == "qa":
-            return {
-                "type": "clarification",
-                "stage": "qa",
-                "message": "Session is awaiting clarification. Please call submit_clarification().",
-            }
+        # Every new task submission always starts a fresh session.
+        # Any in-progress QA session from a previous task is discarded.
         response = self._prepare_turn(prompt, excel_paths)
         return self._finalize_response(self._auto_step_until_blocked(response))
 
@@ -69,6 +64,16 @@ class SheetHeroService:
 
         # Cache prior session memory before switching task/session.
         self._cache_session_memory()
+
+        # Close the previous task's logger before discarding the old agent.
+        # This ensures each task gets its own .md log file even when the
+        # same SheetHeroService instance is reused across multiple tasks
+        # (e.g. the CLI REPL or a long-lived server process).
+        
+        if self._agent is not None:
+            prev_logger = getattr(self._agent, "progress_logger", None)
+            if prev_logger is not None:
+                prev_logger.close()
 
         # Build a new agent for each new task turn.
         self._agent = SheetHero(
@@ -223,12 +228,17 @@ class SheetHeroService:
         header = [cls._compact_cell(cell) for cell in non_empty_rows[0][:visible_cols]]
         col_truncated = effective_width > cls._TEXT_PREVIEW_MAX_COLS
 
-        lines = [" | ".join(header + (["..."] if col_truncated else []))]
+        def _md_row(cells: list[str]) -> str:
+            return "| " + " | ".join(cells) + " |"
+
+        header_cells = header + (["..."] if col_truncated else [])
+        separator_cells = ["---"] * len(header_cells)
+        lines = [_md_row(header_cells), _md_row(separator_cells)]
         for row in preview_body:
             compact_row = [cls._compact_cell(cell) for cell in row[:visible_cols]]
             if col_truncated:
                 compact_row.append("...")
-            lines.append(" | ".join(compact_row))
+            lines.append(_md_row(compact_row))
 
         return "\n".join(lines), truncated or col_truncated, len(preview_body), len(body_rows)
 

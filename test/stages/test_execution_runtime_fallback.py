@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.execution.runtime import ExecutionRuntime
+from backend.stages.execution.runtime import ExecutionRuntime
 
 
 class _SandboxStub:
@@ -36,8 +36,13 @@ def test_offline_runtime_executes_llm_generated_code_before_any_skill_fast_path(
                 "**Thought:** read and write output\n"
                 "```python\n"
                 "tables = load_all_tables()\n"
+                "concat_result = concat_tables_with_same_headers(tables)\n"
+                "combined_df = concat_result['output_df']\n"
+                "summary_df = combined_df\n"
+                "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')\n"
                 "create_output_sheet('Output')\n"
-                "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')\n"
+                "write_dataframe_to_sheet(summary_df, 'Output', 'A1')\n"
+                "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])\n"
                 "saved_file = save_workbook_to(output_path)\n"
                 "print('SAVED_FILE:', saved_file)\n"
                 "saved_file\n"
@@ -51,8 +56,13 @@ def test_offline_runtime_executes_llm_generated_code_before_any_skill_fast_path(
             "\n".join(
                 [
                     "tables = load_all_tables()",
+                    "concat_result = concat_tables_with_same_headers(tables)",
+                    "combined_df = concat_result['output_df']",
+                    "summary_df = combined_df",
+                    "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')",
                     "create_output_sheet('Output')",
-                    "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')",
+                    "write_dataframe_to_sheet(summary_df, 'Output', 'A1')",
+                    "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])",
                     "saved_file = save_workbook_to(output_path)",
                     "print('SAVED_FILE:', saved_file)",
                     "saved_file",
@@ -62,7 +72,7 @@ def test_offline_runtime_executes_llm_generated_code_before_any_skill_fast_path(
     )
     runtime.executor = SimpleNamespace(
         check_forbidden_bounded=lambda _code: None,
-        execute=lambda _code: "Wrote 2 rows to Output!A1:B2\nSAVED_FILE: /tmp/out.xlsx",
+        execute=lambda _code: "Wrote 4 rows to Output!A1:D4\nAdded summary row at row 6 in sheet 'Output'\nSAVED_FILE: /tmp/out.xlsx",
     )
     runtime.skill_fast_path_runner = SimpleNamespace(
         try_run=lambda _question: fast_path_calls.__setitem__("count", fast_path_calls["count"] + 1) or {
@@ -98,38 +108,48 @@ def test_offline_runtime_reprompts_on_format_error_instead_of_falling_back(monke
         [
             SimpleNamespace(content="I will think first."),
             SimpleNamespace(
-                content=(
-                    "**Thought:** fixed format\n"
-                    "```python\n"
-                    "tables = load_all_tables()\n"
-                    "create_output_sheet('Output')\n"
-                    "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')\n"
-                    "saved_file = save_workbook_to(output_path)\n"
-                    "print('SAVED_FILE:', saved_file)\n"
-                    "saved_file\n"
-                    "```"
-                )
+                    content=(
+                        "**Thought:** fixed format\n"
+                        "```python\n"
+                        "tables = load_all_tables()\n"
+                        "concat_result = concat_tables_with_same_headers(tables)\n"
+                        "combined_df = concat_result['output_df']\n"
+                        "summary_df = combined_df\n"
+                        "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')\n"
+                        "create_output_sheet('Output')\n"
+                        "write_dataframe_to_sheet(summary_df, 'Output', 'A1')\n"
+                        "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])\n"
+                        "saved_file = save_workbook_to(output_path)\n"
+                        "print('SAVED_FILE:', saved_file)\n"
+                        "saved_file\n"
+                        "```"
+                    )
             ),
         ]
     )
     runtime.llm_client = SimpleNamespace(get_response=lambda *_args, **_kwargs: next(responses))
     runtime.parser = SimpleNamespace(
         parse=lambda content: (
-            ("fixed format", "\n".join(
-                [
-                    "tables = load_all_tables()",
-                    "create_output_sheet('Output')",
-                    "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')",
-                    "saved_file = save_workbook_to(output_path)",
-                    "print('SAVED_FILE:', saved_file)",
-                    "saved_file",
-                ]
-            )) if "```python" in content else ("", None)
+                ("fixed format", "\n".join(
+                    [
+                        "tables = load_all_tables()",
+                        "concat_result = concat_tables_with_same_headers(tables)",
+                        "combined_df = concat_result['output_df']",
+                        "summary_df = combined_df",
+                        "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')",
+                        "create_output_sheet('Output')",
+                        "write_dataframe_to_sheet(summary_df, 'Output', 'A1')",
+                        "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])",
+                        "saved_file = save_workbook_to(output_path)",
+                        "print('SAVED_FILE:', saved_file)",
+                        "saved_file",
+                    ]
+                )) if "```python" in content else ("", None)
         )
     )
     runtime.executor = SimpleNamespace(
         check_forbidden_bounded=lambda _code: None,
-        execute=lambda _code: "Wrote 2 rows to Output!A1:B2\nSAVED_FILE: /tmp/out.xlsx",
+        execute=lambda _code: "Wrote 4 rows to Output!A1:D4\nAdded summary row at row 6 in sheet 'Output'\nSAVED_FILE: /tmp/out.xlsx",
     )
     fast_path_calls = {"count": 0}
     runtime.skill_fast_path_runner = SimpleNamespace(
@@ -168,8 +188,13 @@ def test_offline_runtime_format_repair_demands_code_first_response(monkeypatch):
                 content=(
                     "```python\n"
                     "tables = load_all_tables()\n"
+                    "concat_result = concat_tables_with_same_headers(tables)\n"
+                    "combined_df = concat_result['output_df']\n"
+                    "summary_df = combined_df\n"
+                    "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')\n"
                     "create_output_sheet('Output')\n"
-                    "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')\n"
+                    "write_dataframe_to_sheet(summary_df, 'Output', 'A1')\n"
+                    "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])\n"
                     "saved_file = save_workbook_to(output_path)\n"
                     "print('SAVED_FILE:', saved_file)\n"
                     "saved_file\n"
@@ -186,8 +211,13 @@ def test_offline_runtime_format_repair_demands_code_first_response(monkeypatch):
                 "\n".join(
                     [
                         "tables = load_all_tables()",
+                        "concat_result = concat_tables_with_same_headers(tables)",
+                        "combined_df = concat_result['output_df']",
+                        "summary_df = combined_df",
+                        "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')",
                         "create_output_sheet('Output')",
-                        "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')",
+                        "write_dataframe_to_sheet(summary_df, 'Output', 'A1')",
+                        "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])",
                         "saved_file = save_workbook_to(output_path)",
                         "print('SAVED_FILE:', saved_file)",
                         "saved_file",
@@ -200,7 +230,7 @@ def test_offline_runtime_format_repair_demands_code_first_response(monkeypatch):
     )
     runtime.executor = SimpleNamespace(
         check_forbidden_bounded=lambda _code: None,
-        execute=lambda _code: "Wrote 2 rows to Output!A1:B2\nSAVED_FILE: /tmp/out.xlsx",
+        execute=lambda _code: "Wrote 4 rows to Output!A1:D4\nAdded summary row at row 6 in sheet 'Output'\nSAVED_FILE: /tmp/out.xlsx",
     )
     runtime.skill_fast_path_runner = SimpleNamespace(try_run=lambda _question: None)
 
@@ -235,8 +265,13 @@ def test_offline_runtime_uses_plan_to_code_recovery_for_thought_only_response(mo
                 content=(
                     "```python\n"
                     "tables = load_all_tables()\n"
+                    "concat_result = concat_tables_with_same_headers(tables)\n"
+                    "combined_df = concat_result['output_df']\n"
+                    "summary_df = combined_df\n"
+                    "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')\n"
                     "create_output_sheet('Output')\n"
-                    "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')\n"
+                    "write_dataframe_to_sheet(summary_df, 'Output', 'A1')\n"
+                    "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])\n"
                     "saved_file = save_workbook_to(output_path)\n"
                     "print('SAVED_FILE:', saved_file)\n"
                     "saved_file\n"
@@ -258,8 +293,13 @@ def test_offline_runtime_uses_plan_to_code_recovery_for_thought_only_response(mo
                 "\n".join(
                     [
                         "tables = load_all_tables()",
+                        "concat_result = concat_tables_with_same_headers(tables)",
+                        "combined_df = concat_result['output_df']",
+                        "summary_df = combined_df",
+                        "summary_result = summarize_numeric_column(summary_df, value_col='Daily Spending (£)')",
                         "create_output_sheet('Output')",
-                        "write_dataframe_to_sheet([['Metric', 'Value'], ['Total', 1]], 'Output', 'A1')",
+                        "write_dataframe_to_sheet(summary_df, 'Output', 'A1')",
+                        "add_summary_row('Output', len(summary_df) + 2, summary_result['summary'])",
                         "saved_file = save_workbook_to(output_path)",
                         "print('SAVED_FILE:', saved_file)",
                         "saved_file",
@@ -270,7 +310,7 @@ def test_offline_runtime_uses_plan_to_code_recovery_for_thought_only_response(mo
     )
     runtime.executor = SimpleNamespace(
         check_forbidden_bounded=lambda _code: None,
-        execute=lambda _code: "Wrote 2 rows to Output!A1:B2\nSAVED_FILE: /tmp/out.xlsx",
+        execute=lambda _code: "Wrote 4 rows to Output!A1:D4\nAdded summary row at row 6 in sheet 'Output'\nSAVED_FILE: /tmp/out.xlsx",
     )
     runtime.skill_fast_path_runner = SimpleNamespace(try_run=lambda _question: None)
 
@@ -408,6 +448,72 @@ def test_offline_runtime_retries_after_llm_connection_error(monkeypatch):
     assert calls["count"] == 2
     assert calls["max_tokens"][0] == 768
     assert calls["max_tokens"][1] <= 768
+
+
+def test_offline_runtime_uses_relational_join_helper_timeout_fallback(monkeypatch):
+    monkeypatch.delenv("SHEETHERO_ENABLE_SKILL_FAST_PATH", raising=False)
+    runtime = ExecutionRuntime(
+        client=_ClientStub(),
+        deployment="offline-test",
+        sandbox=_SandboxStub(),
+        excel_context_execution="",
+        prompt_profile="offline_strict",
+    )
+
+    runtime.llm_client = SimpleNamespace(
+        get_response=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Connection error."))
+    )
+    executed = {"code": ""}
+    runtime.executor = SimpleNamespace(
+        check_forbidden_bounded=lambda _code: None,
+        execute=lambda code: executed.__setitem__("code", code) or "Wrote 5 rows to Output!A1:E5\nSAVED_FILE: /tmp/out.xlsx",
+    )
+
+    result = runtime.run(
+        understanding_output="requires_detailed_table: YES",
+        user_question="Merge the four files into a single file.",
+        max_turns=3,
+    )
+
+    assert result["success"] is True
+    assert result["answer"] == "/tmp/out.xlsx"
+    assert "build_relational_join_enrichment_report" in executed["code"]
+
+
+def test_offline_runtime_uses_time_series_helper_timeout_fallback_with_highlight(monkeypatch):
+    monkeypatch.delenv("SHEETHERO_ENABLE_SKILL_FAST_PATH", raising=False)
+    runtime = ExecutionRuntime(
+        client=_ClientStub(),
+        deployment="offline-test",
+        sandbox=_SandboxStub(),
+        excel_context_execution="",
+        prompt_profile="offline_strict",
+    )
+
+    runtime.llm_client = SimpleNamespace(
+        get_response=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Connection error."))
+    )
+    executed = {"code": ""}
+    runtime.executor = SimpleNamespace(
+        check_forbidden_bounded=lambda _code: None,
+        execute=lambda code: executed.__setitem__("code", code) or (
+            "Wrote 14 rows to Output!A1:D14\n"
+            "Added summary row at row 16 in sheet 'Output'\n"
+            "Highlighted row(s) [5, 7] in sheet 'Output'\n"
+            "SAVED_FILE: /tmp/out.xlsx"
+        ),
+    )
+
+    result = runtime.run(
+        understanding_output="requires_detailed_table: YES\nrequires_highlight: YES\nrequires_summary_metrics: YES",
+        user_question="Calculate total admissions by year, identify years with more than 10% growth, and highlight high-growth years.",
+        max_turns=3,
+    )
+
+    assert result["success"] is True
+    assert result["answer"] == "/tmp/out.xlsx"
+    assert "build_time_series_aggregation_report" in executed["code"]
+    assert "highlight_rows('Output'" in executed["code"]
 
 
 def test_offline_runtime_compacts_repair_turn_after_preflight(monkeypatch):

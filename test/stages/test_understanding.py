@@ -16,9 +16,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _development_dataset_dir() -> Path:
+    return _repo_root() / "dataset" / "DevelopmentBenchmark"
+
+
 def _load_tasks(dataset_dir: Path) -> list[dict]:
     candidates = [
         dataset_dir / "dataset.json",
+        _development_dataset_dir() / "dataset.json",
         _repo_root() / "dataset.json",
     ]
     for path in candidates:
@@ -77,18 +82,18 @@ def main() -> int:
     parser.add_argument(
         "--dataset-dir",
         type=str,
-        default=str(_repo_root() / "dataset"),
-        help="Path to dataset directory (default: ./dataset).",
+        default=str(_development_dataset_dir()),
+        help="Path to dataset directory (default: ./dataset/DevelopmentBenchmark).",
     )
     args = parser.parse_args()
 
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.stages.understanding.stage import UnderstandingStage
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.stages.understanding.stage import UnderstandingStage
 
     dataset_dir = Path(args.dataset_dir)
     tasks = _load_tasks(dataset_dir)

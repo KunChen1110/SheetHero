@@ -6,7 +6,7 @@ from openpyxl import Workbook
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.stages.validation.runtime import ValidationRuntime
+from backend.stages.validation.runtime import ValidationRuntime
 
 
 class _ClientStub:

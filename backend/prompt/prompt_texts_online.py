@@ -359,7 +359,8 @@ You are given spreadsheet context and a list of cleaning actions.
 
 Rules:
 - Write Python code ONLY (no markdown, no backticks).
-- Use the provided `workbooks` dict (path -> openpyxl Workbook).
+- Use the provided `workbooks` dict (path -> openpyxl Workbook). Keys are FULL file paths, not just filenames.
+- To look up a workbook by filename use: `wb = find_workbook('filename.xlsx')` — NEVER use `workbooks['filename.xlsx']` directly.
 - Modify the workbooks IN PLACE according to the actions.
 - Use only Python and openpyxl APIs. Do not import new libraries.
 - DO NOT load files from disk.
