@@ -9,6 +9,7 @@ from ....skills import (
     build_execution_strict_rules,
     build_loop_breaker,
     detect_skills,
+    helper_embeds_summary_in_primary_table,
     select_helper,
 )
 
@@ -19,8 +20,213 @@ if TYPE_CHECKING:
 class ExecutionGenericPreflightAdvisor:
     """Own generic bounded-mode preflight checks and header grounding."""
 
+    _COLUMN_ARG_KEYWORDS = {
+        "on",
+        "left_on",
+        "right_on",
+        "by",
+        "subset",
+        "value_col",
+        "target_col",
+        "date_col",
+        "key_header",
+        "key_headers",
+        "group_cols",
+        "feature_cols",
+        "columns",
+    }
+
     def __init__(self, runtime: "ExecutionRuntime"):
         self.runtime = runtime
+
+    @staticmethod
+    def _has_top_level_return(code: str) -> bool:
+        try:
+            module = ast.parse(code)
+        except SyntaxError:
+            return False
+        return any(isinstance(node, ast.Return) for node in module.body)
+
+    @staticmethod
+    def _string_constant(node) -> Optional[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    @classmethod
+    def _extract_string_literals(cls, node) -> list[str]:
+        literal = cls._string_constant(node)
+        if literal is not None:
+            return [literal]
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            values: list[str] = []
+            for elt in node.elts:
+                values.extend(cls._extract_string_literals(elt))
+            return values
+        return []
+
+    @classmethod
+    def _candidate_header_literals_from_code(cls, code: str) -> set[str]:
+        try:
+            module = ast.parse(code)
+        except SyntaxError:
+            return set()
+
+        candidates: set[str] = set()
+
+        class _Visitor(ast.NodeVisitor):
+            def visit_Subscript(self, node: ast.Subscript):
+                slice_node = node.slice
+                if isinstance(slice_node, ast.Tuple):
+                    for elt in slice_node.elts:
+                        candidates.update(cls._extract_string_literals(elt))
+                else:
+                    candidates.update(cls._extract_string_literals(slice_node))
+                self.generic_visit(node)
+
+            def visit_Call(self, node: ast.Call):
+                for keyword in node.keywords:
+                    if keyword.arg in cls._COLUMN_ARG_KEYWORDS:
+                        candidates.update(cls._extract_string_literals(keyword.value))
+
+                func_name = None
+                if isinstance(node.func, ast.Attribute):
+                    func_name = node.func.attr
+                elif isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+
+                if func_name in {"groupby", "drop_duplicates"} and node.args:
+                    candidates.update(cls._extract_string_literals(node.args[0]))
+                elif func_name in {"sort_values"} and node.args:
+                    candidates.update(cls._extract_string_literals(node.args[0]))
+                elif func_name in {"merge"}:
+                    for position in node.args[:2]:
+                        candidates.update(cls._extract_string_literals(position))
+
+                self.generic_visit(node)
+
+        _Visitor().visit(module)
+        return {value for value in candidates if value and len(value.strip()) >= 3}
+
+    @classmethod
+    def _named_agg_source_column_guard(cls, code: str, observed_headers: set[str]) -> Optional[str]:
+        try:
+            module = ast.parse(code)
+        except SyntaxError:
+            return None
+
+        known_columns: dict[str, set[str]] = {}
+        missing_sources: list[str] = []
+
+        def _string_literals(node) -> list[str]:
+            return cls._extract_string_literals(node)
+
+        def _groupby_keys(call: ast.Call) -> set[str]:
+            keys: set[str] = set()
+            if call.args:
+                keys.update(_string_literals(call.args[0]))
+            for keyword in call.keywords:
+                if keyword.arg == "by":
+                    keys.update(_string_literals(keyword.value))
+            return keys
+
+        def _known_columns_from_expr(node) -> Optional[set[str]]:
+            if isinstance(node, ast.Name):
+                return set(known_columns.get(node.id, set())) or None
+            if isinstance(node, ast.Subscript):
+                literals = _string_literals(node.slice)
+                if "output_df" in literals or "df" in literals:
+                    return set(observed_headers)
+                return None
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in {"copy", "reset_index"}:
+                    return _known_columns_from_expr(node.func.value)
+                if node.func.attr == "agg" and isinstance(node.func.value, ast.Call):
+                    groupby_call = node.func.value
+                    if isinstance(groupby_call.func, ast.Attribute) and groupby_call.func.attr == "groupby":
+                        base_columns = _known_columns_from_expr(groupby_call.func.value) or set(observed_headers)
+                        output_columns = _groupby_keys(groupby_call)
+                        for keyword in node.keywords:
+                            if not keyword.arg:
+                                continue
+                            output_columns.add(keyword.arg)
+                            tuple_literals = _string_literals(keyword.value)
+                            if tuple_literals:
+                                source_col = tuple_literals[0]
+                                if source_col not in base_columns:
+                                    missing_sources.append(source_col)
+                        return output_columns
+            return None
+
+        for statement in module.body:
+            if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+                continue
+            target = statement.targets[0]
+            if not isinstance(target, ast.Name):
+                continue
+            inferred_columns = _known_columns_from_expr(statement.value)
+            if inferred_columns is not None:
+                known_columns[target.id] = inferred_columns
+
+        if not missing_sources:
+            return None
+
+        unique_missing = sorted(dict.fromkeys(missing_sources))
+        lines = [
+            "PREFLIGHT_AGG_SOURCE_COLUMNS: grouped aggregation references source columns that are not available in the current DataFrame flow.",
+            "- Do not invent derived columns before creating them.",
+            "- Build the intermediate summary DataFrame first, then aggregate from its real output columns.",
+        ]
+        for value in unique_missing[:4]:
+            lines.append(f"- Missing source column: `{value}`.")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _duplicate_table_selector_guard(code_action: str, helper_name: str = "") -> Optional[str]:
+        if helper_name != "fill_missing_from_reference":
+            return None
+        assignments = re.findall(
+            r"^\s*([A-Za-z_]\w*)\s*=\s*next\s*\(\s*table\s+for\s+table\s+in\s+tables\s+if\s+(.+?)\)\s*$",
+            code_action or "",
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        seen: dict[str, str] = {}
+        for variable, predicate in assignments:
+            normalized_predicate = re.sub(r"\s+", " ", predicate).strip().lower()
+            if normalized_predicate in seen and seen[normalized_predicate] != variable:
+                return (
+                    "PREFLIGHT_TABLE_ROLE_SELECTION: two different table variables use the same selector, so they can point to the same input table.\n"
+                    "- Select primary and reference tables with distinct role constraints.\n"
+                    "- Use `find_table_by_headers(...)` with required/preferred/forbidden headers instead of duplicate `next(...)` predicates.\n"
+                    "- Example:\n"
+                    "  `primary_t = find_table_by_headers(tables, required_headers=['EmpID'], preferred_headers=['Name', 'JobGrade'])`\n"
+                    "  `reference_t = find_table_by_headers(tables, required_headers=['EmpID'], preferred_headers=['Department'], forbidden_headers=['Name', 'JobGrade'])`\n"
+                    "  `result = fill_missing_from_reference(primary_t['df'], reference_t['df'], key_header='EmpID', prefer_primary=True)`"
+                )
+            seen[normalized_predicate] = variable
+        return None
+
+    @staticmethod
+    def _reference_completion_selector_guard(code_action: str, helper_name: str = "") -> Optional[str]:
+        if helper_name != "fill_missing_from_reference":
+            return None
+        for variable, call_args in re.findall(
+            r"^\s*([A-Za-z_]\w*)\s*=\s*find_table_by_headers\s*\(\s*tables\s*,\s*(.+?)\)\s*$",
+            code_action or "",
+            flags=re.IGNORECASE | re.MULTILINE,
+        ):
+            if "reference" not in variable.lower():
+                continue
+            if "forbidden_headers" in call_args:
+                continue
+            return (
+                "PREFLIGHT_REFERENCE_SELECTOR: reference table selection is too broad and can select the primary table.\n"
+                "- Add `forbidden_headers` that are present only in the primary table, such as `Name`, `JobGrade`, or other detail columns.\n"
+                "- Example:\n"
+                "  `reference_t = find_table_by_headers(tables, required_headers=['EmpID'], preferred_headers=['Department'], forbidden_headers=['Name', 'JobGrade'])`\n"
+                "- Then call `fill_missing_from_reference(primary_t['df'], reference_t['df'], key_header='EmpID', prefer_primary=True)`."
+            )
+        return None
 
     def offline_preflight_check(self, code_action: str, user_question: str) -> Optional[str]:
         code = (code_action or "").strip()
@@ -36,12 +242,7 @@ class ExecutionGenericPreflightAdvisor:
         # Check for any known helper function call in the code
         uses_any_known_helper = any(f"{helper_name_candidate.lower()}(" in lower for helper_name_candidate in all_helper_names())
 
-        top_level_returns = [
-            line.strip()
-            for line in code.splitlines()
-            if line.strip().startswith("return ")
-        ]
-        if top_level_returns:
+        if self._has_top_level_return(code):
             return (
                 "PREFLIGHT_LINEAR: top-level `return` is invalid in execution code.\n"
                 "- Do not use `return saved_file`.\n"
@@ -49,6 +250,18 @@ class ExecutionGenericPreflightAdvisor:
                 "  `saved_file = save_workbook_to(output_path)`\n"
                 "  `print(f'SAVED_FILE: {saved_file}')`\n"
                 "  `saved_file`"
+            )
+
+        if re.search(
+            r"\[\s*['\"]detail_data['\"]\s*\]\s*\.(columns|values|sum|mean|max|min|groupby|iloc|loc|copy|merge|sort_values)\b",
+            code,
+            flags=re.IGNORECASE,
+        ):
+            return (
+                "PREFLIGHT_LINEAR: helper `detail_data` was treated like a DataFrame.\n"
+                "- `result['detail_data']` is a ready-to-write 2D table payload.\n"
+                "- Use `result['output_df']` for DataFrame operations such as `.sum()`, `.mean()`, `.groupby()`, `.iloc`, or `.merge()`.\n"
+                "- Use `write_dataframe_to_sheet(result['detail_data'], 'Output', 'A1')` only when writing the final table."
             )
 
         try:
@@ -71,12 +284,61 @@ class ExecutionGenericPreflightAdvisor:
                     guidance += f"\n{loop_breaker}"
             return guidance
 
-        if helper is not None and helper.self_loading and uses_registered_helper:
+        named_agg_issue = self._named_agg_source_column_guard(code, set(self.runtime._observed_header_set()))
+        if named_agg_issue is not None:
+            return named_agg_issue
+
+        repeated_selector_issue = self._duplicate_table_selector_guard(code, helper_name)
+        if repeated_selector_issue is not None:
+            return repeated_selector_issue
+        reference_selector_issue = self._reference_completion_selector_guard(code, helper_name)
+        if reference_selector_issue is not None:
+            return reference_selector_issue
+
+        if helper is not None and helper.self_loading:
+            if skill is not None and getattr(skill, "output_mode", "") == "text":
+                if re.search(r"\[\s*['\"](?:output_df|detail_data)['\"]\s*\]", code, flags=re.IGNORECASE):
+                    skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or "").strip()
+                    helper_block = (
+                        f"PREFLIGHT_TEXT_SCAN_HELPER: `{helper_name}(...)` returns a text report, not a DataFrame.\n"
+                        "- Use only `report['answer']` for the final text answer.\n"
+                        "- Do not access `report['output_df']` or `report['detail_data']`.\n"
+                        "- Do not create or save a workbook for scan tasks.\n"
+                    )
+                    if skill_hint:
+                        helper_block += f"{skill_hint}\n"
+                    return helper_block.rstrip()
+            if helper_embeds_summary_in_primary_table(helper_name) and "add_summary_row(" in lower:
+                skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
+                helper_block = (
+                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already returns the final report table with summary/target rows embedded.\n"
+                    "- Do not add extra `add_summary_row(...)` calls after writing this helper's `detail_data`.\n"
+                    "- Write `report['detail_data']` directly, save the workbook, and print `RESULT_SUMMARY:` from `report['summary']` or the final `output_df` if available.\n"
+                )
+                if skill_hint:
+                    helper_block += f"{skill_hint}\n"
+                return helper_block.rstrip()
+            if helper_embeds_summary_in_primary_table(helper_name) and re.search(
+                rf"{re.escape(helper_name)}\s*\(\s*\).*?\[\s*['\"]output_df['\"]\s*\]",
+                code,
+                flags=re.IGNORECASE | re.DOTALL,
+            ):
+                skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
+                helper_block = (
+                    f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` returns a final report table; do not treat `output_df` as raw source data.\n"
+                    "- Write `report['detail_data']` directly to `Output` and save.\n"
+                    "- Do not recalculate metrics from `report['output_df']`; the helper already prepared the dashboard/report values.\n"
+                    "- For final text, rely on workbook inspection or `report['summary']` if available.\n"
+                )
+                if skill_hint:
+                    helper_block += f"{skill_hint}\n"
+                return helper_block.rstrip()
             positional_arg_match = re.search(
                 rf"{re.escape(helper_name)}\s*\(\s*(?!\)|\w+\s*=)([^,)]+)",
                 code,
                 flags=re.IGNORECASE,
             )
+
             if positional_arg_match:
                 skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
                 helper_block = (
@@ -89,12 +351,15 @@ class ExecutionGenericPreflightAdvisor:
                     helper_block += f"{skill_hint}\n"
                 return helper_block.rstrip()
             manual_reader_patterns = ("read_table_multi(", "find_table_by_headers(", "load_all_tables(")
-            if any(pattern in lower for pattern in manual_reader_patterns):
+            if any(pattern in lower for pattern in manual_reader_patterns) or not uses_registered_helper:
                 skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
                 helper_block = (
                     f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{skill.name}` skill.\n"
+                    "- Do not hand-build table loading or reconstruction logic for this task.\n"
                     "- Remove manual `read_table_multi(...)`, `find_table_by_headers(...)`, and `load_all_tables(...)` calls from execution code.\n"
-                    "- Call the helper directly, write its returned detail data, then save.\n"
+                    "- Call the helper directly first.\n"
+                    "- If the task needs more processing after the join, continue from `report['output_df']`.\n"
+                    "- Use `report['detail_data']` only when writing a final sheet.\n"
                 )
                 if skill_hint:
                     helper_block += f"{skill_hint}\n"
@@ -103,6 +368,10 @@ class ExecutionGenericPreflightAdvisor:
         skill_grounding_issue = self.skill_helper_header_grounding_guard(code_action, user_question)
         if skill_grounding_issue is not None:
             return skill_grounding_issue
+
+        header_alias_issue = self.header_alias_grounding_guard(code_action)
+        if header_alias_issue is not None:
+            return header_alias_issue
 
         if "list_all_workbooks(" not in lower and not uses_load_all_tables and not uses_registered_helper and not uses_any_known_helper:
             return (
@@ -130,6 +399,15 @@ class ExecutionGenericPreflightAdvisor:
                 "- Call them directly: `load_all_tables()`, `build_cycle_detection_report(...)`, "
                 "`create_output_sheet(...)`, `write_dataframe_to_sheet(...)`, `save_workbook_to(output_path)`.\n"
                 "- Remove all `from runtime...`, `from graph_helper...`, `from excel_output...`, and `from workbook_helper...` imports."
+            )
+
+        if re.search(r"^\s*from\s+your_[a-z_]+\s+import\s+", code, flags=re.IGNORECASE | re.MULTILINE):
+            return (
+                "PREFLIGHT_LINEAR: do not import placeholder helper modules.\n"
+                "- Helper functions are already injected into the sandbox globals.\n"
+                "- Remove imports like `from your_spreadsheet_helpers import *`.\n"
+                "- Call injected helpers directly: `build_relational_join_enrichment_report(...)`, "
+                "`create_output_sheet(...)`, `write_dataframe_to_sheet(...)`, `save_workbook_to(output_path)`."
             )
 
         if re.search(r"^\s*output_path\s*=\s*['\"][^'\"]+['\"]", code, flags=re.IGNORECASE | re.MULTILINE):
@@ -197,6 +475,45 @@ class ExecutionGenericPreflightAdvisor:
 
         return None
 
+    def header_alias_grounding_guard(self, code_action: str) -> Optional[str]:
+        code = code_action or ""
+        observed_headers = sorted(self.runtime._observed_header_set())
+        if not observed_headers:
+            return None
+
+        infer = self.runtime.question_inference
+        normalized_observed = {
+            infer.normalize_header_name_for_grounding(header): header
+            for header in observed_headers
+        }
+        observed_keys = set(normalized_observed.keys())
+        candidate_literals = self._candidate_header_literals_from_code(code)
+
+        suggestions: list[tuple[str, str]] = []
+        for literal in sorted(candidate_literals):
+            normalized_literal = infer.normalize_header_name_for_grounding(literal)
+            if not normalized_literal or normalized_literal in observed_keys:
+                continue
+            close_matches = [
+                actual
+                for normalized_actual, actual in normalized_observed.items()
+                if normalized_actual.startswith(normalized_literal)
+                or normalized_literal.startswith(normalized_actual)
+            ]
+            if len(close_matches) == 1:
+                suggestions.append((literal, close_matches[0]))
+
+        if not suggestions:
+            return None
+
+        lines = [
+            "PREFLIGHT_HEADER_GROUNDING: code references column names that do not exactly match the runtime schema.",
+            "- Use the exact observed headers from the schema snapshot/runtime tables.",
+        ]
+        for requested, actual in suggestions[:4]:
+            lines.append(f"- Replace `{requested}` with `{actual}`.")
+        return "\n".join(lines)
+
     def skill_helper_header_grounding_guard(self, code_action: str, user_question: str) -> Optional[str]:
         all_matched_skills = detect_skills(user_question)
         skill = all_matched_skills[0] if all_matched_skills else None
@@ -228,7 +545,10 @@ class ExecutionGenericPreflightAdvisor:
             if infer.normalize_header_name_for_grounding(value) not in normalized_headers:
                 unknown_args.append((kwarg, value))
         for kwarg in ("group_cols", "feature_cols", "key_headers"):
-            for value in infer.extract_string_list_kwarg(code_action, kwarg):
+            extractor = getattr(infer, "extract_string_list_kwarg", None)
+            if extractor is None:
+                continue
+            for value in extractor(code_action, kwarg):
                 if infer.normalize_header_name_for_grounding(value) not in normalized_headers:
                     unknown_args.append((kwarg, value))
 

@@ -1,0 +1,31 @@
+ProductID,ProductName,Category,StockQty,UnitCost_USD,ReorderLevel
+PR01,"Laptop 14""",Electronics,30,420.0,8
+PR02,"Laptop 15""",Electronics,20,495.0,6
+PR03,Wireless Mouse,Electronics,100,18.5,25
+PR04,Mechanical Keyboard,Electronics,55,72.0,15
+PR05,USB-C Hub,Electronics,70,32.0,18
+PR06,"Monitor 24""",Electronics,25,185.0,8
+PR07,Webcam HD,Electronics,45,48.0,12
+PR08,Office Chair,Furniture,22,185.0,6
+PR09,Standing Desk,Furniture,10,340.0,4
+PR10,Desk Lamp,Furniture,55,28.0,12
+PR11,Bookshelf,Furniture,18,95.0,5
+PR12,Filing Cabinet,Furniture,14,115.0,4
+PR13,A4 Notebooks (10pk),Stationery,180,8.5,50
+PR14,Ballpoint Pens (20pk),Stationery,220,4.2,60
+PR15,Sticky Notes (5pk),Stationery,200,3.8,60
+PR16,Stapler,Stationery,60,12.0,15
+PR17,Scissors Set,Stationery,40,7.5,10
+PR18,Coffee Beans 1kg,Pantry,65,14.0,22
+PR19,Instant Coffee 200g,Pantry,95,6.5,35
+PR20,Green Tea 50 bags,Pantry,80,5.2,28
+PR21,Protein Bars (12pk),Pantry,50,18.0,15
+PR22,Mineral Water 12pk,Pantry,120,8.0,40
+PR23,Hand Sanitiser 500ml,Health,120,3.9,35
+PR24,Paracetamol 24pk,Health,90,2.8,28
+PR25,Face Masks 50pk,Health,65,9.5,22
+PR26,First Aid Kit,Health,30,22.0,8
+PR27,Vitamin C 60 tabs,Health,75,11.0,20
+PR28,Whiteboard A1,Office,12,45.0,3
+PR29,Marker Set (8pc),Office,55,8.0,15
+PR30,Printer Paper (500sh),Office,90,6.5,25

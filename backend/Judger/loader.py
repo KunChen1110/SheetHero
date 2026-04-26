@@ -99,8 +99,7 @@ def find_dataset() -> str:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     search_paths = [
         os.path.join(script_dir, "dataset.json"),
-        os.path.join(script_dir, "../../dataset/dataset.json"),
-        os.path.join(script_dir, "../dataset/dataset.json"),
+        os.path.join(script_dir, "../../dataset/DevelopmentBenchmark/dataset.json"),
         "dataset.json",
     ]
     for p in search_paths:

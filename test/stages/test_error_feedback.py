@@ -18,9 +18,9 @@ def test_market_share_shipment_feedback_uses_helper_metadata_mapping():
     )
 
     assert feedback is not None
-    assert "build_market_share_shipment_report()" in feedback
-    assert "market_share_shipment_result['detail_data']" in feedback
-    assert "Do not manually rebuild the shipment-versus-market-share comparison in code." in feedback
+    assert "build_weighted_share_value_report()" in feedback
+    assert "weighted_share_value_result['detail_data']" in feedback
+    assert "Do not manually rebuild the weighted share-versus-total-value comparison in code." in feedback
 
 
 def test_regression_coef_feedback_uses_documented_helper_result_keys():

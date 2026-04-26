@@ -294,7 +294,17 @@ class ExecutionErrorFeedbackBuilder:
                 "- Call the helpers directly."
             )
 
-        if "'list' object has no attribute 'columns'" in execution_result or "'list' object has no attribute 'values'" in execution_result:
+        if (
+            "'list' object has no attribute 'columns'" in execution_result
+            or "'list' object has no attribute 'values'" in execution_result
+            or "'list' object has no attribute 'sum'" in execution_result
+            or "'list' object has no attribute 'mean'" in execution_result
+            or "'list' object has no attribute 'max'" in execution_result
+            or "'list' object has no attribute 'min'" in execution_result
+            or "'list' object has no attribute 'groupby'" in execution_result
+            or "'list' object has no attribute 'iloc'" in execution_result
+            or "'list' object has no attribute 'loc'" in execution_result
+        ):
             return (
                 "MINIMAL FIX REQUIRED: helper `detail_data` output was treated like a DataFrame.\n"
                 "- `...['detail_data']` is already a ready-to-write 2D table payload.\n"
@@ -371,6 +381,7 @@ class ExecutionErrorFeedbackBuilder:
         if "KeyError: 'max'" in execution_result or "Execution error: 'max'" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: `summarize_numeric_column(...)` does not return a `max` key.\n"
+                "- Use `summary_result['total']`, `summary_result['average']`, and `summary_result['max_value']` for scalar values.\n"
                 "- Use `summary_result['summary']` for the total/average text that goes into `add_summary_row(...)`.\n"
                 "- Use `summary_result['output_row_numbers']` to highlight the highest-spending rows when you wrote the same `summary_df`.\n"
                 "- Safe repair shape:\n"
@@ -378,6 +389,23 @@ class ExecutionErrorFeedbackBuilder:
                 "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
                 "  `row_numbers = summary_result['output_row_numbers']`\n"
                 "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`"
+            )
+
+        if (
+            "KeyError: 'Total'" in execution_result
+            or "Execution error: 'Total'" in execution_result
+            or "KeyError: 'Average'" in execution_result
+            or "Execution error: 'Average'" in execution_result
+        ):
+            return (
+                "MINIMAL FIX REQUIRED: `summary_result['summary']` is a label-to-value mapping for output rows, not the primary scalar API.\n"
+                "- Use `summary_result['total']` and `summary_result['average']` for scalar values.\n"
+                "- Use `summary_result['summary']` only when passing the whole mapping to `add_summary_row(...)`.\n"
+                "- Safe repair shape:\n"
+                "  `summary_result = summarize_numeric_column(summary_df, value_col='...')`\n"
+                "  `total_value = summary_result['total']`\n"
+                "  `average_value = summary_result['average']`\n"
+                "  `add_summary_row('Output', summary_row, summary_result['summary'])`"
             )
 
         column_missing = re.search(r"KeyError:\s*'([^']+)'", execution_result)

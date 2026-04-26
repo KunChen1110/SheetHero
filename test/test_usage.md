@@ -3,7 +3,7 @@
 ## Run the whole backend
 
 ``` bash
-python -m src.backend.main --task-json dataset/dataset.json --task-index 1
+python -m src.backend.main --task-json dataset/DevelopmentBenchmark/dataset.json --task-index 1
 ```
 Run the first integration test
 
@@ -34,4 +34,3 @@ python3 test/utils/geometric_sampling_test.py --test-id 1 --dataset-dir dataset
 ```
 
 By default, `DIAGNOSE_GEOM_DEBUG=1`, which means that you can see the reason why a certain row is sampled.
-

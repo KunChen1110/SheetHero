@@ -1,0 +1,873 @@
+[
+    {
+        "task_id": "Test 1",
+        "title": "Grocery Budget Analysis",
+        "scenario": "Personal finance / grocery expense tracking",
+        "category": "merge two weekly spending tables; compute total and average daily spending; highlight maximum spending day",
+        "spreadsheets": [
+            "Case01/tc01_input01.csv",
+            "Case01/tc01_input02.csv"
+        ],
+        "prompt": "Here are two tables showing my weekly grocery spending for two consecutive weeks. First merge the two tables into a single table, then calculate the average daily spending and the total spending across both weeks. Also highlight in red the day on which I spend the most. Finally, output the results as a new spreadsheet.",
+        "answer": "Total spending: £177.35\nAverage daily spending: £12.67\nMax spending day: Tuesday Week 2 (£25.50 — Meat), highlighted in red.",
+        "expected_output_file": [
+            "Case01/tc01_output01.xlsx"
+        ],
+        "feedback": "Should I treat the same weekday name in both weeks as separate days (14 total days) or as one repeating 7-day cycle?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Here are two tables showing my weekly grocery spending for two consecutive weeks. Merge them, calculate total and average daily spending, highlight the max day in red, and output as a spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I treat each weekday as a separate day per week (14 days total) or combine same-named days across both weeks into 7 unique days?"
+            },
+            {
+                "role": "user",
+                "content": "Treat them as 14 separate days (7 per week)."
+            },
+            {
+                "role": "assistant",
+                "content": "Done. Total: £177.35, Average daily: £12.67. Max spending day is Tuesday of Week 2 (£25.50), highlighted in red in the merged table."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 2",
+        "title": "Class Timetable Scheduling",
+        "scenario": "Education / scheduling",
+        "category": "join student, teacher, course, and enrollment tables; build consolidated class schedule",
+        "spreadsheets": [
+            "Case02/tc02_input01.csv",
+            "Case02/tc02_input02.csv",
+            "Case02/tc02_input03.csv",
+            "Case02/tc02_input04.csv"
+        ],
+        "prompt": "Here are four tables about students, teachers, courses, and enrollments. Your task is to produce a new table that lists, for each course, the teacher's name, meeting day, time, room, and the students enrolled. Output the result as a new spreadsheet.",
+        "answer": "Generated schedule with 3 courses: MATH101 (Dr. Johnson, Mon 09:00, A101, 3 students), CS201 (Prof. Chen, Tue 14:00, B203, 3 students), ENG102 (Ms. Rodriguez, Wed 11:00, C105, 3 students). Total 9 enrollment entries.",
+        "expected_output_file": [
+            "Case02/tc02_output01.xlsx"
+        ],
+        "feedback": "I notice the enrollment table links students to course codes but teacher names are in a separate table. Should I join all four tables to produce the final schedule?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Here are four tables about students, teachers, courses, and enrollments. Produce a schedule showing for each course the teacher, day, time, room, and enrolled students."
+            },
+            {
+                "role": "assistant",
+                "content": "I'll join the four tables on TeacherID and CourseCode to produce the schedule. Should I list multiple students in a single cell per course (semicolon-separated) or use one row per student per course?"
+            },
+            {
+                "role": "user",
+                "content": "One row per course with students listed in a single cell separated by semicolons."
+            },
+            {
+                "role": "assistant",
+                "content": "Schedule generated. 3 courses with full details: MATH101 (Mon 09:00, Room A101, 3 students), CS201 (Tue 14:00, Room B203, 3 students), ENG102 (Wed 11:00, Room C105, 3 students)."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 3",
+        "title": "Social Media Penetration Rate Analysis",
+        "scenario": "Statistical analysis and data visualization",
+        "category": "compute regional averages and growth over 2020-2024; rank regions by growth; generate line chart",
+        "spreadsheets": [
+            "Case03/tc03_input01.csv"
+        ],
+        "prompt": "Here is a table showing social media penetration rates (%) by region from 2018 to 2024. Please calculate the average penetration rate for each region over the years 2020–2024. Identify the region with the fastest growth rate and sort the regions by growth rate. Also provide a line chart where each region is a different color, the horizontal axis is year (2020 to 2024), and the vertical axis is penetration rate. Output the results as a new spreadsheet.",
+        "answer": "Average rates (2020-2024): Africa 37.38%, Asia_Pacific 62.10%, Europe 87.04%, Middle_East 74.62%, Americas 74.78%, North_America 92.74%. Fastest growth: Africa (+9.6 pp from 2020 to 2024). Sorted by growth: Africa, Asia_Pacific, Middle_East, Americas, Europe, North_America.",
+        "expected_output_file": [
+            "Case03/tc03_output01.xlsx"
+        ],
+        "feedback": "The 2018-2019 data are available but outside the requested range. Should I include them in the chart for context, or show only 2020-2024?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate average social media penetration 2020-2024 per region, rank by growth, and provide a line chart for 2020-2024."
+            },
+            {
+                "role": "assistant",
+                "content": "The dataset also contains 2018-2019 data. Should the line chart include those years for trend context, or strictly show 2020-2024 only?"
+            },
+            {
+                "role": "user",
+                "content": "Show only 2020-2024 in the chart as specified."
+            },
+            {
+                "role": "assistant",
+                "content": "Done. Fastest growth is Africa (+9.6 pp). Regions sorted by growth: Africa, Asia_Pacific, Middle_East, Americas, Europe, North_America. Line chart covers 2020-2024 with one line per region."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 4",
+        "title": "Software Sprint Task Scheduling",
+        "scenario": "Project management / algorithmic scheduling",
+        "category": "build task dependency graph; perform topological scheduling; compute total duration",
+        "spreadsheets": [
+            "Case04/tc04_input01.csv",
+            "Case04/tc04_input02.csv"
+        ],
+        "prompt": "Here is a table of sprint tasks with durations and priorities, and another table of task dependencies. All work starts at 09:00.\nSchedule the tasks respecting dependencies and output a new Excel sheet with columns:\n| TaskID | TaskName | Priority | StartTime | EndTime |\nAlso answer: What is the total duration to finish all tasks?",
+        "answer": "Total duration: 26 hours. Schedule (09:00 start): T1 09:00-11:00, T2 11:00-15:00, T3 15:00-18:00, T4 18:00-00:00, T5 00:00-04:00, T6 04:00-07:00, T7 07:00-09:00, T8 09:00-11:00.",
+        "expected_output_file": [
+            "Case04/tc04_output01.xlsx"
+        ],
+        "feedback": "Should I assume zero transition time between tasks? Also, when T4 and T5 both become available after T3, should priority determine which runs first?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Schedule sprint tasks starting at 09:00, respecting dependencies. What is the total duration?"
+            },
+            {
+                "role": "assistant",
+                "content": "Zero transition time assumed. When T4 and T5 are both unblocked after T3, should I schedule T4 first (High priority) before T5 (Medium)?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, use priority to break ties between ready tasks."
+            },
+            {
+                "role": "assistant",
+                "content": "Total duration: 26 hours. Tasks scheduled sequentially respecting dependencies and priority. T8 finishes at 11:00 the next day."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 5",
+        "title": "Indian EV Market Analysis",
+        "scenario": "Business / market analysis",
+        "category": "align time ranges; combine total EV sales and market share; compute estimated unit sales per brand",
+        "spreadsheets": [
+            "Case05/tc05_input01.csv",
+            "Case05/tc05_input02.csv"
+        ],
+        "prompt": "Here are two tables. One gives the total EV units sold in India by quarter (2020-2022), and the other gives market share by brand (2021-2022). Find the overlapping time period, then estimate the number of EVs sold for each brand as market_share × total_units.\nOutput a table with columns:\n| Quarter | Tata (thou) | MG | Hyundai | Mahindra | Kia | Others |",
+        "answer": "Overlapping period: 2021Q1 to 2022Q4 (8 quarters). Example 2021Q1 (12.0k total): Tata 8.70k (72.5%), MG 1.00k (8.3%), Hyundai 0.74k (6.2%), Mahindra 0.37k (3.1%), Kia 0.58k (4.8%), Others 0.61k (5.1%). Market share percentages converted to decimals before multiplication.",
+        "expected_output_file": [
+            "Case05/tc05_output01.xlsx"
+        ],
+        "feedback": "Should I convert percentage market share to decimal before multiplication (20% → 0.20)?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate unit EV sales per brand using market_share × total_units for the overlapping period."
+            },
+            {
+                "role": "assistant",
+                "content": "Should market share percentages be converted to decimals first (20% → 0.20), and should I focus only on quarters where both datasets have data (2021Q1–2022Q4)?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, convert percentages to decimals. Use only the overlapping period."
+            },
+            {
+                "role": "assistant",
+                "content": "Calculated 8 quarters (2021Q1–2022Q4). For 2021Q1: Tata 8.70k, MG 1.00k, Hyundai 0.74k, Mahindra 0.37k, Kia 0.58k, Others 0.61k."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 6",
+        "title": "Maritime Passenger Survival Analysis",
+        "scenario": "Statistical analysis / exploratory data analysis",
+        "category": "compute Pearson correlation coefficients between survival and passenger features; handle categorical encoding; output summary table",
+        "spreadsheets": [
+            "Case06/tc06_input01.csv"
+        ],
+        "prompt": "Your task is to calculate the Pearson correlation coefficient between Survived and each of the other features (Sex, Class, Age, Fare_USD) using this maritime passenger dataset.\nPearson: r = cov(X,Y) / (σ_X × σ_Y)\nEncode Sex as binary (Female=1, Male=0).\nOutput an Excel file with columns:\n| Feature | Correlation_with_Survived |",
+        "answer": "Pearson correlations with Survived: Sex (Female=1): +0.52 (strong positive, females more likely to survive), Class: -0.51 (negative, first-class passengers survive more), Age: -0.05 (weak negative), Fare_USD: +0.53 (moderate positive, higher fares linked to survival).",
+        "expected_output_file": [
+            "Case06/tc06_output01.xlsx"
+        ],
+        "feedback": "Should Sex be encoded as Female=1, Male=0 or the other way around? Also, is Class treated as a numeric ordinal (1, 2, 3)?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate Pearson correlation between Survived and each feature (Sex, Class, Age, Fare_USD)."
+            },
+            {
+                "role": "assistant",
+                "content": "For Sex, I'll encode Female=1, Male=0. Class is already numeric (1, 2, 3). Should I use pairwise deletion for any missing values, or are all rows complete?"
+            },
+            {
+                "role": "user",
+                "content": "All rows are complete. Use Female=1, Male=0. Proceed with the full dataset."
+            },
+            {
+                "role": "assistant",
+                "content": "Correlations: Sex=+0.52, Class=-0.51, Age=-0.05, Fare=+0.53. Females and first-class passengers show strongest positive association with survival."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 7",
+        "title": "Coffee Shop Revenue Regression",
+        "scenario": "Machine learning / regression analysis",
+        "category": "fit linear regression model; estimate feature coefficients; export learned weights",
+        "spreadsheets": [
+            "Case07/tc07_input01.csv"
+        ],
+        "prompt": "Assume a linear relationship between coffee shop daily sales and four factors: temperature, precipitation, foot traffic, and price. Fit a linear regression model to estimate the weight (coefficient) of each factor in predicting Sales_USD. Output the learned weights in an Excel file.",
+        "answer": "Linear regression coefficients (approximate): Intercept: -218.50, Temperature_F: +6.21 (each degree F increases sales by ~$6.21), Precipitation_in: -52.30 (rain reduces sales), FootTraffic: +3.18 (each extra visitor adds ~$3.18), Price_USD: +48.75 (premium pricing correlates with higher sales in peak periods).",
+        "expected_output_file": [
+            "Case07/tc07_output01.xlsx"
+        ],
+        "feedback": "Should I normalise the features before fitting, or use raw values so coefficients are directly interpretable in business terms?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Fit a linear regression model to estimate weights for Temperature, Precipitation, FootTraffic, and Price predicting daily coffee shop Sales_USD."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I normalise the features before fitting (to compare relative importance) or use raw values so coefficients represent actual business impact?"
+            },
+            {
+                "role": "user",
+                "content": "Use raw values so coefficients represent actual business impact."
+            },
+            {
+                "role": "assistant",
+                "content": "Model fitted using OLS. Coefficients: Intercept -218.50, Temperature +6.21, Precipitation -52.30, FootTraffic +3.18, Price +48.75. Higher temperature and foot traffic positively drive sales; rain has a negative impact."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 8",
+        "title": "Wine Quality Correlation Matrix",
+        "scenario": "Machine learning / statistical analysis",
+        "category": "filter by wine type; compute correlation matrix of numeric features; format correlation table",
+        "spreadsheets": [
+            "Case08/tc08_input01.csv"
+        ],
+        "prompt": "Calculate the correlation matrix for all numeric columns in the wine dataset, restricted to WineType = 'red'.\nOutput a 6×6 table with rows and columns:\n| FixedAcidity | VolatileAcidity | CitricAcid | ResidualSugar | pH | Alcohol |\nRound all values to 2 decimal places and label the table clearly with the wine type.",
+        "answer": "Correlation matrix for red wine (10 samples): Strong negative correlation between FixedAcidity and pH (-0.68) and between VolatileAcidity and CitricAcid (-0.55). Strong positive correlation between FixedAcidity and CitricAcid (+0.67). All values rounded to 2 decimal places.",
+        "expected_output_file": [
+            "Case08/tc08_output01.xlsx"
+        ],
+        "feedback": "Should the WineType label appear as the sheet name or as a title row above the matrix?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate the 6×6 correlation matrix for red wine only, rounded to 2 decimal places."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I include 'WineType: red' as the sheet name, a title row above the matrix, or a separate annotation cell?"
+            },
+            {
+                "role": "user",
+                "content": "Use the sheet name and add a title row above the matrix."
+            },
+            {
+                "role": "assistant",
+                "content": "Filtered to 10 red wine samples. Correlation matrix computed. Notable: FixedAcidity↔pH = -0.68, FixedAcidity↔CitricAcid = +0.67, VolatileAcidity↔CitricAcid = -0.55."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 9",
+        "title": "Tesla Cash Flow Efficiency Analysis",
+        "scenario": "Financial / business analysis",
+        "category": "compute OCF-to-net-income ratios; calculate free cash flow; summarise year-by-year and totals",
+        "spreadsheets": [
+            "Case09/tc09_input01.csv"
+        ],
+        "prompt": "Evaluate Tesla's cash flow efficiency from 2017 to 2023 by calculating:\n* Operating Cash Flow to Net Income ratio (OCF / Net Income)\n* Free Cash Flow (Operating Cash Flow − Capital Expenditures)\nShow results year-by-year and include totals at the bottom. Note any anomalous years.",
+        "answer": "OCF/NI ratios: 2017: -0.24, 2018: -2.15, 2019: -2.79 (negative NI years), 2020: 8.24 (first profitable), 2021: 2.08, 2022: 1.15, 2023: 0.88. FCF: -609M, -3M, +968M, +2,786M, +4,982M, +7,327M, +4,358M. Total Net Income 2017-2023: $29,971M. Total FCF: $19,809M.",
+        "expected_output_file": [
+            "Case09/tc09_output01.xlsx"
+        ],
+        "feedback": "The OCF/NI ratio is undefined or misleading when Net Income is negative (2017-2019). Should I flag these years separately or include a note?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate OCF/Net Income ratio and Free Cash Flow for Tesla 2017-2023, year-by-year with totals."
+            },
+            {
+                "role": "assistant",
+                "content": "Years 2017-2019 have negative Net Income, making OCF/NI ratios negative or misleading. Should I include a note flagging these as pre-profit years?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, include a note for those years and show totals at the bottom regardless."
+            },
+            {
+                "role": "assistant",
+                "content": "Done. 2017-2019 flagged as negative-NI years. FCF turned positive in 2019 and grew through 2022. Total FCF 2017-2023: $19,809M."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 10",
+        "title": "Network Topology Cycle Detection",
+        "scenario": "Algorithm problem on graph structures",
+        "category": "parse adjacency lists; detect cycles in directed graphs using DFS; flag graphs with cycles",
+        "spreadsheets": [
+            "Case10/tc10_input01.csv",
+            "Case10/tc10_input02.csv",
+            "Case10/tc10_input03.csv",
+            "Case10/tc10_input04.csv",
+            "Case10/tc10_input05.csv"
+        ],
+        "prompt": "Given five CSV files representing the adjacency lists of directed graphs, determine which graphs contain a cycle and which do not. Output an Excel file with columns:\n| GraphID | Contains_Cycle (True / False) |",
+        "answer": "Graph1: True (social network — Alice→Bob→Carol→Dave→Alice cycle). Graph2: False (task dependency DAG). Graph3: False (module dependency DAG). Graph4: True (transport — CityA→CityB→CityC→CityA). Graph5: True (event chain — Step3→Step1 back-edge).",
+        "expected_output_file": [
+            "Case10/tc10_output01.xlsx"
+        ],
+        "feedback": "None\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Detect cycles in these 5 directed graphs represented as adjacency lists."
+            },
+            {
+                "role": "assistant",
+                "content": "Analysing using DFS-based cycle detection (back-edge identification)."
+            },
+            {
+                "role": "assistant",
+                "content": "Results: Graph1 True (Alice→Dave→Alice), Graph2 False (DAG), Graph3 False (DAG), Graph4 True (CityC→CityA), Graph5 True (Step3→Step1). Output written to Excel."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 11",
+        "title": "Office Supply Inventory Management",
+        "scenario": "Operations research / inventory management",
+        "category": "compute EOQ and related metrics; run sensitivity analysis; evaluate demand-increase scenario",
+        "spreadsheets": [
+            "Case11/tc11_input01.csv"
+        ],
+        "prompt": "Here is an inventory dataset for A4 copy paper.\nPlease:\n1. Calculate EOQ, reorder point, orders per year, cycle time, and total annual cost for the base scenario.\n2. Perform sensitivity analysis varying order quantity at 50%, 75%, 100%, 125%, and 150% of EOQ.\n3. Evaluate a scenario where annual demand increases by 20% and recompute all metrics.\nOutput results in a new Excel file with one table per scenario.",
+        "answer": "Base: EOQ=282.84 units, ROP=67.2 units, Orders/year=8.49, Cycle time=29.45 days, Total cost=$19624.26. Sensitivity: costs at Q=141 ($19731.28), Q=212 ($19642.02), Q=282 ($19624.26), Q=354 ($19634.99), Q=425 ($19659.51). Demand +20%: EOQ=309.84, ROP=80.6, Total cost=$23504.76.",
+        "expected_output_file": [
+            "Case11/tc11_output01.xlsx"
+        ],
+        "feedback": "Should the holding cost be calculated as a percentage of unit cost, or is the given $1.50/unit a fixed rate? Should purchase cost (D×C) be included in the total annual cost?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate EOQ, reorder point, sensitivity analysis, and demand +20% scenario for the office supply inventory."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I include the purchase cost (Annual Demand × Unit Cost = $19,200) in the Total Annual Cost, or report only ordering + holding costs?"
+            },
+            {
+                "role": "user",
+                "content": "Include all costs: purchase + ordering + holding."
+            },
+            {
+                "role": "assistant",
+                "content": "Base scenario: EOQ=282.84 units, Total cost=$19624.26. Sensitivity shows minimum cost at EOQ. Demand +20%: new EOQ=309.84, cost rises to $23504.76."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 12",
+        "title": "Q2 Financial Performance Dashboard",
+        "scenario": "Financial performance and marketing analytics",
+        "category": "consolidate monthly P&L and marketing data; compute profit and margin metrics; calculate CAC and marketing efficiency",
+        "spreadsheets": [
+            "Case12/tc12_input01.csv",
+            "Case12/tc12_input02.csv",
+            "Case12/tc12_input03.csv"
+        ],
+        "prompt": "Calculate the following metrics for each month and the total Q2:\n- Gross Profit (Revenue − COGS)\n- Net Profit (Gross Profit − Operating Expenses − Interest Paid)\n- Gross Profit Margin (Gross Profit / Revenue)\n- Net Profit Margin (Net Profit / Revenue)\n- Customer Acquisition Cost (Marketing Spend / New Customers)\n- Marketing Efficiency Ratio (Revenue / Marketing Spend)\nOutput a consolidated dashboard comparing actuals to targets.",
+        "answer": "Q2 Dashboard: Gross Profit $136,880 (target $130,000, +$6,880, Exceeding). Net Profit $45,380 (target $40,000, +$5,380, Exceeding). GP Margin 58.0% (target 55.0%, Exceeding). NP Margin 19.2% (target 18.0%, Exceeding). CAC $53.13 (target $55.00, Exceeding). MER 8.97 (target 8.00, Exceeding). All metrics exceed Q2 targets.",
+        "expected_output_file": [
+            "Case12/tc12_output01.xlsx"
+        ],
+        "feedback": "For quarterly ratios (margins, CAC), should I calculate them from Q2 totals or average the monthly ratios?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate Q2 financial metrics and marketing KPIs for each month and total quarter. Compare against targets."
+            },
+            {
+                "role": "assistant",
+                "content": "For CAC and margin ratios at the Q2 level, should I calculate from Q2 totals (more accurate) or average the three monthly ratios?"
+            },
+            {
+                "role": "user",
+                "content": "Calculate from Q2 totals for accuracy."
+            },
+            {
+                "role": "assistant",
+                "content": "All 6 metrics exceed targets. GP=$136,880, NP=$45,380, GP Margin=58.0%, NP Margin=19.2%, CAC=$53.13, MER=8.97."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 13",
+        "title": "Global Obesity Population Analysis",
+        "scenario": "Public health and healthcare expenditure analysis",
+        "category": "aggregate obese population by region; compute global share and average expenditure per person; build summary table",
+        "spreadsheets": [
+            "Case13/tc13_input01.csv",
+            "Case13/tc13_input02.csv",
+            "Case13/tc13_input03.csv"
+        ],
+        "prompt": "Given three spreadsheets showing obesity prevalence by country, obese population by region (millions), and healthcare expenditure by region (billion USD), calculate for each region:\n* Share of global obese population (%)\n* Average healthcare expenditure per obese person (USD)\nOutput an Excel file with columns:\n| Region | Obese_Pop (millions) | Global_Share (%) | Expenditure (billion USD) | Avg_Exp_per_Person (USD) |",
+        "answer": "7 regions. Total global obese population: 723.8M. Asia_Pacific largest share (33.96%, 245.8M, $755/person). North_America highest per-person cost ($3,680, 130.5M). Oceania smallest share (1.77%, 12.8M, $2,227/person). South_Asia lowest per-person cost ($410).",
+        "expected_output_file": [
+            "Case13/tc13_output01.xlsx"
+        ],
+        "feedback": "Note: Country-level prevalence data (input1) and regional population data (input2) use different granularities. The regional population totals should be used directly for share and per-person calculations.\n\n---",
+        "conversations": []
+    },
+    {
+        "task_id": "Test 14",
+        "title": "Hotel Review Analysis",
+        "scenario": "Customer review and hospitality analytics",
+        "category": "group reviews by country and hotel type; compute average rating and review counts; summarise in table",
+        "spreadsheets": [
+            "Case14/tc14_input01.csv"
+        ],
+        "prompt": "Given a dataset of hotel reviews containing country, hotel type, and overall rating, generate a table showing for each country and hotel type: the average rating and the number of reviews. Output an Excel file with columns: Country, HotelType, avg_rating, num_reviews. Calculate average ratings to at least 6 decimal places.",
+        "answer": "20 country-hotel type combinations across 5 countries (UK, France, Germany, Spain, Italy) and 4 hotel types (Budget, Mid-range, Luxury, Boutique). Average ratings calculated to 6 decimal places. Review counts vary from 3 to 5 per combination.",
+        "expected_output_file": [
+            "Case14/tc14_output01.xlsx"
+        ],
+        "feedback": "Should missing ratings be excluded or treated as zero? Also, should I include combinations with fewer than 3 reviews?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Generate a summary table of average hotel rating and review count by country and hotel type."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I exclude combinations with very few reviews (e.g., less than 3), or include all country-hotel type combinations present in the data?"
+            },
+            {
+                "role": "user",
+                "content": "Include all combinations regardless of review count. Calculate average ratings to 6 decimal places."
+            },
+            {
+                "role": "assistant",
+                "content": "20 country-hotel type combinations analysed. Ratings calculated to 6 decimal places. All combinations included."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 15",
+        "title": "Movie Dataset Multi-Table Merge",
+        "scenario": "Data integration and analysis",
+        "category": "merge multiple relational CSV tables on MovieID; translate and unify genre information; report merged dataset size",
+        "spreadsheets": [
+            "Case15/tc15_input01.csv",
+            "Case15/tc15_input02.csv",
+            "Case15/tc15_input03.csv",
+            "Case15/tc15_input04.csv",
+            "Case15/tc15_input05.csv"
+        ],
+        "prompt": "Here are five CSV files from a movie dataset. Please merge them into a single table (joining on MovieID) and output the merged result as a new Excel file. In your final answer also report the size of the merged dataset (number of rows and columns).",
+        "answer": "Merged dataset: rows=14, columns=9. Merging movies (10) with genres (14, some movies have 2 genres) plus ratings, directors, and studios. Final columns: MovieID, Title, Year, Language, Genre, AudienceScore, CriticScore, DirectorName, StudioName.",
+        "expected_output_file": [
+            "Case15/tc15_output01.xlsx"
+        ],
+        "feedback": "None\n\n---",
+        "conversations": []
+    },
+    {
+        "task_id": "Test 16",
+        "title": "Employee Productivity & Salary Correlation",
+        "scenario": "HR analytics and compensation analysis",
+        "category": "compute Pearson correlation between performance rating and salary; aggregate average salary by rating; create scatter plot of hours vs salary",
+        "spreadsheets": [
+            "Case16/tc16_input01.csv"
+        ],
+        "prompt": "Here is a dataset containing employee details including monthly salary, weekly hours, and performance rating. Please calculate the Pearson correlation between PerformanceRating and MonthlySalary, compute the average salary for each rating level, and create a scatter plot of HoursPerWeek versus MonthlySalary. Output the results in a new Excel file.",
+        "answer": "Pearson correlation (PerformanceRating vs MonthlySalary): ≈0.63 (moderate positive relationship). Average salary by rating increases from Rating 1 to Rating 5 as expected. Scatter plot of HoursPerWeek vs MonthlySalary with linear trendline generated.",
+        "expected_output_file": [
+            "Case16/tc16_output01.xlsx"
+        ],
+        "feedback": "Should the scatter plot include a trendline?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate Pearson correlation between PerformanceRating and MonthlySalary, average salary by rating level, and a scatter plot of hours vs salary."
+            },
+            {
+                "role": "assistant",
+                "content": "Should the scatter plot include a linear trendline to highlight the relationship between hours worked and salary?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, include a linear trendline."
+            },
+            {
+                "role": "assistant",
+                "content": "Correlation (PerformanceRating vs Salary): ≈0.63. Average salary rises with rating. Scatter plot of hours vs salary with trendline generated in the output."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 17",
+        "title": "Supermarket Store Sales Analysis",
+        "scenario": "Retail store performance analysis",
+        "category": "merge weekly sales and store feature tables; compute average sales and features by store type; compare holiday vs non-holiday weeks",
+        "spreadsheets": [
+            "Case17/tc17_input01.csv",
+            "Case17/tc17_input02.csv"
+        ],
+        "prompt": "Here are two tables containing weekly store sales and store information. Please merge them by StoreID, then calculate the average weekly sales, temperature, and fuel price for each store type. Also compare holiday and non-holiday weeks by computing the average values for each numeric feature. Output a summary Excel file.",
+        "answer": "Merged on StoreID. By store type: Type A (3 stores, avg ~$26,500/week), Type B (1 store, ~$19,200), Type C (1 store, ~$13,100). Holiday vs Non-Holiday: holiday weeks average ~35% higher sales. Temperature and fuel price remain similar across periods.",
+        "expected_output_file": [
+            "Case17/tc17_output01.xlsx"
+        ],
+        "feedback": "Should the holiday/non-holiday comparison be broken down by store type, or aggregated across all stores combined?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Merge by StoreID, compute averages by store type, and compare holiday vs non-holiday weeks."
+            },
+            {
+                "role": "assistant",
+                "content": "Should the holiday comparison be aggregated across all stores combined, or shown separately per store type?"
+            },
+            {
+                "role": "user",
+                "content": "Aggregate across all stores combined for the holiday comparison. Store type analysis should be separate."
+            },
+            {
+                "role": "assistant",
+                "content": "Store type averages and holiday/non-holiday comparison generated. Holiday weeks show ~35% higher sales. Type A stores have the highest average weekly sales."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 18",
+        "title": "Hospital Admission Trends Analysis",
+        "scenario": "Healthcare operations and trend analysis",
+        "category": "aggregate admissions by year; calculate year-over-year growth; identify high-growth years; create trend line chart",
+        "spreadsheets": [
+            "Case18/tc18_input01.csv"
+        ],
+        "prompt": "Here is a dataset showing total hospital admissions by year (2010–2022). Please calculate the year-over-year growth in total admissions, identify years with more than 10% growth, and create a line chart showing the overall admission trend. Highlight high-growth years clearly in the Excel output.",
+        "answer": "Total admissions 2010–2022 calculated. High-growth years (>10%): 2016 (+23.35%), 2017 (+10.78%), 2021 (+10.81%). Admissions dipped in 2020 (likely COVID impact: -7.01%). Line chart shows steady growth with jumps in 2016 and 2021.",
+        "expected_output_file": [
+            "Case18/tc18_output01.xlsx"
+        ],
+        "feedback": "The 2020 drop likely reflects the COVID-19 pandemic. Should I annotate this in the output as a note?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate YoY growth for hospital admissions 2010-2022, identify >10% growth years, and create a trend line chart."
+            },
+            {
+                "role": "assistant",
+                "content": "I notice admissions dropped in 2020 (-7.01%), likely due to COVID-19. Should I annotate this as a note in the output?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, add a note about the 2020 drop in the output."
+            },
+            {
+                "role": "assistant",
+                "content": "High-growth years: 2016 (+23.35%), 2017 (+10.78%), 2021 (+10.81%), all highlighted. 2020 drop annotated. Line chart generated."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 19",
+        "title": "Global Solar Energy Production Analysis",
+        "scenario": "Environmental and energy data analysis",
+        "category": "group solar production by continent; compute yearly totals and percentage changes 2005-2020; build ranking bar chart",
+        "spreadsheets": [
+            "Case19/tc19_input01.csv"
+        ],
+        "prompt": "This dataset lists annual solar energy production (GWh) by country for 2005, 2010, 2015, and 2020. Please group countries by continent, calculate the total solar production per continent for each year, and compute the percentage change from 2005 to 2020.\nCreate a bar chart ranking continents by 2020 solar production. Output the results in a new Excel file.",
+        "answer": "Asia leads in 2020 solar production (1,025,500 GWh) with largest absolute growth. Americas second. All continents show massive percentage increases. Asia growth: >60,000%. Oceania and Africa also show strong relative growth from low base.",
+        "expected_output_file": [
+            "Case19/tc19_output01.xlsx"
+        ],
+        "feedback": "Should countries without a continent mapping be grouped under 'Unknown'? All countries here have continent assignments.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Group countries by continent, calculate total solar production per continent for each year, compute % change 2005-2020, and create a ranking bar chart for 2020."
+            },
+            {
+                "role": "assistant",
+                "content": "All 21 countries have continent assignments, so no 'Unknown' group is needed. I'll compute totals and percentage changes for all 5 continents."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Asia dominates 2020 solar production. All continents show exceptional growth from the 2005 baseline. Bar chart and summary table generated."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 20",
+        "title": "School Facility Utilization Analysis",
+        "scenario": "Education operations and resource planning",
+        "category": "combine staff, schedule, service, and booking tables; compute service utilization per department; highlight overutilised departments",
+        "spreadsheets": [
+            "Case20/tc20_input01.csv",
+            "Case20/tc20_input02.csv",
+            "Case20/tc20_input03.csv",
+            "Case20/tc20_input04.csv"
+        ],
+        "prompt": "Here are four school tables containing staff, weekly schedules, service metrics, and student bookings. Please compute service utilisation (visits / max capacity) and staff utilisation for each department. Identify departments with utilisation above 90% and highlight these values in red. Output all results in a new Excel file.",
+        "answer": "Service utilisation: Sciences 69.4%, Arts 98.0% (OVER 90%), Mathematics 60.7%, Languages 80.0%, Sports 95.4% (OVER 90%). Arts and Sports departments highlighted in red as overutilised. Staff utilisation across departments is broadly consistent (~85-90%).",
+        "expected_output_file": [
+            "Case20/tc20_output01.xlsx"
+        ],
+        "feedback": "Should the red highlight apply only to the utilisation value cell, or to the entire row?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Compute service and staff utilisation per department, highlight >90% utilisation in red, and output to Excel."
+            },
+            {
+                "role": "assistant",
+                "content": "Should the red formatting apply only to the utilisation percentage cell, or highlight the entire row for overutilised departments?"
+            },
+            {
+                "role": "user",
+                "content": "Highlight only the specific utilisation value cells that exceed 90%."
+            },
+            {
+                "role": "assistant",
+                "content": "Arts (98.0%) and Sports (95.4%) exceed 90% service utilisation — their utilisation cells are highlighted in red. Sciences, Mathematics, and Languages are within capacity."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 21",
+        "title": "Grant Application Scoring",
+        "scenario": "Research funding / candidate evaluation",
+        "category": "aggregate applicant attributes from multiple files; compute weighted score; rank and filter candidates",
+        "spreadsheets": [
+            "Case21/tc21_input01.csv",
+            "Case21/tc21_input02.csv",
+            "Case21/tc21_input03.csv",
+            "Case21/tc21_input04.csv",
+            "Case21/tc21_input05.csv",
+            "Case21/tc21_input06.csv",
+            "Case21/tc21_input07.csv",
+            "Case21/tc21_input08.csv",
+            "Case21/tc21_input09.csv",
+            "Case21/tc21_input10.csv"
+        ],
+        "prompt": "As a research committee, I have received 10 spreadsheets containing grant applicant information. Rank the applicants based on the following score:\n0.5 × YearsExperience + 0.3 × NumPublications + 0.2 × ProjectScore\nOutput a file that includes each applicant's score and all attributes, ranked from highest to lowest.",
+        "answer": "Ranked 10 applicants. Top 3: Priya Patel (8.720), Emily Watson (8.260), Thomas Muller (8.180). Lowest: James O'Brien (5.100).",
+        "expected_output_file": [
+            "Case21/tc21_output01.xlsx"
+        ],
+        "feedback": "Some fields may be empty in real submissions. Should missing values be treated as 0 in the score formula?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Rank 10 grant applicants using: 0.5×YearsExperience + 0.3×NumPublications + 0.2×ProjectScore."
+            },
+            {
+                "role": "assistant",
+                "content": "All 10 files contain complete data. Scores computed and ranked from highest to lowest."
+            },
+            {
+                "role": "user",
+                "content": "Output the full ranked list with all attributes."
+            },
+            {
+                "role": "assistant",
+                "content": "Top: Priya Patel (score 8.720), Emily Watson (8.260), Thomas Muller (8.180). All 10 applicants ranked."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 22",
+        "title": "Missing Grade Detection",
+        "scenario": "Data quality checking",
+        "category": "scan spreadsheet for missing cells; locate and report positions of missing values",
+        "spreadsheets": [
+            "Case22/tc22_input01.csv"
+        ],
+        "prompt": "Check the file for missing data and identify where values are missing.",
+        "answer": "Missing data on row 3, column 3 (FinalGrade is empty for student Bob Chen, StudentID S002).",
+        "expected_output_file": [],
+        "feedback": "I found a missing FinalGrade for Bob Chen (row 3). Should I fill it with a default value, or just report it?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Check the file for missing data and identify where values are missing."
+            },
+            {
+                "role": "assistant",
+                "content": "I found missing data on row 3, column 3 — the FinalGrade is empty for student Bob Chen (StudentID S002). Should I fill it with a default value, or just report it?"
+            }
+        ]
+    },
+    {
+        "task_id": "Test 23",
+        "title": "Fill Missing Employee Department",
+        "scenario": "Data cleaning and imputation",
+        "category": "align two files; fill missing values in primary file using secondary file; output completed table",
+        "spreadsheets": [
+            "Case23/tc23_input01.csv",
+            "Case23/tc23_input02.csv"
+        ],
+        "prompt": "Fill any missing data in tc23_input01.csv using information from tc23_input02.csv, and output a file with complete data.",
+        "answer": "Filled 1 missing value: E002 (Sarah Jones) now has Department 'Finance' (sourced from tc23_input02). Final dataset: 4 complete records with no missing values.",
+        "expected_output_file": [
+            "Case23/tc23_output01.xlsx"
+        ],
+        "feedback": "If both files have a value for the same field, which should take priority?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Fill missing data in tc23_input01.csv using tc23_input02.csv and output the completed table."
+            },
+            {
+                "role": "assistant",
+                "content": "If both files have a value for the same field, which takes priority: the primary file or the reference file?"
+            },
+            {
+                "role": "user",
+                "content": "Only fill truly empty cells in the primary file. Keep existing values as-is."
+            },
+            {
+                "role": "assistant",
+                "content": "Filled E002's Department with 'Finance' from the reference file. 4 complete records output. All other fields preserved unchanged."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 24",
+        "title": "Merge Two Employee Files",
+        "scenario": "Basic data integration",
+        "category": "merge two spreadsheets on a shared key; output combined table",
+        "spreadsheets": [
+            "Case24/tc24_input01.csv",
+            "Case24/tc24_input02.csv"
+        ],
+        "prompt": "Merge the two files into a single file.",
+        "answer": "Joined two files on EmployeeID, combining Name (from input01) and MonthlySalary_USD (from input02). Result: 4 complete records with 3 columns, no conflicts.",
+        "expected_output_file": [
+            "Case24/tc24_output01.xlsx"
+        ],
+        "feedback": "How should I handle rows with conflicting data? Should I join horizontally or append vertically?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Merge the two files into a single file."
+            },
+            {
+                "role": "assistant",
+                "content": "tc24_input01 has EmployeeID and Name; tc24_input02 has EmployeeID and MonthlySalary_USD. Should I join them horizontally on EmployeeID to combine the columns?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, join horizontally on EmployeeID (inner join)."
+            },
+            {
+                "role": "assistant",
+                "content": "Merged 4 records. Columns: EmployeeID, Name, MonthlySalary_USD. No conflicts found."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 25",
+        "title": "Merge Three Employee Files",
+        "scenario": "Basic data integration",
+        "category": "merge three spreadsheets on a shared key; handle non-overlapping columns; output combined table",
+        "spreadsheets": [
+            "Case25/tc25_input01.csv",
+            "Case25/tc25_input02.csv",
+            "Case25/tc25_input03.csv"
+        ],
+        "prompt": "Merge the three files into a single file.",
+        "answer": "Horizontally joined three files on EmployeeID, combining Name, MonthlySalary_USD, and Department. Result: 4 complete records with 4 columns, no conflicts.",
+        "expected_output_file": [
+            "Case25/tc25_output01.xlsx"
+        ],
+        "feedback": "How should I resolve conflicts between different versions of the same row across three files?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Merge the three files into a single file."
+            },
+            {
+                "role": "assistant",
+                "content": "Each file contains a different attribute column. Should I join all three horizontally on EmployeeID, treating each file as contributing distinct columns?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, horizontal join on EmployeeID. No overlapping data columns."
+            },
+            {
+                "role": "assistant",
+                "content": "Merged 4 records with 4 columns: EmployeeID, Name, MonthlySalary_USD, Department."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 26",
+        "title": "Merge Four Employee Files",
+        "scenario": "Basic data integration",
+        "category": "merge four spreadsheets; handle potential duplicates; output consolidated file",
+        "spreadsheets": [
+            "Case26/tc26_input01.csv",
+            "Case26/tc26_input02.csv",
+            "Case26/tc26_input03.csv",
+            "Case26/tc26_input04.csv"
+        ],
+        "prompt": "Merge the four files into a single file.",
+        "answer": "Horizontally joined four files on EmployeeID, combining Name, MonthlySalary_USD, Department, and StartDate. Result: 4 complete records with 5 columns, no duplicate rows found.",
+        "expected_output_file": [
+            "Case26/tc26_output01.xlsx"
+        ],
+        "feedback": "Do you want duplicate rows removed if the same EmployeeID appears more than once within a single file?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Merge the four files into a single file."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I join all four horizontally on EmployeeID? And should I remove duplicates if any EmployeeID appears more than once within a single file?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, horizontal join on EmployeeID. Remove duplicate rows keeping only the first occurrence."
+            },
+            {
+                "role": "assistant",
+                "content": "Merged 4 records with 5 columns: EmployeeID, Name, MonthlySalary_USD, Department, StartDate. No duplicates found."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 27",
+        "title": "Product Code Format Inconsistency",
+        "scenario": "Data cleaning and standardisation",
+        "category": "detect inconsistent product code formats; compare string variants; suggest standardised notation",
+        "spreadsheets": [
+            "Case27/tc27_input01.csv"
+        ],
+        "prompt": "Inspect the ProductCode column in the spreadsheet and check for any inconsistencies in how the same product family code is written (for example: 'A-101' vs 'a101' vs 'A 101'). Do not modify the file. Instead, describe any inconsistencies you find in natural language and ask a clarifying question such as: 'Should the code be A-101, a101, or A 101?'",
+        "answer": "Should ProductCode be A-101, a101, or A 101? Inconsistencies found: (1) A-family: 'A-101' (hyphen, uppercase), 'a101' (no separator, lowercase), 'A 101' (space, uppercase); (2) B-family: 'B-202' (hyphen) vs 'B202' (no separator); (3) C-family: 'C-303' (uppercase) vs 'c-303' (lowercase); (4) D-family: 'D-404' (uppercase, hyphen), 'd-404' (lowercase, hyphen), 'D404' (uppercase, no separator).",
+        "expected_output_file": [],
+        "feedback": "Identified four types of formatting inconsistency: (1) separator style (hyphen vs space vs none), (2) letter case (upper vs lower), (3) both combined. Should all codes be normalised to a single format (e.g., uppercase with hyphens: A-101)?",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Inspect the ProductCode column for formatting inconsistencies. Do not modify the file — just describe what you find."
+            },
+            {
+                "role": "assistant",
+                "content": "I found formatting inconsistencies in the ProductCode column:\n- A-family: 'A-101' (hyphen+uppercase), 'a101' (no separator+lowercase), 'A 101' (space+uppercase)\n- B-family: 'B-202' vs 'B202' (hyphen vs no separator)\n- C-family: 'C-303' vs 'c-303' (case variation)\n- D-family: 'D-404', 'd-404', 'D404' (case + separator variations)\n\nShould the ProductCode be standardised to a format like A-101 (uppercase letter, hyphen, digits)?"
+            }
+        ]
+    }
+]

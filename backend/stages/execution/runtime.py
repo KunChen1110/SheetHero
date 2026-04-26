@@ -5,7 +5,7 @@ import re
 from typing import Dict, Any, Optional
 
 from ...log.logger_registry import LoggerRegistry
-from ...skills import detect_skills
+from ...skills import detect_skill, detect_skills, select_helper
 from .core.executor import CodeExecutor
 from .guards.error_feedback import ExecutionErrorFeedbackBuilder
 from .guards.forbidden_policy import (
@@ -149,6 +149,143 @@ class ExecutionRuntime(StageRuntime):
         self._same_forbidden_streak = 0
         self._llm_error_streak = 0
         self._active_understanding_output = ""
+
+    def _build_helper_timeout_fallback_code(
+        self,
+        user_question: str,
+        output_contract: Dict[str, Optional[bool]],
+    ) -> Optional[str]:
+        skill = detect_skill(user_question)
+        helper = select_helper(skill, user_question) if skill else None
+        helper_name = helper.name if helper else ""
+
+        if helper_name == "build_relational_join_enrichment_report":
+            return "\n".join(
+                [
+                    "report = build_relational_join_enrichment_report(key_header=None, how='inner')",
+                    "create_output_sheet('Output')",
+                    "write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')",
+                    "saved_file = save_workbook_to(output_path)",
+                    "print(f'SAVED_FILE: {saved_file}')",
+                    "saved_file",
+                ]
+            )
+
+        if helper_name == "build_grouped_aggregation_ranking_report":
+            return "\n".join(
+                [
+                    "report = build_grouped_aggregation_ranking_report()",
+                    "create_output_sheet('Output')",
+                    "write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')",
+                    "add_summary_row('Output', len(report['detail_data']) + 2, report['summary'])",
+                    "saved_file = save_workbook_to(output_path)",
+                    "print(f'SAVED_FILE: {saved_file}')",
+                    "saved_file",
+                ]
+            )
+
+        if helper_name == "build_time_series_aggregation_report":
+            lines = [
+                "report = build_time_series_aggregation_report(period='year', aggregate='sum', sort_desc=False)",
+                "output_df = report['output_df'].copy()",
+                "year_col = output_df.columns[0]",
+                "value_col = output_df.columns[1]",
+                "base_value_name = value_col.replace('Total ', '') if value_col.startswith('Total ') else value_col",
+                "output_df = output_df.rename(columns={year_col: 'Year', value_col: base_value_name})",
+                "output_df['YoY_Growth_pct'] = output_df[base_value_name].pct_change() * 100",
+                "output_df['YoY_Growth_pct'] = output_df['YoY_Growth_pct'].round(2)",
+                "output_df['High_Growth'] = output_df['YoY_Growth_pct'].apply(lambda v: 'YES' if pd.notna(v) and v > 10 else 'NO')",
+                "create_output_sheet('Output')",
+                "write_dataframe_to_sheet(output_df, 'Output', 'A1')",
+                "summary_result = {'Rows Used': int(len(output_df)), 'Latest Year': str(output_df['Year'].iloc[-1]) if len(output_df) else ''}",
+                "add_summary_row('Output', len(output_df) + 2, summary_result)",
+            ]
+            if output_contract.get("requires_highlight") is True:
+                lines.extend(
+                    [
+                        "row_numbers = [i + 2 for i, value in enumerate(output_df['High_Growth'].tolist()) if str(value).strip().upper() == 'YES']",
+                        "if row_numbers:",
+                        "    highlight_rows('Output', row_numbers, {'fill_color': 'red'})",
+                        "else:",
+                        "    print('NO_HIGHLIGHT_ROWS: []')",
+                    ]
+                )
+            lines.extend(
+                [
+                    "saved_file = save_workbook_to(output_path)",
+                    "print(f'SAVED_FILE: {saved_file}')",
+                    "saved_file",
+                ]
+            )
+            return "\n".join(lines)
+
+        return None
+
+    def _try_timeout_helper_fallback(
+        self,
+        user_question: str,
+        output_contract: Dict[str, Optional[bool]],
+        execution_steps: list[Dict[str, Any]],
+        turn_index: int,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._is_offline_strict:
+            return None
+        fallback_code = self._build_helper_timeout_fallback_code(user_question, output_contract)
+        if not fallback_code:
+            return None
+
+        self._log_to_file(
+            f"\n**Helper timeout fallback (Turn {turn_index + 1}):**\n```python\n{fallback_code}\n```\n"
+        )
+        try:
+            execution_result = self.executor.execute(fallback_code)
+        except Exception as exc:
+            self._log_to_file(
+                f"\n**Helper timeout fallback error (Turn {turn_index + 1}):**\n```\n{str(exc)}\n```\n"
+            )
+            return None
+
+        execution_steps.append({
+            "turn": turn_index + 1,
+            "code": fallback_code,
+            "result": execution_result,
+            "success": "Execution error:" not in execution_result and "Traceback:" not in execution_result,
+        })
+        self._log_to_file(
+            f"\n**Helper timeout fallback result (Turn {turn_index + 1}):**\n```\n{execution_result}\n```\n"
+        )
+
+        saved_path = self._extract_saved_path_from_result(execution_result)
+        if saved_path is None:
+            return None
+        if not self._has_meaningful_output_rows(execution_result):
+            return None
+        output_intent_feedback = self._build_output_intent_feedback(
+            execution_result,
+            output_contract,
+            fallback_code,
+        )
+        if output_intent_feedback is not None:
+            self._log_to_file(
+                f"\n**Helper timeout fallback rejected (Turn {turn_index + 1}):**\n{output_intent_feedback}\n"
+            )
+            return None
+
+        self._log_to_file(
+            f"\n**Final Answer (Turn {turn_index + 1}, from helper timeout fallback):**\n{saved_path}\n"
+        )
+        return {
+            "success": True,
+            "answer": saved_path,
+            "total_turns": turn_index + 1,
+            "conversation_history": self.history_formatter.format_history(
+                self.conversation_history
+            ),
+            "execution_summary": self.summary_builder.build(
+                execution_steps,
+                saved_path
+            ),
+        }
 
     def _install_linear_io_guards(self) -> None:
         """Disable ambiguous I/O helpers for execution-time determinism."""
@@ -421,6 +558,7 @@ class ExecutionRuntime(StageRuntime):
         return {"role": "user", "content": user_content}
 
     def _create_llm_recovery_prompt(self, user_question: str) -> dict:
+        schema_snapshot = self._build_schema_snapshot()
         user_content = (
             "LLM_CONNECTION_RECOVERY: the previous response could not be generated.\n"
             "Return ONE short complete ```python ... ``` block only.\n"
@@ -431,6 +569,11 @@ class ExecutionRuntime(StageRuntime):
             "Save with `save_workbook_to(output_path)`.\n\n"
             f"User Question:\n{user_question}\n"
         )
+        if schema_snapshot:
+            user_content += (
+                f"\nRuntime schema snapshot:\n{schema_snapshot}\n"
+                "Use these exact files and headers.\n"
+            )
         user_content = self.skill_prompt.augment_initial_prompt(user_content, user_question)
         return {"role": "user", "content": user_content}
 
@@ -446,6 +589,7 @@ class ExecutionRuntime(StageRuntime):
             return None, None
 
         task_loop_breaker = get_task_specific_loop_breaker(user_question)
+        schema_snapshot = self._build_schema_snapshot()
         user_content = (
             "PLAN_TO_CODE_RECOVERY: your previous reply explained the solution but did not include executable code.\n"
             "Convert the plan below into exactly one runnable ```python ... ``` block.\n"
@@ -455,6 +599,8 @@ class ExecutionRuntime(StageRuntime):
             f"User Question:\n{user_question}\n\n"
             f"Plan To Convert:\n{plan_text}\n"
         )
+        if schema_snapshot:
+            user_content += f"\nRuntime schema snapshot:\n{schema_snapshot}\n"
         if task_loop_breaker:
             user_content += f"\n{task_loop_breaker.strip()}\n"
 
@@ -479,9 +625,10 @@ class ExecutionRuntime(StageRuntime):
         if not self._is_offline_strict:
             return snapshot
 
+        available_basenames = self._available_workbook_basenames()
         relevant = self._extract_relevant_basenames(
             self._active_understanding_output,
-            self._available_workbook_basenames(),
+            available_basenames,
         )
         if not relevant:
             return snapshot
@@ -490,6 +637,8 @@ class ExecutionRuntime(StageRuntime):
             line for line in snapshot.splitlines()
             if any(f"`{basename}`" in line for basename in relevant)
         ]
+        if len(available_basenames) <= 5 and len(filtered_lines) < len(available_basenames):
+            return snapshot
         return "\n".join(filtered_lines) if filtered_lines else snapshot
 
     @staticmethod
@@ -726,6 +875,7 @@ class ExecutionRuntime(StageRuntime):
                 if code_action is None:
                     self._consecutive_format_errors += 1
                     raw_preview = (response_message.content or "").strip()
+                    schema_snapshot = self._build_schema_snapshot()
                     if raw_preview:
                         preview = raw_preview[:1600]
                         self._log_to_file(
@@ -758,6 +908,8 @@ class ExecutionRuntime(StageRuntime):
                         f"{execution_shape}"
                         f"{strict_repair}"
                     )
+                    if schema_snapshot:
+                        format_msg += f"\nRuntime schema snapshot:\n{schema_snapshot}\nUse these exact files and headers.\n"
                     if task_loop_breaker:
                         format_msg += task_loop_breaker
                     logger.warning("No code block returned; executable code required")
@@ -1034,6 +1186,14 @@ class ExecutionRuntime(StageRuntime):
                         self._create_llm_recovery_prompt(user_question),
                     ]
                     continue
+                fallback_result = self._try_timeout_helper_fallback(
+                    user_question,
+                    output_contract,
+                    execution_steps,
+                    turn,
+                )
+                if fallback_result is not None:
+                    return fallback_result
                 return {
                     "success": False,
                     "answer": f"LLM communication error: {str(e)}",

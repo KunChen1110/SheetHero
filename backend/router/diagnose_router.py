@@ -60,6 +60,10 @@ class DiagnoseRouter:
             should_diagnose = True
             reasons = [f"data_evidence:{len(evidence_issues)}"]
             issues = evidence_issues
+        elif not self._question_invites_diagnose(user_question):
+            should_diagnose = False
+            reasons = ["intent:NO"]
+            issues = []
         else:
             prompt = self.prompt_builder.build_diagnose_router_prompt(
                 user_question=user_question,
@@ -90,6 +94,34 @@ class DiagnoseRouter:
             reasons=reasons,
             issues=issues,
         )
+
+    @classmethod
+    def _question_invites_diagnose(cls, user_question: str) -> bool:
+        q = (user_question or "").lower()
+        investigation_markers = (
+            "clean",
+            "fix",
+            "correct",
+            "normalize",
+            "normalise",
+            "standardize",
+            "standardise",
+            "fill missing",
+            "missing value",
+            "duplicate",
+            "inconsistent",
+            "inconsistency",
+            "anomaly",
+            "outlier",
+            "audit",
+            "inspect",
+            "check",
+            "detect",
+            "scan",
+            "repair",
+            "resolve",
+        )
+        return any(marker in q for marker in investigation_markers)
 
     @staticmethod
     def _normalize_header_name(text: str) -> str:
@@ -519,6 +551,25 @@ class DiagnoseRouter:
         return False
 
     @classmethod
+    def _is_analysis_period_column(cls, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if not any(token in normalized for token in ("year", "date", "month", "week", "quarter", "period")):
+            return False
+        lifecycle_markers = (
+            "open",
+            "launch",
+            "founded",
+            "established",
+            "created",
+            "birth",
+            "hire",
+            "graduation",
+        )
+        if any(marker in normalized for marker in lifecycle_markers):
+            return False
+        return True
+
+    @classmethod
     def _extract_requested_years(cls, user_question: str) -> List[int]:
         text = user_question or ""
         range_matches = list(
@@ -541,6 +592,8 @@ class DiagnoseRouter:
         for column_name in map(str, getattr(df, "columns", [])):
             series = df[column_name]
             if not cls._is_period_like_column(series, column_name):
+                continue
+            if not cls._is_analysis_period_column(column_name):
                 continue
             for raw_value in series.tolist():
                 text = cls._normalize_cell_text(raw_value)
@@ -784,6 +837,87 @@ class DiagnoseRouter:
         if len(valid) < max(2, len(series) // 3):
             return False
         return len(valid) >= max(2, int(len(series) * 0.6))
+
+    @classmethod
+    def _is_relationship_table_for_key(cls, df: pd.DataFrame, key_col: str, differing_columns: List[str]) -> bool:
+        columns = [str(col) for col in getattr(df, "columns", [])]
+        key_like_columns = [col for col in columns if cls._is_unique_key_like_header(col)]
+        if len(key_like_columns) < 2 or not differing_columns:
+            return False
+        if not all(column_name in key_like_columns for column_name in differing_columns):
+            return False
+        non_key_columns = [col for col in columns if col not in key_like_columns]
+        if any(cls._is_measure_like_column(df, col) for col in non_key_columns):
+            return False
+
+        pair_columns = [key_col] + [col for col in differing_columns if col != key_col]
+        if len(pair_columns) < 2:
+            return False
+
+        pair_frame = df[pair_columns].copy()
+        for column_name in pair_columns:
+            pair_frame[column_name] = pair_frame[column_name].map(cls._normalize_cell_text)
+        pair_frame = pair_frame[(pair_frame[pair_columns[0]] != "") & (pair_frame[pair_columns[1]] != "")]
+        if pair_frame.empty:
+            return False
+
+        uniqueness_ratio = len(pair_frame.drop_duplicates()) / len(pair_frame)
+        return uniqueness_ratio >= 0.95
+
+    @classmethod
+    def _is_multi_valued_membership_table_for_key(
+        cls,
+        df: pd.DataFrame,
+        key_col: str,
+        differing_columns: List[str],
+    ) -> bool:
+        columns = [str(col) for col in getattr(df, "columns", [])]
+        non_key_columns = [col for col in columns if col != key_col]
+        if len(non_key_columns) != 1 or differing_columns != non_key_columns:
+            return False
+        value_col = non_key_columns[0]
+        normalized = cls._normalize_header_name(value_col)
+        membership_markers = (
+            "genre",
+            "tag",
+            "label",
+            "category",
+            "course",
+            "subject",
+            "program",
+            "skill",
+            "language",
+            "topic",
+            "feature",
+            "type",
+        )
+        if not any(marker in normalized for marker in membership_markers):
+            return False
+        if cls._is_measure_like_column(df, value_col):
+            return False
+
+        working = df[[key_col, value_col]].copy()
+        working[key_col] = working[key_col].map(cls._normalize_cell_text)
+        working[value_col] = working[value_col].map(cls._normalize_cell_text)
+        working = working[(working[key_col] != "") & (working[value_col] != "")]
+        if working.empty:
+            return False
+
+        pair_uniqueness = len(working.drop_duplicates()) / len(working)
+        key_repeats = working[key_col].value_counts()
+        return pair_uniqueness >= 0.95 and bool((key_repeats > 1).any())
+
+    @classmethod
+    def _looks_like_large_integer_count_metric(cls, series: pd.Series, column_name: str) -> bool:
+        normalized = cls._normalize_header_name(column_name)
+        if not any(token in normalized for token in ("score", "rating", "reviews", "votes", "count")):
+            return False
+        valid = cls._coerce_numeric_series(series).dropna()
+        if len(valid) < 4:
+            return False
+        integer_ratio = float(((valid % 1) == 0).mean())
+        median_value = float(valid.median())
+        return integer_ratio >= 0.8 and median_value >= 500
 
     @classmethod
     def _is_id_like_value(cls, text: str) -> bool:
@@ -1602,6 +1736,10 @@ class DiagnoseRouter:
                     continue
                 if len(differing_columns) == 1 and cls._is_entity_descriptor_header(differing_columns[0]):
                     continue
+                if cls._is_relationship_table_for_key(df, key_col, differing_columns):
+                    continue
+                if cls._is_multi_valued_membership_table_for_key(df, key_col, differing_columns):
+                    continue
                 event_columns = [
                     column_name for column_name in differing_columns
                     if cls._is_event_granularity_column(df, column_name)
@@ -1681,6 +1819,8 @@ class DiagnoseRouter:
             series = cls._coerce_numeric_series(df[column_name])
             valid = series.dropna()
             if len(valid) < 4:
+                continue
+            if cls._looks_like_large_integer_count_metric(df[column_name], column_name):
                 continue
 
             lower_bound, upper_bound = cls._semantic_numeric_bounds(column_name)
