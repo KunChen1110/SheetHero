@@ -47,6 +47,9 @@ def test_execution_strict_rules_do_not_force_direct_task_helper_call():
     assert "Use `concat_tables_with_same_headers(...)` for this task." not in guidance
     assert "shared runtime helpers" in guidance
     assert "Do not replace the whole task with a single task-shaped helper shortcut." in guidance
+    assert "requested deliverable grain" in guidance
+    assert "not the raw joined/source rows" in guidance
+    assert "RESULT_SUMMARY" in guidance
 
 
 def test_execution_prompt_uses_primary_skill_only_without_secondary_guidance():
@@ -113,6 +116,18 @@ def test_schedule_guidance_prefers_dependency_helper_pipeline_for_dag_tasks():
     assert "write_dataframe_to_sheet" in loop_breaker
 
 
+def test_relational_join_loop_breaker_uses_self_loading_helper_path():
+    question = "Merge the four files into a single file."
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+
+    loop_breaker = build_loop_breaker(skill, helper)
+
+    assert "build_relational_join_enrichment_report" in loop_breaker
+    assert "concat_tables_with_same_headers" in loop_breaker
+    assert "report['output_df']" in loop_breaker
+
+
 def test_proportion_guidance_prefers_generic_weighted_period_helpers():
     question = (
         "One table gives smartphone units shipped from 2012 to 2025, and another gives "
@@ -125,7 +140,7 @@ def test_proportion_guidance_prefers_generic_weighted_period_helpers():
     guidance = build_execution_strict_rules(skill, helper)
     loop_breaker = build_loop_breaker(skill, helper)
 
-    assert "Do NOT call `build_market_share_shipment_report()` directly." in guidance
+    assert "Do NOT call `build_weighted_share_value_report()` directly." in guidance
     assert "merge_on_shared_period" in guidance
     assert "build_weighted_period_output" in guidance
     assert "merge_on_shared_period" in loop_breaker

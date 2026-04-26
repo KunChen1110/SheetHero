@@ -270,6 +270,10 @@ class TestHighlightContract:
         result = summarize_numeric_column(df, value_col="Sales")
         # Max value is 250, appearing at indices 1 and 3 (0-based after reset_index)
         assert result["max_value"] == 250
+        assert result["total"] == 870
+        assert result["average"] == 174
+        assert result["summary"]["Total"] == 870
+        assert result["summary"]["Average"] == 174
         assert result["output_row_numbers"] == [3, 5], (
             "Index 1 → Excel row 3 (header=1, data starts at 2), index 3 → Excel row 5"
         )
