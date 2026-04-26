@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from backend.skills import detect_skill, select_helper
+from backend.skills import detect_skill, detect_skills, select_helper
 
 
 def test_merge_detected_from_generic_question():
@@ -58,6 +58,14 @@ def test_helper_selection_merge_join():
     skill = detect_skill("merge the two files using the student ID column")
     assert skill is not None
     helper = select_helper(skill, "merge the two files using the student ID column")
+    assert helper is not None
+    assert helper.name == "build_relational_join_enrichment_report"
+
+
+def test_helper_selection_generic_multi_file_merge_defaults_to_relational_join():
+    skill = detect_skill("merge the four files into a single file")
+    assert skill is not None
+    helper = select_helper(skill, "merge the four files into a single file")
     assert helper is not None
     assert helper.name == "build_relational_join_enrichment_report"
 
@@ -149,6 +157,134 @@ def test_helper_selection_cash_flow_efficiency():
     assert skill.name == "financial"
     assert helper is not None
     assert helper.name == "build_cash_flow_efficiency_report"
+
+
+def test_helper_selection_financial_dashboard():
+    question = (
+        "Calculate gross profit, net profit, gross profit margin, net profit margin, "
+        "customer acquisition cost, and marketing efficiency ratio, then output a "
+        "dashboard comparing actuals to targets."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "financial"
+    assert helper is not None
+    assert helper.name == "build_financial_dashboard_report"
+
+
+def test_helper_selection_inventory_policy():
+    question = (
+        "Calculate EOQ, reorder point, orders per year, cycle time, and total annual cost, "
+        "then run sensitivity analysis."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "financial"
+    assert helper is not None
+    assert helper.name == "build_inventory_eoq_report"
+
+
+def test_helper_selection_region_share_and_cost_report():
+    question = (
+        "Given regional population totals and regional healthcare expenditure, "
+        "calculate each region's share of the global population and the "
+        "average expenditure per person."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "proportion"
+    assert helper is not None
+    assert helper.name == "build_region_share_cost_report"
+
+
+def test_helper_selection_two_dimension_mean_count_summary_report():
+    question = (
+        "Given a dataset containing country, category, and rating, "
+        "generate a table showing for each country and category the average rating and the number of records."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "aggregate"
+    assert helper is not None
+    assert helper.name == "build_two_dimension_mean_count_summary_report"
+
+
+def test_merge_skill_detected_for_join_with_singular_table_names():
+    question = (
+        "Merge the store sales data with the store information table using Store ID, "
+        "then compute total monthly sales by city for March and rank cities."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "merge"
+    assert helper is not None
+    assert helper.name == "build_relational_join_enrichment_report"
+
+
+def test_helper_selection_multi_source_group_comparison_report():
+    question = (
+        "Merge weekly sales with reference information by ID, then calculate average sales, "
+        "temperature, and fuel price for each group and compare holiday versus non-holiday periods."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "merge"
+    assert helper is not None
+    assert helper.name == "build_multi_source_group_comparison_report"
+
+
+def test_helper_selection_multi_source_utilisation_summary_report():
+    question = (
+        "Compute service utilisation and staff utilisation for each department, identify departments above 90%, "
+        "and highlight those values in red."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "aggregate"
+    assert helper is not None
+    assert helper.name == "build_multi_source_utilisation_summary_report"
+
+
+def test_helper_selection_university_utilisation_summary_report():
+    question = (
+        "You have five clean university tables: students, courses, sections, enrollments, and rooms. "
+        "Join the tables using StudentID, CourseID, SectionID, and RoomID. "
+        "For each section, calculate enrolled count, waitlisted count, fill rate, and waitlist rate. "
+        "Then summarise instructor load with section count, total enrolled, and scheduled hours, "
+        "and create a room-utilisation summary by building using average section fill rate."
+    )
+    skill = detect_skill(question)
+    helper = select_helper(skill, question)
+    assert skill is not None
+    assert skill.name == "aggregate"
+    assert helper is not None
+    assert helper.name == "build_multi_source_utilisation_summary_report"
+
+
+def test_statistical_skill_prioritized_over_aggregate_for_correlation_plus_average_question():
+    question = (
+        "Calculate the Pearson correlation between PerformanceRating and MonthlySalary, "
+        "and compute the average salary for each rating level."
+    )
+    skill = detect_skill(question)
+    assert skill is not None
+    assert skill.name == "statistical"
+
+
+def test_detect_skills_returns_priority_sorted_matches():
+    question = (
+        "Calculate EOQ, reorder point, orders per year, cycle time, and total annual cost, "
+        "then run sensitivity analysis."
+    )
+    matched = detect_skills(question)
+    assert [skill.name for skill in matched[:2]] == ["financial", "aggregate"]
 
 
 if __name__ == "__main__":

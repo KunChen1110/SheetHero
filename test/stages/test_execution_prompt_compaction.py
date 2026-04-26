@@ -34,6 +34,21 @@ def test_offline_execution_system_prompt_stays_compact():
     assert len(prompt) <= 2800
 
 
+def test_offline_execution_and_understanding_prompts_align_on_helper_first_loading():
+    execution_prompt = PromptBuilder(profile="offline_strict").build_execution_system_prompt(
+        "write result to output file"
+    )
+    understanding_prompt = PromptBuilder(profile="offline_strict").build_understanding_prompt(
+        "Build a multi-sheet utilisation workbook.",
+        "📁 **File: input.csv**\n**📄 Sheet: 'Sheet1'**\n- Candidate headers: SectionID, Instructor, Capacity",
+        "",
+    )
+
+    assert "load_all_tables()" in execution_prompt
+    assert "load_all_tables()" in understanding_prompt
+    assert "read_table_multi" not in understanding_prompt
+
+
 def test_execution_runtime_uses_tighter_offline_token_budget_by_default(monkeypatch):
     monkeypatch.delenv("SHEETHERO_EXECUTION_MAX_TOKENS", raising=False)
 
@@ -161,6 +176,74 @@ def test_understanding_falls_back_to_minimal_plan_when_llm_call_fails(monkeypatc
     assert "downstream stages must inspect the runtime schema directly" in output
 
 
+def test_understanding_offline_context_summary_keeps_all_visible_files():
+    stage = UnderstandingStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+
+    prompt_lines = stage._extract_context_summary_lines(
+        "\n".join(
+            [
+                "📁 **File: tc01_input01.csv**",
+                "**📄 Sheet: 'Sheet1'**",
+                "- Candidate headers: StoreID, StoreName, Region",
+                "📁 **File: tc01_input02.csv**",
+                "**📄 Sheet: 'Sheet1'**",
+                "- Candidate headers: ProductID, ProductName, Category",
+                "📁 **File: tc01_input03.csv**",
+                "**📄 Sheet: 'Sheet1'**",
+                "- Candidate headers: SaleID, StoreID, ProductID, Month",
+                "📁 **File: tc01_input04.csv**",
+                "**📄 Sheet: 'Sheet1'**",
+                "- Candidate headers: TargetID, StoreID, Category, Month",
+            ]
+        )
+    )
+
+    assert any("tc01_input01.csv" in line for line in prompt_lines)
+    assert any("tc01_input02.csv" in line for line in prompt_lines)
+    assert any("tc01_input03.csv" in line for line in prompt_lines)
+    assert any("tc01_input04.csv" in line for line in prompt_lines)
+
+
+def test_offline_runtime_schema_snapshot_does_not_hide_small_case_tables():
+    runtime = ExecutionRuntime(
+        client=SimpleNamespace(),
+        deployment="offline-test",
+        sandbox=_SandboxStub(),
+        excel_context_execution="",
+        prompt_profile="offline_strict",
+    )
+
+    runtime.grounding = SimpleNamespace(
+        build_schema_snapshot=lambda: "\n".join(
+            [
+                "- `tc01_input01.csv` | columns=StoreID, StoreName, Region",
+                "- `tc01_input02.csv` | columns=ProductID, ProductName, Category",
+                "- `tc01_input03.csv` | columns=SaleID, StoreID, ProductID, Month",
+                "- `tc01_input04.csv` | columns=TargetID, StoreID, Category, Month",
+            ]
+        ),
+        available_workbook_basenames=lambda: [
+            "tc01_input01.csv",
+            "tc01_input02.csv",
+            "tc01_input03.csv",
+            "tc01_input04.csv",
+        ],
+        observed_header_set=lambda: set(),
+        detect_unknown_filename_lookup=lambda _code: None,
+    )
+    runtime._active_understanding_output = (
+        "### 1. Sheet Summary\n"
+        "- Files: tc01_input01.csv, tc01_input02.csv, tc01_input03.csv\n"
+    )
+
+    snapshot = runtime._build_schema_snapshot()
+
+    assert "tc01_input01.csv" in snapshot
+    assert "tc01_input02.csv" in snapshot
+    assert "tc01_input03.csv" in snapshot
+    assert "tc01_input04.csv" in snapshot
+
+
 def test_understanding_contract_does_not_require_summary_for_target_feature_correlation():
     flags = UnderstandingStage._infer_contract_from_question(
         "Calculate the correlation coefficient between survival and other factors such as sex, age, fare, cabin, and embarked. "
@@ -182,6 +265,18 @@ def test_understanding_contract_does_not_require_summary_for_regression_weights_
     assert flags["requires_summary_metrics"] is False
 
 
+def test_understanding_contract_does_not_require_summary_for_market_share_overlap_table():
+    flags = UnderstandingStage._infer_contract_from_question(
+        "Here are two tables. One gives the total EV units sold in India by quarter (2020-2022), "
+        "and the other gives market share by brand (2021-2022). Find the overlapping time period, "
+        "then estimate the number of EVs sold for each brand as market_share × total_units. "
+        "Output a table with columns Quarter, Tata (thou), MG, Hyundai, Mahindra, Kia, Others."
+    )
+
+    assert flags["requires_detailed_table"] is True
+    assert flags["requires_summary_metrics"] is False
+
+
 def test_execution_parser_ignores_think_prefix_before_code():
     parser = ExecutionResponseParser()
 
@@ -191,6 +286,54 @@ def test_execution_parser_ignores_think_prefix_before_code():
 
     assert thought is None
     assert code == "print('ok')"
+
+
+def test_execution_parser_rewrites_top_level_return_tail():
+    parser = ExecutionResponseParser()
+
+    thought, code = parser.parse(
+        "```python\nsaved_file = save_workbook_to(output_path)\nprint(f'SAVED_FILE: {saved_file}')\nreturn saved_file\n```"
+    )
+
+    assert thought is None
+    assert code is not None
+    assert "return saved_file" not in code
+    assert code.splitlines()[-1] == "saved_file"
+
+
+def test_execution_parser_rewrites_all_top_level_return_lines():
+    parser = ExecutionResponseParser()
+
+    thought, code = parser.parse(
+        "```python\n"
+        "saved_file = save_workbook_to(output_path)\n"
+        "return saved_file\n"
+        "print('done')\n"
+        "return saved_file\n"
+        "```"
+    )
+
+    assert thought is None
+    assert code is not None
+    assert "return saved_file" not in code
+    assert code.splitlines()[1] == "saved_file"
+    assert code.splitlines()[-1] == "saved_file"
+
+
+def test_execution_parser_rewrites_indented_top_level_return_lines_without_functions():
+    parser = ExecutionResponseParser()
+
+    thought, code = parser.parse(
+        "```python\n"
+        "    saved_file = save_workbook_to(output_path)\n"
+        "    return saved_file\n"
+        "```"
+    )
+
+    assert thought is None
+    assert code is not None
+    assert "return saved_file" not in code
+    assert code.splitlines()[-1] == "saved_file"
 
 
 def test_execution_parser_does_not_treat_prose_with_code_snippets_as_bare_code():
@@ -241,7 +384,7 @@ def test_execution_parser_rejects_bare_code_when_prefixed_by_explanation():
 
 
 def test_offline_understanding_prompt_stays_compact_for_real_multi_file_task():
-    dataset_root = Path(__file__).resolve().parents[2] / "dataset"
+    dataset_root = Path(__file__).resolve().parents[2] / "dataset" / "DevelopmentBenchmark"
     tasks = json.loads((dataset_root / "dataset.json").read_text(encoding="utf-8"))
     task = next(item for item in tasks if item["task_id"] == "Test 2")
     input_paths = [str((dataset_root / rel).resolve()) for rel in task["spreadsheets"]]

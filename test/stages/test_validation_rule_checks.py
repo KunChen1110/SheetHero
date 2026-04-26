@@ -1,6 +1,7 @@
 import os
 import sys
 from types import SimpleNamespace
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -125,3 +126,76 @@ def test_regression_metadata_exposes_rule_inspector_hook():
         get_helper_rule_inspector_name("fit_linear_regression_weights")
         == "_collect_regression_feature_coverage_issues"
     )
+
+
+def test_summary_only_dashboard_counts_single_written_table_as_summary_signal():
+    class _SummaryRuntimeStub(_RuleCheckRuntimeStub):
+        @staticmethod
+        def _extract_rows_written(_latest_result: str):
+            return [7]
+
+    advisor = ValidationRuleCheckAdvisor(_SummaryRuntimeStub())
+
+    result = advisor.apply(
+        {
+            "validation_passed": True,
+            "issues_found": [],
+            "improvement_feedback": "",
+            "final_assessment": "",
+        },
+        execution_result={"success": True},
+        user_question="Build a consolidated dashboard comparing actuals to targets.",
+        run_success=True,
+        final_answer="/tmp/output.xlsx",
+        latest_result="Wrote 7 rows to Output!A1:E7\nWorkbook saved to: /tmp/output.xlsx",
+        latest_code="dashboard_result = build_financial_dashboard_report()\nwrite_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')",
+        all_results="Wrote 7 rows to Output!A1:E7\nWorkbook saved to: /tmp/output.xlsx",
+        all_code="dashboard_result = build_financial_dashboard_report()\nwrite_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')",
+        need_detail=False,
+        need_summary=True,
+        need_highlight=False,
+    )
+
+    assert result["validation_passed"] is True
+    assert not any("summary metrics" in issue for issue in result["issues_found"])
+
+
+def test_embedded_summary_helper_satisfies_detail_plus_summary_contract(monkeypatch: pytest.MonkeyPatch):
+    class _EmbeddedSummaryRuntimeStub(_RuleCheckRuntimeStub):
+        @staticmethod
+        def _extract_rows_written(_latest_result: str):
+            return [10]
+
+    monkeypatch.setattr(
+        "backend.stages.validation.checks.rule_checks.detect_skill",
+        lambda _question: SimpleNamespace(name="proportion"),
+    )
+    monkeypatch.setattr(
+        "backend.stages.validation.checks.rule_checks.select_helper",
+        lambda _skill, _question: SimpleNamespace(name="build_region_share_cost_report"),
+    )
+
+    advisor = ValidationRuleCheckAdvisor(_EmbeddedSummaryRuntimeStub())
+
+    result = advisor.apply(
+        {
+            "validation_passed": True,
+            "issues_found": [],
+            "improvement_feedback": "",
+            "final_assessment": "",
+        },
+        execution_result={"success": True},
+        user_question="Calculate global share of obese population and include the total.",
+        run_success=True,
+        final_answer="/tmp/output.xlsx",
+        latest_result="Wrote 10 rows to Output!A1:E10\nWorkbook saved to: /tmp/output.xlsx",
+        latest_code="report = build_region_share_cost_report()\nwrite_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')",
+        all_results="Wrote 10 rows to Output!A1:E10\nWorkbook saved to: /tmp/output.xlsx",
+        all_code="report = build_region_share_cost_report()\nwrite_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')",
+        need_detail=True,
+        need_summary=True,
+        need_highlight=False,
+    )
+
+    assert result["validation_passed"] is True
+    assert not any("summary metrics" in issue for issue in result["issues_found"])
