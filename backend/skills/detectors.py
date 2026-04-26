@@ -10,9 +10,9 @@ import re
 
 from ..stages.execution.analysis.task_intents import (
     is_cash_flow_efficiency_request,
-    is_market_share_shipment_request,
     is_region_growth_chart_request,
     is_relational_assignment_schedule_request,
+    is_weighted_share_value_alignment_request,
 )
 
 
@@ -22,6 +22,17 @@ from ..stages.execution.analysis.task_intents import (
 
 def is_merge_request(q: str) -> bool:
     q = q.lower()
+    single_table_column_ops = (
+        "within one table",
+        "into one column",
+        "columns in the table",
+        "columns within",
+        "two columns",
+        "first name and last name",
+        "full address",
+    )
+    if any(marker in q for marker in single_table_column_ops):
+        return False
     fill_words = ("fill missing", "fill the missing", "fill any missing", "complete missing",
                   "populate missing", "use the reference", "use another file")
     if any(w in q for w in fill_words):
@@ -46,12 +57,26 @@ def is_merge_request(q: str) -> bool:
                   "stack", "stacking", "union", "stitch", "stitching")
     plural_structure_words = ("files", "tables", "sheets", "datasets",
                               "workbooks", "spreadsheets")
-    return any(w in q for w in join_words) and any(w in q for w in plural_structure_words)
+    if any(w in q for w in join_words) and any(w in q for w in plural_structure_words):
+        return True
+    singular_structure_words = (
+        " file", " table", " sheet", " dataset", " workbook",
+        " data", " information", " details", " records",
+    )
+    join_context_words = ("using", "based on", "on the", "common key", "shared key", " id", " column")
+    if any(w in q for w in join_words):
+        if (" with " in q or any(word in q for word in join_context_words)) and any(
+            word in q for word in singular_structure_words
+        ):
+            return True
+    return False
 
 
 def is_aggregate_request(q: str) -> bool:
     q = q.lower()
     if is_region_growth_chart_request(q):
+        return True
+    if is_two_dimension_mean_count_summary(q) or is_multi_source_utilisation_summary(q):
         return True
     agg_words = ("average", "mean", " sum ", "total ", "totals", "median",
                  "summary", "summarize", "summarise", "breakdown", "stats", "statistics")
@@ -194,6 +219,114 @@ def is_fill_missing(q: str) -> bool:
     ))
 
 
+def is_financial_dashboard(q: str) -> bool:
+    q = q.lower()
+    metric_markers = (
+        "gross profit",
+        "net profit",
+        "gross profit margin",
+        "net profit margin",
+        "customer acquisition cost",
+        "marketing efficiency ratio",
+        "dashboard",
+        "actuals to targets",
+    )
+    return (
+        "dashboard" in q
+        and any(marker in q for marker in ("target", "targets", "actuals"))
+        and sum(1 for marker in metric_markers if marker in q) >= 2
+    ) or (
+        sum(1 for marker in metric_markers if marker in q) >= 2
+        and "target" in q
+    )
+
+
+def is_inventory_policy(q: str) -> bool:
+    q = q.lower()
+    return (
+        "eoq" in q
+        or (
+            "reorder point" in q
+            and any(marker in q for marker in ("orders per year", "cycle time", "annual cost"))
+        )
+        or (
+            "sensitivity analysis" in q
+            and any(marker in q for marker in ("order quantity", "annual demand", "reorder point"))
+        )
+    )
+
+
+def is_region_share_and_cost_report(q: str) -> bool:
+    q = q.lower()
+    population_markers = (
+        "regional population",
+        "population by region",
+        "population",
+        "count by region",
+        "people by region",
+    )
+    cost_markers = (
+        "healthcare expenditure",
+        "health care expenditure",
+        "regional expenditure",
+        "cost by region",
+        "expenditure per person",
+        "average expenditure per person",
+        "usd per person",
+    )
+    share_markers = (
+        "share of global",
+        "share of the global",
+        "global share",
+        "percentage of global",
+    )
+    return (
+        "region" in q
+        and any(marker in q for marker in population_markers)
+        and any(marker in q for marker in cost_markers)
+        and any(marker in q for marker in share_markers)
+    )
+
+
+def is_two_dimension_mean_count_summary(q: str) -> bool:
+    q = q.lower()
+    return (
+        any(marker in q for marker in ("average", "avg", "mean"))
+        and any(marker in q for marker in ("count", "number of", "review count"))
+        and any(marker in q for marker in ("for each", "group by", "grouped by", "by "))
+        and any(marker in q for marker in ("type", "category", "brand", "country", "region", "department"))
+    )
+
+
+def is_multi_source_group_comparison_report(q: str) -> bool:
+    q = q.lower()
+    return (
+        any(marker in q for marker in ("merge", "join", "combine"))
+        and any(marker in q for marker in ("weekly sales", "sales", "features", "metrics", "information"))
+        and any(marker in q for marker in ("type", "category", "group"))
+        and any(marker in q for marker in ("holiday", "non-holiday", "non holiday"))
+        and any(marker in q for marker in ("temperature", "fuel price", "fuel"))
+    )
+
+
+def is_multi_source_utilisation_summary(q: str) -> bool:
+    q = q.lower()
+    department_utilisation = (
+        any(marker in q for marker in ("utilisation", "utilization"))
+        and "department" in q
+        and "service" in q
+        and "staff" in q
+    )
+    university_utilisation = (
+        any(marker in q for marker in ("utilisation", "utilization"))
+        and "section" in q
+        and "instructor" in q
+        and "room" in q
+        and any(marker in q for marker in ("fill rate", "waitlist rate", "waitlisted count", "scheduled hours"))
+    )
+    return department_utilisation or university_utilisation
+
+
 def is_multi_key_join(q: str) -> bool:
     q = q.lower()
     if any(w in q for w in (
@@ -205,10 +338,14 @@ def is_multi_key_join(q: str) -> bool:
 
 def is_key_based_join(q: str) -> bool:
     q = q.lower()
+    if is_multi_source_group_comparison_report(q) or is_multi_source_utilisation_summary(q):
+        return False
     key_hints = ("student id", "employee id", "customer id", "order id",
                  "using the", "based on", "on the", "common key",
                  "shared column", "matching", "id column")
-    return any(w in q for w in key_hints)
+    if any(w in q for w in key_hints):
+        return True
+    return re.search(r"\b(?:using|on|by)\s+[a-z0-9_ ]*id\b", q) is not None
 
 
 def is_time_series(q: str) -> bool:
@@ -272,6 +409,8 @@ def is_allocation(q: str) -> bool:
 def is_highlight_request(q: str) -> bool:
     """Tasks that explicitly ask to color-mark or highlight rows in output."""
     q = q.lower()
+    if is_multi_source_utilisation_summary(q):
+        return False
     return any(w in q for w in (
         "highlight", "highlighted", "color", "colour",
         "mark in red", "mark the", "in red",
@@ -302,13 +441,20 @@ def is_financial_ratio_request(q: str) -> bool:
                    "return on", "as a ratio", "divide by revenue", "over net income")
     yoy_words = ("year over year", "yoy", "year-on-year", "year-to-year",
                  "annual growth rate", "yearly comparison", "year-by-year")
-    return any(w in q for w in ratio_words) or any(w in q for w in yoy_words)
+    return (
+        any(w in q for w in ratio_words)
+        or any(w in q for w in yoy_words)
+        or is_financial_dashboard(q)
+        or is_inventory_policy(q)
+    )
 
 
 def is_proportion_request(q: str) -> bool:
     """Percentage share or distribution breakdown."""
     q = q.lower()
-    if is_market_share_shipment_request(q):
+    if is_weighted_share_value_alignment_request(q):
+        return True
+    if is_region_share_and_cost_report(q):
         return True
     prop_words = ("percentage of total", "share of total", "proportion of",
                   "percentage share", "market share", "contribution to total",
@@ -355,4 +501,20 @@ def is_region_growth_chart(q: str) -> bool:
 
 
 def is_market_share_shipment(q: str) -> bool:
-    return is_market_share_shipment_request(q)
+    return is_weighted_share_value_alignment_request(q)
+
+
+def is_region_share_cost(q: str) -> bool:
+    return is_region_share_and_cost_report(q)
+
+
+def is_two_dimension_mean_count_summary_helper(q: str) -> bool:
+    return is_two_dimension_mean_count_summary(q)
+
+
+def is_multi_source_group_comparison_helper(q: str) -> bool:
+    return is_multi_source_group_comparison_report(q)
+
+
+def is_multi_source_utilisation_summary_helper(q: str) -> bool:
+    return is_multi_source_utilisation_summary(q)

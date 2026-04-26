@@ -347,9 +347,17 @@ def is_cycle_detection_request(user_question: str) -> bool:
     return "contain a cycle" in q or "contains a cycle" in q or ("cycle" in q and "graph" in q)
 
 
-def is_market_share_shipment_request(user_question: str) -> bool:
+def is_weighted_share_value_alignment_request(user_question: str) -> bool:
     q = (user_question or "").lower()
-    markers = ("market share", "smartphone", "shipment", "overlapping time period")
+    markers = (
+        "share",
+        "shipment",
+        "units",
+        "total",
+        "overlapping time period",
+        "overlapping period",
+        "align",
+    )
     return sum(1 for marker in markers if marker in q) >= 3
 
 

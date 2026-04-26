@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Optional
 
+from ....skills import all_helper_names, helper_embeds_summary_in_primary_table
+
 
 class OutputContractChecker:
     """Parse contract flags and validate execution output signals."""
@@ -205,6 +207,14 @@ class OutputContractChecker:
             return True
         return False
 
+    @staticmethod
+    def _has_embedded_summary_helper_signal(code_action: str) -> bool:
+        lower_code = (code_action or "").lower()
+        for helper_name in all_helper_names():
+            if helper_embeds_summary_in_primary_table(helper_name) and f"{helper_name.lower()}(" in lower_code:
+                return True
+        return False
+
     @classmethod
     def build_output_intent_feedback(
         cls,
@@ -267,8 +277,9 @@ class OutputContractChecker:
         if need_summary:
             has_summary_signal = (
                 "added summary row" in lower_result
-                or len(rows) >= 2
+                or (need_detail is not True and max_rows >= 2)
                 or cls._has_summary_write_signal_from_code(code_action)
+                or (max_rows >= 2 and cls._has_embedded_summary_helper_signal(code_action))
                 or (need_detail and max_rows >= 20)
             )
             if not has_summary_signal:
