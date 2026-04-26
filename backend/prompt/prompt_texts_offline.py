@@ -24,7 +24,7 @@ Use this exact structure:
 - Data quality notes that could block execution
 
 ### 2. Execution Plan (Offline Strict)
-- Read / inspect plan
+- Read / inspect plan using `load_all_tables()` first
 - Schema grounding plan
 - Computation plan
 - Output plan

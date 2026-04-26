@@ -3,8 +3,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.environment.sandbox.runner import SandboxRunner
-from src.backend.stages.execution.core.executor import CodeExecutor
+from backend.environment.sandbox.runner import SandboxRunner
+from backend.stages.execution.core.executor import CodeExecutor
 
 
 class _SandboxStub:

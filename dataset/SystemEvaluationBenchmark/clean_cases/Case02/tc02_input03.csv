@@ -1,0 +1,4 @@
+CourseCode,CourseName,TeacherID,MeetingDay,MeetingTime,Room
+MATH101,Calculus I,T01,Monday,09:00-10:00,A101
+CS201,Data Structures,T02,Tuesday,14:00-15:00,B203
+ENG102,Technical Writing,T03,Wednesday,11:00-12:00,C105

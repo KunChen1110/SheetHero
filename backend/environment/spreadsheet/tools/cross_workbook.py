@@ -23,6 +23,8 @@ _NOTE_MARKERS = {
     "remarks",
 }
 
+_QUARTER_TEXT_RE = re.compile(r"^Q[1-4]$", flags=re.IGNORECASE)
+
 
 def get_workbook(world: SpreadsheetWorld, file_path: str):
     """Get a workbook by full path or by matching filename."""
@@ -159,6 +161,74 @@ def _pick_header_row_index(rows: List[List[Any]], first_non_empty_idx: int) -> i
     return first_non_empty_idx
 
 
+def _looks_matrix_subheader_label(value: Any) -> bool:
+    text = _normalize_text(value)
+    if not isinstance(text, str) or not text:
+        return False
+    if _QUARTER_TEXT_RE.fullmatch(text):
+        return True
+    lowered = text.lower()
+    return lowered in {
+        "temp_c",
+        "rainfall_mm",
+        "humidity_%",
+        "temperature",
+        "rainfall",
+        "humidity",
+    }
+
+
+def _build_two_row_matrix_header(
+    top_row: List[Any],
+    second_row: List[Any],
+) -> tuple[list[int], list[str]] | None:
+    width = max(len(top_row), len(second_row))
+    if width == 0:
+        return None
+
+    top_norm = [_normalize_text(top_row[idx]) if idx < len(top_row) else None for idx in range(width)]
+    second_norm = [_normalize_text(second_row[idx]) if idx < len(second_row) else None for idx in range(width)]
+
+    if sum(1 for value in top_norm if not _is_empty(value)) < 2:
+        return None
+    if sum(1 for value in second_norm if _looks_matrix_subheader_label(value)) < 2:
+        return None
+
+    propagated_top: list[Any] = []
+    current_top: Any = None
+    for value in top_norm:
+        if not _is_empty(value):
+            current_top = value
+        propagated_top.append(current_top)
+
+    keep_indices: list[int] = []
+    header: list[str] = []
+    for idx in range(width):
+        top_raw = top_norm[idx]
+        top_value = propagated_top[idx]
+        second_value = second_norm[idx]
+        if _is_empty(top_raw) and _is_empty(second_value):
+            continue
+
+        if idx == 0 and not _is_empty(top_raw) and _is_empty(second_value):
+            label = str(top_raw).strip()
+        elif not _is_empty(top_value) and _looks_matrix_subheader_label(second_value):
+            label = f"{str(top_value).strip()}_{str(second_value).strip()}"
+        elif not _is_empty(top_raw) and _is_empty(second_value):
+            label = str(top_raw).strip()
+        else:
+            label = str(second_value).strip()
+
+        keep_indices.append(idx)
+        header.append(label)
+
+    if len(header) < 3:
+        return None
+    if sum(1 for value in header if "_" in value) < 2:
+        return None
+    return keep_indices, header
+
+
 def _is_ignorable_overflow_value(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -230,6 +300,16 @@ def extract_sheet_table(
     ]
     header = [str(header_raw[idx]).strip() for idx in keep_indices]
     data_start_index = header_row_index + 1
+
+    second_header_index = _find_next_non_empty_row_index(normalized_rows, header_row_index + 1)
+    if second_header_index is not None:
+        flattened_header = _build_two_row_matrix_header(
+            normalized_rows[header_row_index],
+            normalized_rows[second_header_index],
+        )
+        if flattened_header is not None:
+            keep_indices, header = flattened_header
+            data_start_index = second_header_index + 1
 
     preview_data_index = _find_next_non_empty_row_index(normalized_rows, data_start_index)
     if header and keep_indices and preview_data_index is not None:

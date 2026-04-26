@@ -1,0 +1,9 @@
+TaskID,TaskName,Duration_hours,Priority
+T1,Project Setup,2,High
+T2,Data Collection,4,High
+T3,Data Analysis,3,Medium
+T4,Model Development,6,High
+T5,Dashboard Creation,4,Medium
+T6,Model Testing,3,High
+T7,Dashboard Testing,2,Medium
+T8,Final Deployment,2,Low

@@ -10,7 +10,7 @@ from .environment.sandbox.sandbox import Sandbox
 from .router.diagnose_router import DiagnoseRouter
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BENCHMARK_ROOT = (
     PROJECT_ROOT
     / "dataset"

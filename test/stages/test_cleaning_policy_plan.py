@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from openpyxl import Workbook
 
-from src.backend.stages.cleaning.stage import DataCleaningStage
+from backend.stages.cleaning.stage import DataCleaningStage
 
 
 class _SandboxStub:

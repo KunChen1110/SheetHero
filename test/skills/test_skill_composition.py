@@ -18,14 +18,14 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills import (
+from backend.skills import (
     detect_skills,
     select_helper,
     compose_skill_plan,
     build_loop_breaker,
     WorkflowStep,
 )
-from src.backend.skills.registry import all_skills as _all_skills_list
+from backend.skills.registry import all_skills as _all_skills_list
 
 
 # ---------------------------------------------------------------------------

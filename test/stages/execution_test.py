@@ -17,10 +17,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _development_dataset_dir() -> Path:
+    return _repo_root() / "dataset" / "DevelopmentBenchmark"
+
+
 def _load_tasks(dataset_dir: Path) -> list[dict]:
     candidates = [
         dataset_dir / "dataset.json",
-        _repo_root() / "dataset" / "dataset.json",
+        _development_dataset_dir() / "dataset.json",
         ]
     for path in candidates:
         if path.exists():
@@ -133,7 +137,7 @@ def main() -> int:
         description="Test ExecutionStage with mocked understanding."
     )
     parser.add_argument("--test-id", type=int, required=True, help="Dataset entry index")
-    parser.add_argument("--dataset-dir", type=str, default=str(_repo_root() / "dataset"))
+    parser.add_argument("--dataset-dir", type=str, default=str(_development_dataset_dir()))
     parser.add_argument("--model", type=str, default=None, help="Model override")
     parser.add_argument("--output-mode", type=str, choices=["text", "file"], default="text",
                         help="Output mode: text (return answer) or file (save to Excel)")
@@ -150,11 +154,11 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
-    from src.backend.stages.execution.stage import ExecutionStage
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
+    from backend.stages.execution.stage import ExecutionStage
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     config = Config()
     model = args.model or config.deployment

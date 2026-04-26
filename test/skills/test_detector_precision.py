@@ -17,13 +17,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills.detectors import (
+from backend.skills.detectors import (
     is_merge_request,
     is_aggregate_request,
     is_highlight_request,
 )
-from src.backend.skills import detect_skills, select_helper, build_loop_breaker
-from src.backend.skills.prompt_builders import _extract_month_from_question
+from backend.skills import detect_skills, select_helper, build_loop_breaker
+from backend.skills.prompt_builders import _extract_month_from_question
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ class TestHighlightContract:
         then +2 gives Excel row (1=header, 2=first data row).
         output_row_numbers is only valid for the exact df written at A1.
         """
-        from src.backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
+        from backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
 
         df = pd.DataFrame({
             "Day": ["Mon", "Tue", "Wed", "Thu", "Fri"],
@@ -270,13 +270,17 @@ class TestHighlightContract:
         result = summarize_numeric_column(df, value_col="Sales")
         # Max value is 250, appearing at indices 1 and 3 (0-based after reset_index)
         assert result["max_value"] == 250
+        assert result["total"] == 870
+        assert result["average"] == 174
+        assert result["summary"]["Total"] == 870
+        assert result["summary"]["Average"] == 174
         assert result["output_row_numbers"] == [3, 5], (
             "Index 1 → Excel row 3 (header=1, data starts at 2), index 3 → Excel row 5"
         )
 
     def test_output_row_numbers_after_filter(self):
         """After period filter, indices are re-mapped relative to the filtered df."""
-        from src.backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
+        from backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
 
         full_df = pd.DataFrame({
             "Date": ["2024-11-01", "2024-11-02", "2024-12-01", "2024-11-03"],
@@ -294,7 +298,7 @@ class TestHighlightContract:
         Demonstrates the contract violation: if a DIFFERENT df is written to the sheet
         than the one passed to summarize_numeric_column, row numbers are wrong.
         """
-        from src.backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
+        from backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
 
         summary_df = pd.DataFrame({
             "Day": ["Mon", "Tue", "Wed"],
@@ -318,7 +322,7 @@ class TestHighlightContract:
 
     def test_output_row_numbers_reset_index_ensures_contiguous(self):
         """reset_index inside summarize_numeric_column ensures contiguous 0-based indices."""
-        from src.backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
+        from backend.environment.spreadsheet.tools.workflows import summarize_numeric_column
 
         # df with non-contiguous index (e.g. result of a filter without reset_index)
         df = pd.DataFrame(

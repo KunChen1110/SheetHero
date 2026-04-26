@@ -3,8 +3,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from src.backend.skills.runtime_plan import RuntimeExecutionPlan
-from src.backend.stages.execution.skill.question_inference import ExecutionQuestionInferenceAdvisor
+from backend.skills.runtime_plan import RuntimeExecutionPlan
+from backend.stages.execution.skill.question_inference import ExecutionQuestionInferenceAdvisor
 
 
 class _DummyRuntime:

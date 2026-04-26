@@ -135,6 +135,10 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
         "- Build the solution from shared runtime helpers and verified schema.",
         "- Compose the task step by step: read/inspect -> transform/analyze -> write Output -> save workbook.",
         "- Choose helpers that fit the observed tables and requested output, not the benchmark title.",
+        "- Before writing Output, decide the requested deliverable grain from the user question.",
+        "- If the user asks `for each X`, `by X`, `per X`, `rank`, `top`, `average`, `rate`, `ratio`, `growth`, `score`, or `utilisation`, the final Output should be the aggregated/derived report at that grain, not the raw joined/source rows.",
+        "- Raw merged rows are only the final Output when the user explicitly asks to merge/combine files into one table without downstream calculations.",
+        "- Print a concise `RESULT_SUMMARY:` with the key totals, top rows, ranks, or detected issues after saving; this summary must be derived from the final output table.",
     ]
     if plan_summary:
         lines.extend(
@@ -172,15 +176,44 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
                 "- Do not replace the whole task with a single task-shaped helper shortcut.",
             ]
         )
-    elif helper.name == "build_market_share_shipment_report":
+    elif helper.name == "build_weighted_share_value_report":
         lines.extend(
             [
-                "- Do NOT call `build_market_share_shipment_report()` directly.",
+                "- Do NOT call `build_weighted_share_value_report()` directly.",
                 "- Build a generic share table and shipment table from observed period columns, not from an assumed exact `Shipment` header.",
                 "- The market-share table is the wider one with many brand columns; the shipment table is the narrower one with a single numeric value column.",
                 "- Rename that single numeric shipment column to `Shipment` before the weighted merge.",
                 "- Align the overlap with `merge_on_shared_period(...)` before computing the weighted output.",
                 "- Use `build_weighted_period_output(...)` to scale the share columns by the shipment column into the final output table.",
+            ]
+        )
+    elif helper.name == "build_region_share_cost_report":
+        lines.extend(
+            [
+                "- For regional share-and-cost tasks, prefer `build_region_share_cost_report()` over manual multi-file joins and ratio calculations.",
+                "- This workflow identifies the region population table and the region expenditure table from observed headers.",
+                "- Write `report['detail_data']` or `report['output_df']` directly to `Output`, then save.",
+            ]
+        )
+    elif helper.name == "build_two_dimension_mean_count_summary_report":
+        lines.extend(
+            [
+                "- For two-dimension mean-and-count summary tasks, prefer `build_two_dimension_mean_count_summary_report()` over hand-written groupby/count code.",
+                "- This workflow identifies the grouping columns and the rating/value column from observed headers and returns a ready-to-write summary table.",
+            ]
+        )
+    elif helper.name == "build_multi_source_group_comparison_report":
+        lines.extend(
+            [
+                "- For joined grouped-comparison tasks, prefer `build_multi_source_group_comparison_report()` over manual multi-table merge logic.",
+                "- This workflow returns one grouped summary table and one conditional comparison table.",
+            ]
+        )
+    elif helper.name == "build_multi_source_utilisation_summary_report":
+        lines.extend(
+            [
+                "- For multi-source utilisation tasks, prefer `build_multi_source_utilisation_summary_report()` over manual multi-table ratio calculations.",
+                "- This workflow returns the output table plus `highlight_rows` for values above threshold when applicable.",
             ]
         )
     elif helper.name == "build_region_growth_analysis":
@@ -237,6 +270,14 @@ def build_loop_breaker(
 ) -> str:
     label = skill.name.upper()
     if skill.output_mode == "text":
+        if getattr(helper, "self_loading", False):
+            return (
+                f"\n{label} LOOP BREAKER:\n"
+                f"- Use the matched scan helper directly: `report = {helper.name}()`.\n"
+                "- Return the helper's textual answer only: `print('FINAL_TEXT:', report['answer'])`.\n"
+                "- Do not access `report['output_df']` or `report['detail_data']`; scan helpers return text reports.\n"
+                "- Do not create or save an output workbook.\n"
+            )
         return (
             f"\n{label} LOOP BREAKER:\n"
             "- Read the relevant tables, compute the text answer, and print `FINAL_TEXT:`.\n"
@@ -275,6 +316,30 @@ def build_loop_breaker(
             "  `saved_file = save_workbook_to(output_path)`\n"
             "  `print(f'SAVED_FILE: {saved_file}')`\n"
             "  `saved_file`\n"
+        )
+    if helper.name == "build_relational_join_enrichment_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use the self-loading shared-key join helper for generic multi-table merge tasks:\n"
+            "  `report = build_relational_join_enrichment_report(key_header=None, how='inner')`\n"
+            "- If the task continues after the join, continue from `joined_df = report['output_df'].copy()`.\n"
+            "- Create final sheets only after downstream filtering / aggregation / ranking is complete.\n"
+            "- Do not use `concat_tables_with_same_headers(...)` unless the loaded tables truly share the same schema.\n"
+            "- If a helper result is reused for further DataFrame operations, use `report['output_df']`, not `report['detail_data']`.\n"
+            "- Use `report['detail_data']` only when the joined table itself is the final deliverable.\n"
+        )
+    if helper.name == "fill_missing_from_reference":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use `fill_missing_from_reference(primary_df, reference_df, key_header='...', prefer_primary=True)` only for filling or enriching a primary table from a reference table.\n"
+            "- Select the primary table and reference table by different header constraints; never use the same selector for both.\n"
+            "- Preferred role-selection shape:\n"
+            "  `tables = load_all_tables()`\n"
+            "  `primary_t = find_table_by_headers(tables, required_headers=['<key>'], preferred_headers=['Name', 'JobGrade'])`\n"
+            "  `reference_t = find_table_by_headers(tables, required_headers=['<key>'], preferred_headers=['Department'], forbidden_headers=['Name', 'JobGrade'])`\n"
+            "  `result = fill_missing_from_reference(primary_t['df'], reference_t['df'], key_header='<key>', prefer_primary=True)`\n"
+            "- If you need another DataFrame operation after the helper call, continue from `result['output_df']`.\n"
+            "- Use `result['detail_data']` only for the final write step.\n"
         )
     if helper.name == "concat_tables_with_same_headers":
         # Build the loop breaker from the composed skill plan so that
@@ -355,7 +420,7 @@ def build_loop_breaker(
                 "- `output_row_numbers` is only valid for the DataFrame passed to summarize_numeric_column — never mix filtered and unfiltered frames."
             )
         return "\n".join(lines) + "\n"
-    if helper.name == "build_market_share_shipment_report":
+    if helper.name == "build_weighted_share_value_report":
         return (
             f"\n{label} LOOP BREAKER:\n"
             "- Use this grounded skeleton for title-heavy period sheets:\n"
@@ -393,6 +458,63 @@ def build_loop_breaker(
             "- The market-share table is the wider one with many brand columns.\n"
             "- The shipment table is the one with `Time` plus a single numeric value column; rename that column to `Shipment`.\n"
             "- Do not return prose; return one runnable code block.\n"
+        )
+    if helper.name == "build_region_share_cost_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use this grounded workflow shape for regional share-and-cost analysis:\n"
+            "  `report = build_region_share_cost_report()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not hand-pick files by list position unless you first verify them from observed headers.\n"
+        )
+    if helper.name == "build_time_series_aggregation_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use the self-loading time-series helper first, then compose any highlight/chart steps from its outputs:\n"
+            "  `report = build_time_series_aggregation_report()`\n"
+            "  `output_df = report['output_df'].copy()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+            "  `add_summary_row('Output', len(report['detail_data']) + 2, report['summary'])`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not call `load_all_tables()` or `read_table_multi()` for this task.\n"
+        )
+    if helper.name == "build_grouped_aggregation_ranking_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use the self-loading grouped aggregation helper directly:\n"
+            "  `report = build_grouped_aggregation_ranking_report()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(report['detail_data'], 'Output', 'A1')`\n"
+            "  `add_summary_row('Output', len(report['detail_data']) + 2, report['summary'])`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not pass positional DataFrame arguments to the helper.\n"
+        )
+    if helper.name == "build_two_dimension_mean_count_summary_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use `report = build_two_dimension_mean_count_summary_report()`, write `report['output_df']` to `Output!A1`, save, and return the saved path.\n"
+        )
+    if helper.name == "build_multi_source_group_comparison_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use `report = build_multi_source_group_comparison_report()`.\n"
+            "- Write `report['avg_by_type_df']` to one output sheet and `report['holiday_df']` to another output sheet before saving.\n"
+        )
+    if helper.name == "build_multi_source_utilisation_summary_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use `report = build_multi_source_utilisation_summary_report()`.\n"
+            "- If `report['sheet_outputs']` is present, write each DataFrame to its own sheet using the provided sheet names before saving.\n"
+            "- Otherwise write `report['output_df']` to `Output!A1`; if `report['highlight_rows']` is non-empty, highlight them in red, then save.\n"
         )
     if helper.name == "build_region_growth_analysis":
         return (
@@ -463,6 +585,30 @@ def build_loop_breaker(
             "  `print(f'SAVED_FILE: {saved_file}')`\n"
             "  `saved_file`\n"
             "- Do not manually rebuild the statement header or hand-select year columns.\n"
+        )
+    if helper.name == "build_inventory_eoq_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use this grounded workflow shape for EOQ and sensitivity analysis:\n"
+            "  `inventory_result = build_inventory_eoq_report()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(inventory_result['detail_data'], 'Output', 'A1')`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not manually rebuild parameter lookup tables or EOQ scenario formulas in execution code.\n"
+        )
+    if helper.name == "build_financial_dashboard_report":
+        return (
+            f"\n{label} LOOP BREAKER:\n"
+            "- Use this grounded workflow shape for multi-source financial dashboards:\n"
+            "  `dashboard_result = build_financial_dashboard_report()`\n"
+            "  `create_output_sheet('Output')`\n"
+            "  `write_dataframe_to_sheet(dashboard_result['detail_data'], 'Output', 'A1')`\n"
+            "  `saved_file = save_workbook_to(output_path)`\n"
+            "  `print(f'SAVED_FILE: {saved_file}')`\n"
+            "  `saved_file`\n"
+            "- Do not manually rebuild the month joins, KPI targets, or dashboard calculations in execution code.\n"
         )
     # Generic fallback — but if extra_skills carry aggregate or highlight we
     # still build the skeleton from the composed plan so the code shape stays

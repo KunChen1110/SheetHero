@@ -10,6 +10,27 @@ class ExecutionResponseParser(BaseResponseParser):
     """Parse assistant responses into thought, code, and final answers."""
 
     @staticmethod
+    def _normalize_code_tail(code: str) -> str:
+        lines = code.splitlines()
+        while lines and not lines[-1].strip():
+            lines.pop()
+        if not lines:
+            return code
+
+        has_function_or_class_block = any(
+            re.match(r"^\s*(def|class)\s+\w+", line)
+            for line in lines
+        )
+        normalized_lines = []
+        for line in lines:
+            if not has_function_or_class_block and re.match(r"^\s*return\s+.+$", line):
+                expr = re.sub(r"^\s*return\s+", "", line, count=1).rstrip()
+                normalized_lines.append(expr)
+                continue
+            normalized_lines.append(line)
+        return "\n".join(normalized_lines)
+
+    @staticmethod
     def _looks_like_bare_code(content: str) -> bool:
         lines = [line.rstrip() for line in content.splitlines() if line.strip()]
         if not lines:
@@ -47,27 +68,27 @@ class ExecutionResponseParser(BaseResponseParser):
             re.DOTALL | re.IGNORECASE,
         )
         if begin_solution_match:
-            code = begin_solution_match.group(1).strip()
+            code = self._normalize_code_tail(begin_solution_match.group(1).strip())
             if code:
                 return None, code
 
         # Preferred: closed fenced code block (python/py/unspecified), case-insensitive.
         code_match = re.search(r"```(?:python|py)?\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
         if code_match:
-            code = code_match.group(1).strip()
+            code = self._normalize_code_tail(code_match.group(1).strip())
             if code:
                 return None, code
 
         # Fallback: opening fence exists but closing fence may be truncated by the model.
         open_only_match = re.search(r"```(?:python|py)?\s*(.*)$", content, re.DOTALL | re.IGNORECASE)
         if open_only_match:
-            code = open_only_match.group(1).strip()
+            code = self._normalize_code_tail(open_only_match.group(1).strip())
             if code:
                 return None, code
 
         # Last resort for bounded mode style outputs: content may be plain code without fences.
         if self._looks_like_bare_code(content):
-            return None, content.strip()
+            return None, self._normalize_code_tail(content.strip())
 
         if "Final Answer:" in content:
             return content.strip(), None

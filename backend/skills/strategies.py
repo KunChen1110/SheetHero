@@ -63,7 +63,9 @@ Numeric column summary (total / average / max on a verified table):
   tables = load_all_tables()
   df = tables[0]["df"]
   print(df.columns.tolist(), len(df))
-  result = summarize_numeric_column(df, value_col="...", summary_labels={"Total": "sum", "Average": "mean"})
+  result = summarize_numeric_column(df, value_col="...")
+  total_value = result["total"]
+  average_value = result["average"]
   -> use result["summary"] for add_summary_row(); result["output_row_numbers"] for highlight_rows()
 
 Grouped summary:

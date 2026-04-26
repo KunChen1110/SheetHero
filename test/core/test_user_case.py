@@ -30,7 +30,7 @@ from typing import List, Dict, Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATASET_RUN = PROJECT_ROOT / "test" / "core" / "run_test.py"
-DATASET_DIR = PROJECT_ROOT / "dataset"
+DATASET_DIR = PROJECT_ROOT / "dataset" / "DevelopmentBenchmark"
 TEST_OUTPUT_DIR = PROJECT_ROOT / "test"
 SUMMARY_JSON = TEST_OUTPUT_DIR / "output.json"
 

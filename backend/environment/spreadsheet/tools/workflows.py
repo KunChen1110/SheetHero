@@ -16,11 +16,13 @@ from .cross_workbook import get_workbook, list_all_workbooks, read_table_multi
 
 _HEADER_XML_ESCAPE_RE = re.compile(r"_x[0-9A-Fa-f]{4}_")
 _DEP_SPLIT_RE = re.compile(r"[,\n;]+")
+_CAMEL_CASE_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 def _normalize_header_name(value: Any) -> str:
     text = str(value or "")
     text = _HEADER_XML_ESCAPE_RE.sub("", text)
+    text = _CAMEL_CASE_BOUNDARY_RE.sub(" ", text)
     text = re.sub(r"[_\W]+", " ", text, flags=re.UNICODE)
     text = re.sub(r"\s+", " ", text)
     return text.strip().lower()
@@ -273,10 +275,11 @@ def build_weighted_period_output(
     )
 
 
-def _resolve_column_name(columns: Iterable[Any], requested_name: str) -> str:
-    normalized_requested = _normalize_header_name(requested_name)
+def _resolve_column_name(columns: Iterable[Any], requested_name: str, *fallback_names: str) -> str:
+    requested_names = (requested_name,) + tuple(fallback_names)
+    normalized_candidates = {_normalize_header_name(name) for name in requested_names if name}
     for column in columns:
-        if _normalize_header_name(column) == normalized_requested:
+        if _normalize_header_name(column) in normalized_candidates:
             return str(column)
     raise ValueError(f"Column `{requested_name}` not found in {list(columns)}")
 
@@ -391,7 +394,7 @@ def load_all_tables(
         tables.append(
             {
                 "file_path": file_path,
-                "file": file_path,
+                "file": os.path.basename(file_path),
                 "file_name": os.path.basename(file_path),
                 "sheet_name": table["sheet_name"],
                 "sheet": table["sheet_name"],
@@ -605,6 +608,221 @@ def infer_common_keys(
             f"Unable to infer a stable composite key. common_headers={sorted(actual_lookup.values())}"
         )
     return resolved
+
+
+def _join_key_score(normalized: str) -> int:
+    score = 0
+    if any(marker in normalized for marker in ("id", "code", "key", "number")):
+        score += 100
+    if any(marker in normalized for marker in ("month", "date", "year", "quarter", "week", "day", "period", "time")):
+        score += 70
+    if any(marker in normalized for marker in ("category", "region", "segment", "department", "group", "class", "type")):
+        score += 45
+    if any(marker in normalized for marker in ("name", "title", "description", "manager", "city", "note")):
+        score -= 25
+    return score
+
+
+def _shared_join_key_candidates(
+    left_headers: Sequence[Any],
+    right_headers: Sequence[Any],
+    max_keys: int = 3,
+) -> list[tuple[str, str, str, int]]:
+    left_lookup = {
+        _normalize_header_name(col): str(col)
+        for col in left_headers
+    }
+    right_lookup = {
+        _normalize_header_name(col): str(col)
+        for col in right_headers
+    }
+    shared = set(left_lookup) & set(right_lookup)
+    scored: list[tuple[str, str, str, int]] = []
+    for normalized in shared:
+        score = _join_key_score(normalized)
+        if score <= 0:
+            continue
+        scored.append((left_lookup[normalized], right_lookup[normalized], normalized, score))
+    scored.sort(key=lambda item: (-item[3], item[2]))
+    return scored[:max_keys]
+
+
+def _count_numeric_non_key_columns(df: pd.DataFrame, key_columns: Sequence[str]) -> int:
+    key_set = {_normalize_header_name(col) for col in key_columns}
+    count = 0
+    for col in df.columns:
+        if _normalize_header_name(col) in key_set:
+            continue
+        if pd.api.types.is_numeric_dtype(df[col]):
+            count += 1
+    return count
+
+
+def _rows_are_unique_for_keys(df: pd.DataFrame, key_columns: Sequence[str]) -> bool:
+    if df.empty or not key_columns:
+        return False
+    working = df.copy()
+    for column in key_columns:
+        working[column] = working[column].map(_normalize_cell_text)
+    non_empty_mask = pd.Series(True, index=working.index)
+    for column in key_columns:
+        non_empty_mask &= working[column] != ""
+    working = working[non_empty_mask]
+    if working.empty:
+        return False
+    return not working.duplicated(subset=list(key_columns)).any()
+
+
+def _merge_current_with_table(
+    left_df: pd.DataFrame,
+    right_df: pd.DataFrame,
+    left_keys: Sequence[str],
+    right_keys: Sequence[str],
+    how: str,
+    suffix_index: int,
+) -> pd.DataFrame:
+    merged_left = left_df.copy()
+    merged_right = right_df.copy()
+    for key_name in left_keys:
+        merged_left[key_name] = merged_left[key_name].map(_normalize_cell_text)
+    for key_name in right_keys:
+        merged_right[key_name] = merged_right[key_name].map(_normalize_cell_text)
+
+    merged_right = merged_right.drop_duplicates(subset=list(right_keys), keep="first")
+    existing_norm = {_normalize_header_name(col) for col in merged_left.columns}
+    rename_map: dict[str, str] = {}
+    for col in merged_right.columns:
+        if col in right_keys:
+            continue
+        if _normalize_header_name(col) in existing_norm:
+            rename_map[col] = f"{col}_{suffix_index}"
+    if rename_map:
+        merged_right = merged_right.rename(columns=rename_map)
+
+    merged = merged_left.merge(
+        merged_right,
+        left_on=list(left_keys),
+        right_on=list(right_keys),
+        how=how,
+    )
+    for left_key, right_key in zip(left_keys, right_keys):
+        if right_key != left_key and right_key in merged.columns:
+            merged = merged.drop(columns=[right_key])
+    return merged
+
+
+def _choose_bridge_join_seed_index(tables: Sequence[Dict[str, Any]]) -> int:
+    best_index = 0
+    best_score: tuple[int, int, int] | None = None
+    for idx, table in enumerate(tables):
+        df = table.get("df")
+        if not isinstance(df, pd.DataFrame):
+            continue
+        headers = list(df.columns)
+        pair_score = 0
+        for other_idx, other in enumerate(tables):
+            if idx == other_idx:
+                continue
+            other_df = other.get("df")
+            if not isinstance(other_df, pd.DataFrame):
+                continue
+            pair_score += sum(score for *_rest, score in _shared_join_key_candidates(headers, list(other_df.columns)))
+        table_score = (
+            pair_score,
+            len(headers),
+            int(len(df)),
+        )
+        if best_score is None or table_score > best_score:
+            best_index = idx
+            best_score = table_score
+    return best_index
+
+
+def _is_dimension_like_join_candidate(current_df: pd.DataFrame, table_df: pd.DataFrame) -> bool:
+    candidates = _shared_join_key_candidates(list(current_df.columns), list(table_df.columns))
+    if len(candidates) != 1:
+        return False
+    right_key = candidates[0][1]
+    if not _rows_are_unique_for_keys(table_df, [right_key]):
+        return False
+    return _count_numeric_non_key_columns(table_df, [right_key]) <= 2
+
+
+def _bridge_join_tables(
+    tables: Sequence[Dict[str, Any]],
+    how: str = "inner",
+) -> Dict[str, Any]:
+    if not tables:
+        raise ValueError("No tables provided for bridge join.")
+
+    seed_index = _choose_bridge_join_seed_index(tables)
+    seed_table = tables[seed_index]
+    merged_df = seed_table["df"].copy()
+    sources = [str(seed_table.get("file_name") or seed_table.get("sheet_name") or f"table_{seed_index + 1}")]
+    remaining = [table for idx, table in enumerate(tables) if idx != seed_index]
+    join_path: list[str] = []
+
+    while remaining:
+        dimension_candidates = [
+            table for table in remaining
+            if isinstance(table.get("df"), pd.DataFrame)
+            and _is_dimension_like_join_candidate(merged_df, table["df"])
+        ]
+        candidate_pool = dimension_candidates or remaining
+
+        best: tuple[tuple[int, int, int], Dict[str, Any], list[tuple[str, str, str, int]]] | None = None
+        for table in candidate_pool:
+            table_df = table.get("df")
+            if not isinstance(table_df, pd.DataFrame):
+                continue
+            join_candidates = _shared_join_key_candidates(list(merged_df.columns), list(table_df.columns))
+            if not join_candidates:
+                continue
+            join_keys = join_candidates[:3]
+            right_keys = [right for _left, right, _norm, _score in join_keys]
+            unique_on_join_keys = _rows_are_unique_for_keys(table_df, right_keys)
+            candidate_score = (
+                1 if unique_on_join_keys else 0,
+                len(join_keys),
+                sum(score for *_rest, score in join_keys),
+                -_count_numeric_non_key_columns(table_df, right_keys),
+            )
+            if best is None or candidate_score > best[0]:
+                best = (candidate_score, table, join_keys)
+
+        if best is None:
+            unresolved = [
+                str(table.get("file_name") or table.get("sheet_name") or "table")
+                for table in remaining
+            ]
+            raise ValueError(
+                f"Unable to bridge-join remaining tables: {', '.join(unresolved)}"
+            )
+
+        _, table, join_keys = best
+        table_df = table["df"]
+        left_keys = [left for left, _right, _norm, _score in join_keys]
+        right_keys = [right for _left, right, _norm, _score in join_keys]
+        merged_df = _merge_current_with_table(
+            merged_df,
+            table_df,
+            left_keys=left_keys,
+            right_keys=right_keys,
+            how=how,
+            suffix_index=len(sources) + 1,
+        )
+        source_name = str(table.get("file_name") or table.get("sheet_name") or f"table_{len(sources) + 1}")
+        sources.append(source_name)
+        join_path.append(f"{source_name} on {', '.join(left_keys)}")
+        remaining.remove(table)
+
+    detail_data = [merged_df.columns.tolist()] + merged_df.fillna("").values.tolist()
+    return {
+        "output_df": merged_df,
+        "detail_data": detail_data,
+        "sources": sources,
+        "join_path": join_path,
+    }
 
 
 def concat_tables_with_same_headers(
@@ -828,24 +1046,38 @@ def build_relational_join_enrichment_report(
     if len(tables) < 2:
         raise ValueError("At least two related tables are required for relational join enrichment.")
 
-    actual_key_header = key_header or infer_common_key(tables)
-    merge_result = merge_tables_on_key(
-        tables,
-        key_header=actual_key_header,
-        how=how,
-    )
+    if key_header is not None:
+        merge_result = merge_tables_on_key(
+            tables,
+            key_header=key_header,
+            how=how,
+        )
+    else:
+        try:
+            actual_key_header = infer_common_key(tables)
+        except ValueError:
+            merge_result = _bridge_join_tables(tables, how=how)
+        else:
+            merge_result = merge_tables_on_key(
+                tables,
+                key_header=actual_key_header,
+                how=how,
+            )
+
     output_df = merge_result["output_df"].copy()
     detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+    key_summary = merge_result.get("key_column") or ", ".join(merge_result.get("join_path", [])) or "bridge_join"
     return {
         "output_df": output_df,
         "detail_data": detail_data,
         "summary": {
-            "Key Column": merge_result["key_column"],
+            "Key Column": key_summary,
             "Source Tables": ", ".join(merge_result["sources"]),
             "Rows Used": int(len(output_df)),
         },
         "metadata": {
-            "key_column": merge_result["key_column"],
+            "key_column": merge_result.get("key_column"),
+            "join_path": merge_result.get("join_path", []),
             "how": how,
             "sources": merge_result["sources"],
         },
@@ -1078,7 +1310,7 @@ def build_room_format_report(
     for _file_name, column_name, raw_values in candidate_columns:
         variant_map: dict[str, set[str]] = {}
         for value in raw_values:
-            canonical = re.sub(r"\s+", "", value).upper()
+            canonical = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
             variant_map.setdefault(canonical, set()).add(value)
 
         duplicate_variant_groups = {
@@ -1087,16 +1319,22 @@ def build_room_format_report(
             if len(variants) > 1
         }
         if duplicate_variant_groups:
-            canonical, variants = sorted(
+            group_parts: list[str] = []
+            question_parts: list[str] = []
+            for canonical, variants in sorted(
                 duplicate_variant_groups.items(),
                 key=lambda item: (-len(item[1]), item[0]),
-            )[0]
-            display_variants = variants[:3]
-            sample = ", ".join(f"`{variant}`" for variant in display_variants)
-            preferred = min(display_variants, key=lambda value: (len(value), value.lower()))
+            )[:5]:
+                display_variants = variants[:4]
+                sample = ", ".join(f"`{variant}`" for variant in display_variants)
+                group_parts.append(f"{canonical}: {sample}")
+                if not question_parts:
+                    question_parts = display_variants
+            question_sample = ", ".join(f"`{variant}`" for variant in question_parts)
             answer = (
-                f"The `{column_name}` column contains inconsistent variants for the same identifier `{canonical}`: {sample}. "
-                f"Should `{column_name}` be standardized as `{preferred}`?"
+                f"The `{column_name}` column contains inconsistent variants for the same identifier families: "
+                f"{'; '.join(group_parts)}. "
+                f"Should `{column_name}` be standardized to one format such as {question_sample}?"
             )
             return {
                 "answer": answer,
@@ -1125,7 +1363,7 @@ def build_room_format_report(
             return {
                 "answer": answer,
                 "variants": {
-                    re.sub(r"\s+", "", value).upper(): [value]
+                    re.sub(r"[^A-Za-z0-9]+", "", value).upper(): [value]
                     for value in sample_values
                 },
             }
@@ -1699,9 +1937,9 @@ def summarize_numeric_column(
     output_row_numbers = [int(idx) + 2 for idx in max_indices]
 
     labels = {
-        "total": f"Total {actual_value_col}",
-        "average": f"Average {actual_value_col}",
-        "max": f"Max {actual_value_col}",
+        "total": "Total",
+        "average": "Average",
+        "max": "Max",
     }
     if summary_labels:
         labels.update(summary_labels)
@@ -2159,6 +2397,28 @@ def build_time_series_aggregation_report(
     sort_desc: bool = True,
 ) -> Dict[str, Any]:
     """Aggregate one time series column over a requested temporal grain."""
+    def _infer_date_column(frame: pd.DataFrame) -> str:
+        candidate_scores: list[tuple[int, str]] = []
+        for candidate in frame.columns:
+            candidate_name = str(candidate)
+            normalized = _normalize_header_name(candidate_name)
+            score = 0
+            if any(token in normalized for token in ("date", "year", "month", "quarter", "period", "time")):
+                score += 10
+            text_series = frame[candidate].map(_normalize_cell_text)
+            year_like_count = int(text_series.str.fullmatch(r"\d{4}").fillna(False).sum())
+            if year_like_count >= max(2, len(text_series) // 2):
+                score += 8
+            parsed_dates = pd.to_datetime(frame[candidate], errors="coerce")
+            parsed_count = int(parsed_dates.notna().sum())
+            score += parsed_count
+            if score > 0:
+                candidate_scores.append((score, candidate_name))
+        if not candidate_scores:
+            raise ValueError("Could not infer a date column for time-series aggregation.")
+        candidate_scores.sort(key=lambda item: (-item[0], item[1]))
+        return candidate_scores[0][1]
+
     def _infer_value_column(frame: pd.DataFrame, actual_date_col_name: str) -> str:
         candidate_scores: list[tuple[int, str]] = []
         for candidate in frame.columns:
@@ -2173,6 +2433,14 @@ def build_time_series_aggregation_report(
             raise ValueError("Could not infer a numeric value column for time-series aggregation.")
         candidate_scores.sort(key=lambda item: (-item[0], item[1]))
         return candidate_scores[0][1]
+
+    def _resolve_date_column(frame: pd.DataFrame) -> str:
+        if date_col:
+            try:
+                return _resolve_column_name(frame.columns, date_col)
+            except ValueError:
+                return _infer_date_column(frame)
+        return _infer_date_column(frame)
 
     def _resolve_value_column(frame: pd.DataFrame, actual_date_col_name: str) -> str:
         if value_col:
@@ -2217,12 +2485,21 @@ def build_time_series_aggregation_report(
         if df.empty:
             continue
         try:
-            frame_date_col = _resolve_column_name(df.columns, date_col)
+            frame_date_col = _resolve_date_column(df)
         except ValueError:
             continue
         frame_value_col = _resolve_value_column(df, frame_date_col)
         working_frame = df[[frame_date_col, frame_value_col]].copy()
-        working_frame[frame_date_col] = pd.to_datetime(working_frame[frame_date_col], errors="coerce")
+        date_text = working_frame[frame_date_col].map(_normalize_cell_text)
+        year_mask = date_text.str.fullmatch(r"\d{4}")
+        if year_mask.fillna(False).sum() >= max(2, len(date_text) // 2):
+            working_frame[frame_date_col] = pd.to_datetime(
+                date_text,
+                format="%Y",
+                errors="coerce",
+            )
+        else:
+            working_frame[frame_date_col] = pd.to_datetime(working_frame[frame_date_col], errors="coerce")
         working_frame[frame_value_col] = working_frame[frame_value_col].map(_parse_numeric_text)
         working_frame = working_frame.dropna(subset=[frame_date_col, frame_value_col]).reset_index(drop=True)
         if working_frame.empty:
@@ -2311,7 +2588,10 @@ def build_time_series_aggregation_report(
     }
     value_col_name = value_header_map[aggregate_func]
     grouped.columns = [sort_col, label_col, value_col_name]
-    grouped = grouped.sort_values(by=value_col_name, ascending=not sort_desc, kind="stable").reset_index(drop=True)
+    if sort_desc:
+        grouped = grouped.sort_values(by=value_col_name, ascending=False, kind="stable").reset_index(drop=True)
+    else:
+        grouped = grouped.sort_values(by=sort_col, ascending=True, kind="stable").reset_index(drop=True)
     grouped[value_col_name] = grouped[value_col_name].round(4)
     output_df = grouped[[label_col, value_col_name]]
     detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
@@ -2381,18 +2661,28 @@ def _dashboard_assessment(metric_name: str, actual: float, target: float) -> str
     if target == 0:
         return "On Target"
     relative_gap = abs((target - actual) / target) if lower_is_better else abs((actual - target) / target)
+    exceed_label = "Exceeding Target (lower is better)" if lower_is_better else "Exceeding Target"
     if "gross profit" in lower and "margin" not in lower:
-        return "On Target" if relative_gap < 0.02 else "Exceeding Target"
+        return "On Target" if relative_gap < 0.02 else exceed_label
     if "margin" in lower:
-        return "On Target" if relative_gap < 0.05 else "Exceeding Target"
+        return "On Target" if relative_gap < 0.05 else exceed_label
     if "cac" in lower:
-        return "On Target" if relative_gap < 0.03 else "Exceeding Target"
+        return "On Target" if relative_gap < 0.03 else exceed_label
     if "ratio" in lower:
-        return "On Target" if relative_gap < 0.05 else "Exceeding Target"
-    return "On Target" if relative_gap < 0.05 else "Exceeding Target"
+        return "On Target" if relative_gap < 0.05 else exceed_label
+    return "On Target" if relative_gap < 0.05 else exceed_label
 
 
-def build_market_share_shipment_report(
+def _round_dashboard_numeric(metric_name: str, value: float) -> float:
+    lower = metric_name.lower()
+    if "margin" in lower:
+        return round(float(value), 4)
+    if "cac" in lower or "ratio" in lower:
+        return round(float(value), 2)
+    return round(float(value), 0)
+
+
+def build_weighted_share_value_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z300",
 ) -> Dict[str, Any]:
@@ -2471,12 +2761,12 @@ def build_market_share_shipment_report(
                     shipment_df = pd.DataFrame(records)
 
     if market_share_df is None or shipment_df is None:
-        raise ValueError("Could not identify both market-share and shipment tables from the loaded workbooks.")
+        raise ValueError("Could not identify both share-matrix and total-value tables from the loaded workbooks.")
 
     try:
         overlap_df = _merge_on_shared_period(market_share_df, shipment_df, period_col="Time")
     except ValueError as exc:
-        raise ValueError("No overlapping quarter period was found between market share and shipment tables.") from exc
+        raise ValueError("No overlapping quarter period was found between the share and total-value tables.") from exc
 
     brand_columns = [col for col in market_share_df.columns if col != "Time"]
     output_df = _build_weighted_period_output(
@@ -2502,11 +2792,92 @@ def build_cash_flow_efficiency_report(
     world: SpreadsheetWorld,
     file_path: str | None = None,
 ) -> Dict[str, Any]:
-    """Compute Coca-Cola OCF/Net Income and Free Cash Flow by year."""
+    """Compute operating cash flow efficiency and free cash flow by year."""
     workbook_paths = list_all_workbooks(world)
     target_path = file_path or (workbook_paths[0] if workbook_paths else None)
     if not target_path:
         raise ValueError("No workbook available for cash-flow analysis.")
+
+    tables = load_all_tables(
+        world,
+        require_primary_key=False,
+        stop_at_note_row=False,
+    )
+    structured_table = None
+    try:
+        structured_table = find_table_by_headers(
+            tables,
+            required_headers=["Year"],
+            preferred_headers=[
+                "NetIncome_M_USD",
+                "Net Income",
+                "OperatingCashFlow_M_USD",
+                "Operating Cash Flow",
+                "CapEx_M_USD",
+                "Capital Expenditures",
+            ],
+        )
+    except Exception:
+        structured_table = None
+
+    if structured_table is not None:
+        df = structured_table["df"].copy()
+        year_col = _resolve_column_name(df.columns, "Year", "Fiscal Year", "FY")
+        net_income_col = _resolve_column_name(df.columns, "NetIncome_M_USD", "Net Income", "NetIncome")
+        ocf_col = _resolve_column_name(
+            df.columns,
+            "OperatingCashFlow_M_USD",
+            "Operating Cash Flow",
+            "OperatingCashFlow",
+            "OCF",
+        )
+        capex_col = _resolve_column_name(
+            df.columns,
+            "CapEx_M_USD",
+            "Capital Expenditures",
+            "CapitalExpenditures_M_USD",
+            "CapEx",
+        )
+
+        working = df[[year_col, net_income_col, ocf_col, capex_col]].copy()
+        working.columns = ["Year", "Net Income", "Operating Cash Flow", "Capital Expenditures"]
+        for column_name in ["Net Income", "Operating Cash Flow", "Capital Expenditures"]:
+            working[column_name] = pd.to_numeric(working[column_name], errors="coerce")
+        working = working.dropna(subset=["Year", "Net Income", "Operating Cash Flow", "Capital Expenditures"]).reset_index(drop=True)
+        if working.empty:
+            raise ValueError("Structured cash-flow table did not contain usable numeric values.")
+
+        working["OCF/Net Income"] = (
+            working["Operating Cash Flow"] / working["Net Income"]
+        ).replace([np.inf, -np.inf], np.nan).round(2)
+        working["Free Cash Flow"] = (
+            working["Operating Cash Flow"] - working["Capital Expenditures"]
+        ).round(0)
+        working["Anomaly Note"] = working["Net Income"].apply(
+            lambda value: "Negative net income year" if float(value) < 0 else ""
+        )
+
+        totals_row = {
+            "Year": "Total",
+            "Net Income": round(float(working["Net Income"].sum()), 0),
+            "Operating Cash Flow": round(float(working["Operating Cash Flow"].sum()), 0),
+            "Capital Expenditures": round(float(working["Capital Expenditures"].sum()), 0),
+            "OCF/Net Income": round(
+                float(working["Operating Cash Flow"].sum()) / float(working["Net Income"].sum()),
+                2,
+            ) if float(working["Net Income"].sum()) else np.nan,
+            "Free Cash Flow": round(float(working["Free Cash Flow"].sum()), 0),
+            "Anomaly Note": "",
+        }
+        output_df = pd.concat([working, pd.DataFrame([totals_row])], ignore_index=True)
+        detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+        return {
+            "output_df": output_df,
+            "formatted_df": output_df.copy(),
+            "detail_data": detail_data,
+            "row_count": int(len(output_df)),
+            "column_count": int(len(output_df.columns)),
+        }
 
     wb = get_workbook(world, target_path)
     ws = wb.active
@@ -2584,86 +2955,127 @@ def build_cash_flow_efficiency_report(
     }
 
 
-def build_diabetes_region_report(
+def build_region_share_cost_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z200",
 ) -> Dict[str, Any]:
-    """Build a regional diabetes summary from prevalence/expenditure inputs."""
-    workbook_paths = list_all_workbooks(world)
-    diabetics_df = None
+    """Build a regional population-share and expenditure-per-person summary."""
+    tables = load_all_tables(
+        world,
+        range_ref=range_ref,
+        require_primary_key=False,
+        stop_at_note_row=False,
+    )
+    population_df = None
     expenditure_df = None
-    for file_path in workbook_paths:
-        wb = get_workbook(world, file_path)
-        if "Data" not in wb.sheetnames:
+    for table in tables:
+        df = table["df"].copy()
+        if df.empty:
             continue
-        ws = wb["Data"]
-        rows = [
-            [_normalize_cell_text(ws.cell(row=row_idx, column=col_idx).value) for col_idx in range(1, 6)]
-            for row_idx in range(1, min(ws.max_row, 120) + 1)
-        ]
-        first_values = [row[1] if len(row) > 1 else "" for row in rows]
-        if diabetics_df is None and any("number of diabetics worldwide by region" in value.lower() for value in first_values if value):
-            records = []
-            for row in rows:
-                if len(row) < 3:
-                    continue
-                region, value = row[1], row[2]
-                if not region or region.lower().startswith("number of diabetics worldwide"):
-                    continue
-                numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-                if pd.isna(numeric):
-                    continue
-                records.append({"Region": region, "Number of Diabetics (millions)": float(numeric)})
-            diabetics_df = pd.DataFrame(records)
-        if expenditure_df is None and any("health care expenditure due to diabetes worldwide by region" in value.lower() for value in first_values if value):
-            records = []
-            for row in rows:
-                if len(row) < 3:
-                    continue
-                region, value = row[1], row[2]
-                if not region or region.lower().startswith("health care expenditure due to diabetes worldwide"):
-                    continue
-                numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-                if pd.isna(numeric):
-                    continue
-                records.append({"Region": region, "Expenditure (billion USD)": float(numeric)})
-            expenditure_df = pd.DataFrame(records)
+        try:
+            region_col = _resolve_column_name(df.columns, "Region")
+        except ValueError:
+            continue
 
-    if diabetics_df is None or expenditure_df is None:
-        raise ValueError("Could not identify both diabetics-by-region and expenditure-by-region tables.")
+        value_candidates: list[tuple[str, str]] = []
+        for column in df.columns:
+            if str(column) == str(region_col):
+                continue
+            normalized = _normalize_header_name(column)
+            if normalized:
+                value_candidates.append((str(column), normalized))
 
-    output_df = diabetics_df.merge(expenditure_df, on="Region", how="inner")
-    total_diabetics = float(output_df["Number of Diabetics (millions)"].sum())
-    output_df["Share of Global (%)"] = output_df["Number of Diabetics (millions)"] / total_diabetics * 100.0
+        if population_df is None:
+            population_col = next(
+                (
+                    column
+                    for column, normalized in value_candidates
+                    if "population" in normalized
+                    and any(token in normalized for token in ("million", "people", "persons"))
+                ),
+                None,
+            )
+            if population_col is not None:
+                working = df[[region_col, population_col]].copy()
+                working.columns = ["Region", "Population (millions)"]
+                working["Population (millions)"] = pd.to_numeric(
+                    working["Population (millions)"], errors="coerce"
+                )
+                working = working.dropna(subset=["Region", "Population (millions)"]).reset_index(drop=True)
+                if not working.empty:
+                    population_df = working
+
+        if expenditure_df is None:
+            expenditure_col = next(
+                (
+                    column
+                    for column, normalized in value_candidates
+                    if any(token in normalized for token in ("expenditure", "spending", "spend", "cost"))
+                    and any(token in normalized for token in ("billion", "usd", "dollar"))
+                ),
+                None,
+            )
+            if expenditure_col is not None:
+                working = df[[region_col, expenditure_col]].copy()
+                working.columns = ["Region", "Expenditure (billion USD)"]
+                working["Expenditure (billion USD)"] = pd.to_numeric(
+                    working["Expenditure (billion USD)"], errors="coerce"
+                )
+                working = working.dropna(subset=["Region", "Expenditure (billion USD)"]).reset_index(drop=True)
+                if not working.empty:
+                    expenditure_df = working
+
+    if population_df is None or expenditure_df is None:
+        raise ValueError("Could not identify both region-population and region-expenditure tables.")
+
+    output_df = population_df.merge(expenditure_df, on="Region", how="inner")
+    total_population = float(output_df["Population (millions)"].sum())
+    output_df["Share of Global (%)"] = output_df["Population (millions)"] / total_population * 100.0
     output_df["Avg Expenditure per Person (USD)"] = (
-        output_df["Expenditure (billion USD)"] * 1000.0 / output_df["Number of Diabetics (millions)"]
+        output_df["Expenditure (billion USD)"] * 1000.0 / output_df["Population (millions)"]
     )
     output_df = output_df[
         [
             "Region",
-            "Number of Diabetics (millions)",
+            "Population (millions)",
             "Expenditure (billion USD)",
             "Share of Global (%)",
             "Avg Expenditure per Person (USD)",
         ]
     ]
     output_df = output_df.sort_values(
-        by="Number of Diabetics (millions)", ascending=False, kind="stable"
+        by="Population (millions)", ascending=False, kind="stable"
     ).reset_index(drop=True)
-    detail_data = [output_df.columns.tolist(), ["", "", "", "", ""]] + output_df.fillna("").values.tolist()
+    normalized_output_df = pd.DataFrame(
+        {
+            "Region": output_df["Region"],
+            "Obese_Pop_millions": output_df["Population (millions)"].round(1),
+            "Global_Share_pct": output_df["Share of Global (%)"].round(2),
+            "Expenditure_BillionUSD": output_df["Expenditure (billion USD)"].round(1),
+            "Avg_Exp_per_Person_USD": output_df["Avg Expenditure per Person (USD)"].round(0).astype(int),
+        }
+    )
+    detail_data = [normalized_output_df.columns.tolist()] + normalized_output_df.where(
+        pd.notna(normalized_output_df), None
+    ).values.tolist()
+    detail_data.append([None, None, None, None, None])
+    detail_data.append(["Total", round(total_population, 1), "100.00", None, None])
     return {
-        "output_df": output_df,
+        "output_df": normalized_output_df,
         "detail_data": detail_data,
-        "row_count": int(len(output_df)),
-        "column_count": int(len(output_df.columns)),
+        "summary": {
+            "Total": round(total_population, 1),
+        },
+        "row_count": int(len(normalized_output_df)),
+        "column_count": int(len(normalized_output_df.columns)),
     }
 
 
-def build_mobile_reviews_summary_report(
+def build_two_dimension_mean_count_summary_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Y50000",
 ) -> Dict[str, Any]:
-    """Group smartphone reviews by country and brand with average rating and count."""
+    """Group reviews by country and type/brand with average rating and count."""
     tables = load_all_tables(
         world,
         range_ref=range_ref,
@@ -2672,26 +3084,43 @@ def build_mobile_reviews_summary_report(
     )
     review_table = find_table_by_headers(
         tables,
-        required_headers=["country", "brand", "rating"],
+        required_headers=["country", "rating"],
+        preferred_headers=["brand", "category", "type"],
     )
     df = review_table["df"].copy()
     country_col = _resolve_column_name(df.columns, "country")
-    brand_col = _resolve_column_name(df.columns, "brand")
+    try:
+        secondary_group_col = _resolve_column_name(df.columns, "brand", "category", "type")
+    except ValueError:
+        secondary_group_col = next(
+            (
+                str(column)
+                for column in df.columns
+                if str(column) != str(country_col)
+                and any(
+                    token in _normalize_header_name(column)
+                    for token in ("brand", "category", "type", "segment", "group")
+                )
+            ),
+            None,
+        )
+        if secondary_group_col is None:
+            raise ValueError(f"Could not identify a secondary grouping column from {list(df.columns)}")
     rating_col = _resolve_column_name(df.columns, "rating")
 
     df[rating_col] = pd.to_numeric(df[rating_col], errors="coerce")
-    working = df.dropna(subset=[country_col, brand_col, rating_col]).copy()
+    working = df.dropna(subset=[country_col, secondary_group_col, rating_col]).copy()
     grouped = (
-        working.groupby([country_col, brand_col], dropna=False)
+        working.groupby([country_col, secondary_group_col], dropna=False)
         .agg(
             avg_rating=(rating_col, "mean"),
             num_reviews=(rating_col, "count"),
         )
         .reset_index()
-        .sort_values(by=[country_col, brand_col], kind="stable")
+        .sort_values(by=[country_col, secondary_group_col], kind="stable")
         .reset_index(drop=True)
     )
-    grouped.columns = ["country", "brand", "avg_rating", "num_reviews"]
+    grouped.columns = ["Country", "HotelType", "avg_rating", "num_reviews"]
     detail_data = [grouped.columns.tolist()] + grouped.fillna("").values.tolist()
     return {
         "output_df": grouped,
@@ -2701,11 +3130,11 @@ def build_mobile_reviews_summary_report(
     }
 
 
-def build_store_feature_analysis_report(
+def build_multi_source_group_comparison_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z100000",
 ) -> Dict[str, Any]:
-    """Merge weekly store features with store metadata and build two summary sheets."""
+    """Merge related operational tables and build grouped summary comparison sheets."""
     tables = load_all_tables(
         world,
         range_ref=range_ref,
@@ -2714,18 +3143,24 @@ def build_store_feature_analysis_report(
     )
     features_table = find_table_by_headers(
         tables,
-        required_headers=["Store", "Temperature", "Fuel_Price", "CPI", "Unemployment", "IsHoliday"],
-        preferred_headers=["MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"],
+        required_headers=["IsHoliday"],
+        preferred_headers=["Store", "StoreID", "WeeklySales_USD", "Weekly_Sales", "Temperature", "Temperature_F", "Fuel_Price", "FuelPrice_USD"],
     )
-    stores_table = find_table_by_headers(
-        tables,
-        required_headers=["Store", "Type", "Size"],
-    )
+    try:
+        stores_table = find_table_by_headers(
+            tables,
+            required_headers=["Store", "Type", "Size"],
+        )
+    except ValueError:
+        stores_table = find_table_by_headers(
+            tables,
+            required_headers=["StoreID", "StoreType", "Size_sqft"],
+        )
 
     features_df = features_table["df"].copy()
     stores_df = stores_table["df"].copy()
-    store_col = _resolve_column_name(features_df.columns, "Store")
-    stores_store_col = _resolve_column_name(stores_df.columns, "Store")
+    store_col = _resolve_column_name(features_df.columns, "Store", "StoreID")
+    stores_store_col = _resolve_column_name(stores_df.columns, "Store", "StoreID")
     features_df[store_col] = pd.to_numeric(features_df[store_col], errors="coerce")
     stores_df[stores_store_col] = pd.to_numeric(stores_df[stores_store_col], errors="coerce")
 
@@ -2736,41 +3171,37 @@ def build_store_feature_analysis_report(
         how="inner",
     )
 
-    type_col = _resolve_column_name(merged.columns, "Type")
+    type_col = _resolve_column_name(merged.columns, "Type", "StoreType")
     isholiday_col = _resolve_column_name(merged.columns, "IsHoliday")
-    store_type_metrics = ["Temperature", "Fuel_Price", "CPI", "Unemployment"]
-    for col in store_type_metrics + ["MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5", "Size"]:
-        actual = _resolve_column_name(merged.columns, col)
+    metric_specs = [
+        ("WeeklySales_USD", ("WeeklySales_USD", "Weekly_Sales", "Sales")),
+        ("Temperature_F", ("Temperature", "Temperature_F")),
+        ("FuelPrice_USD", ("Fuel_Price", "FuelPrice_USD")),
+    ]
+    resolved_metrics: list[tuple[str, str]] = []
+    for output_name, candidate_names in metric_specs:
+        try:
+            actual = _resolve_column_name(merged.columns, *candidate_names)
+        except ValueError:
+            continue
         merged[actual] = pd.to_numeric(merged[actual], errors="coerce")
+        resolved_metrics.append((output_name, actual))
 
     merged[isholiday_col] = merged[isholiday_col].apply(
         lambda value: bool(value) if isinstance(value, bool) else str(value).strip().lower() in {"true", "1", "yes"}
     )
 
     avg_by_type = (
-        merged.groupby(type_col, dropna=False)[[_resolve_column_name(merged.columns, col) for col in store_type_metrics]]
+        merged.groupby(type_col, dropna=False)[[actual for _output, actual in resolved_metrics]]
         .mean()
         .reset_index()
     )
-    avg_by_type.columns = ["Type"] + store_type_metrics
+    avg_by_type.columns = ["StoreType"] + [output_name for output_name, _actual in resolved_metrics]
 
-    holiday_metrics = [
-        "Temperature",
-        "Fuel_Price",
-        "MarkDown1",
-        "MarkDown2",
-        "MarkDown3",
-        "MarkDown4",
-        "MarkDown5",
-        "CPI",
-        "Unemployment",
-        "Size",
-    ]
     holiday_rows: list[list[Any]] = [["Feature", "Holiday Average", "Non-Holiday Average", "Difference"]]
     holiday_mask = merged[isholiday_col] == True
     non_holiday_mask = merged[isholiday_col] == False
-    for feature in holiday_metrics:
-        actual = _resolve_column_name(merged.columns, feature)
+    for feature, actual in resolved_metrics:
         holiday_avg = float(merged.loc[holiday_mask, actual].mean())
         non_holiday_avg = float(merged.loc[non_holiday_mask, actual].mean())
         holiday_rows.append([feature, holiday_avg, non_holiday_avg, holiday_avg - non_holiday_avg])
@@ -2782,7 +3213,7 @@ def build_store_feature_analysis_report(
         "holiday_df": holiday_output_df,
         "avg_by_type_detail_data": avg_by_type_detail_data,
         "holiday_detail_data": holiday_rows,
-        "sheet_names": ["AvgByStoreType", "HolidayVsNonHoliday"],
+        "sheet_names": ["AvgByGroupType", "ConditionalComparison"],
     }
 
 
@@ -2958,7 +3389,53 @@ def build_financial_dashboard_report(
                 range_ref=range_ref,
             )
         except Exception:
-            continue
+            try:
+                target_table = target_table or _extract_structured_table_from_workbook(
+                    world,
+                    file_path,
+                    required_headers=["Metric", "Target"],
+                    range_ref=range_ref,
+                )
+            except Exception:
+                continue
+
+    if pnl_table is None or sales_table is None or target_table is None:
+        tables = load_all_tables(
+            world,
+            range_ref=range_ref,
+            require_primary_key=False,
+            stop_at_note_row=False,
+        )
+        if pnl_table is None:
+            for required_headers in (
+                ["Month", "Revenue", "Cost of Goods Sold", "Operating Expenses", "Interest Paid"],
+                ["Month", "Revenue_USD", "COGS_USD", "OperatingExpenses_USD", "InterestPaid_USD"],
+            ):
+                try:
+                    pnl_table = find_table_by_headers(tables, required_headers=required_headers)
+                    break
+                except Exception:
+                    continue
+        if sales_table is None:
+            for required_headers in (
+                ["Month", "New Customers", "Marketing Spend"],
+                ["Month", "NewCustomers", "MarketingSpend_USD"],
+            ):
+                try:
+                    sales_table = find_table_by_headers(tables, required_headers=required_headers)
+                    break
+                except Exception:
+                    continue
+        if target_table is None:
+            for required_headers in (
+                ["KPI", "Q1 Target"],
+                ["Metric", "Target"],
+            ):
+                try:
+                    target_table = find_table_by_headers(tables, required_headers=required_headers)
+                    break
+                except Exception:
+                    continue
 
     if pnl_table is None or sales_table is None or target_table is None:
         raise ValueError("Could not identify the P&L, sales/marketing, and KPI target tables.")
@@ -2967,16 +3444,24 @@ def build_financial_dashboard_report(
     sales_df = sales_table["df"].copy()
     target_df = target_table["df"].copy()
 
+    def _resolve_first_column(columns, candidates: Sequence[str]) -> str:
+        for candidate in candidates:
+            try:
+                return _resolve_column_name(columns, candidate)
+            except Exception:
+                continue
+        raise ValueError(f"Could not resolve any of the candidate columns: {candidates}")
+
     month_col = _resolve_column_name(pnl_df.columns, "Month")
-    revenue_col = _resolve_column_name(pnl_df.columns, "Revenue")
-    cogs_col = _resolve_column_name(pnl_df.columns, "Cost of Goods Sold")
-    opex_col = _resolve_column_name(pnl_df.columns, "Operating Expenses")
-    interest_col = _resolve_column_name(pnl_df.columns, "Interest Paid")
+    revenue_col = _resolve_first_column(pnl_df.columns, ("Revenue", "Revenue_USD"))
+    cogs_col = _resolve_first_column(pnl_df.columns, ("Cost of Goods Sold", "COGS_USD"))
+    opex_col = _resolve_first_column(pnl_df.columns, ("Operating Expenses", "OperatingExpenses_USD"))
+    interest_col = _resolve_first_column(pnl_df.columns, ("Interest Paid", "InterestPaid_USD"))
     sales_month_col = _resolve_column_name(sales_df.columns, "Month")
-    customers_col = _resolve_column_name(sales_df.columns, "New Customers")
-    marketing_col = _resolve_column_name(sales_df.columns, "Marketing Spend")
-    kpi_col = _resolve_column_name(target_df.columns, "KPI")
-    target_col = _resolve_column_name(target_df.columns, "Q1 Target")
+    customers_col = _resolve_first_column(sales_df.columns, ("New Customers", "NewCustomers"))
+    marketing_col = _resolve_first_column(sales_df.columns, ("Marketing Spend", "MarketingSpend_USD"))
+    kpi_col = _resolve_first_column(target_df.columns, ("KPI", "Metric"))
+    target_col = _resolve_first_column(target_df.columns, ("Q1 Target", "Target"))
 
     for df, numeric_cols in (
         (pnl_df, [revenue_col, cogs_col, opex_col, interest_col]),
@@ -2994,8 +3479,8 @@ def build_financial_dashboard_report(
 
     merged["Gross Profit"] = merged[revenue_col] - merged[cogs_col]
     merged["Net Profit"] = merged["Gross Profit"] - merged[opex_col] - merged[interest_col]
-    merged["Gross Profit Margin"] = merged["Gross Profit"] / merged[revenue_col] * 100.0
-    merged["Net Profit Margin"] = merged["Net Profit"] / merged[revenue_col] * 100.0
+    merged["Gross Profit Margin"] = merged["Gross Profit"] / merged[revenue_col]
+    merged["Net Profit Margin"] = merged["Net Profit"] / merged[revenue_col]
     merged["Customer Acquisition Cost (CAC)"] = merged[marketing_col] / merged[customers_col]
     merged["Marketing Efficiency Ratio"] = merged[revenue_col] / merged[marketing_col]
 
@@ -3008,8 +3493,8 @@ def build_financial_dashboard_report(
     dashboard_metrics = {
         "Gross Profit": total_gross_profit,
         "Net Profit": total_net_profit,
-        "Gross Profit Margin": (total_gross_profit / total_revenue) * 100.0,
-        "Net Profit Margin": (total_net_profit / total_revenue) * 100.0,
+        "Gross Profit Margin": (total_gross_profit / total_revenue),
+        "Net Profit Margin": (total_net_profit / total_revenue),
         "Customer Acquisition Cost (CAC)": total_marketing / total_customers,
         "Marketing Efficiency Ratio": total_revenue / total_marketing,
     }
@@ -3020,38 +3505,78 @@ def build_financial_dashboard_report(
         if _normalize_cell_text(metric)
     }
 
-    dashboard_rows: list[list[Any]] = []
+    quarter_numbers: list[int] = []
+    for value in merged[month_col].tolist():
+        text = _normalize_cell_text(value).lower()
+        if not text:
+            continue
+        month_map = {
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12,
+        }
+        month_number = month_map.get(text)
+        if month_number is None:
+            for token, candidate_number in month_map.items():
+                if token in text:
+                    month_number = candidate_number
+                    break
+        if month_number is not None:
+            quarter_numbers.append(((month_number - 1) // 3) + 1)
+    quarter_label = f"Q{min(quarter_numbers)}" if quarter_numbers else "Quarter"
+
+    dashboard_records: list[dict[str, Any]] = []
+    metric_aliases = {
+        _normalize_header_name("Gross Profit"): ("Gross Profit", "Gross_Profit"),
+        _normalize_header_name("Net Profit"): ("Net Profit", "Net_Profit"),
+        _normalize_header_name("Gross Profit Margin"): ("Gross Profit Margin", "Gross_Profit_Margin"),
+        _normalize_header_name("Net Profit Margin"): ("Net Profit Margin", "Net_Profit_Margin"),
+        _normalize_header_name("Customer Acquisition Cost (CAC)"): ("Customer Acquisition Cost (CAC)", "CAC", "Customer Acquisition Cost"),
+        _normalize_header_name("Marketing Efficiency Ratio"): ("Marketing Efficiency Ratio", "MER"),
+    }
     for metric_name, actual in dashboard_metrics.items():
         lookup_key = _normalize_header_name(metric_name)
-        if lookup_key not in target_lookup:
+        candidate_keys = [
+            _normalize_header_name(candidate)
+            for candidate in metric_aliases.get(lookup_key, (metric_name,))
+        ]
+        matched_key = next((candidate for candidate in candidate_keys if candidate in target_lookup), None)
+        if matched_key is None:
             raise ValueError(f"Target missing for KPI `{metric_name}`.")
-        target_value = float(target_lookup[lookup_key])
+        target_value = float(target_lookup[matched_key])
         variance = actual - target_value
-        dashboard_rows.append(
-            [
-                metric_name,
-                _format_dashboard_metric(metric_name, actual),
-                _format_dashboard_metric(metric_name, target_value),
-                _format_dashboard_variance(metric_name, variance),
-                _dashboard_assessment(metric_name, actual, target_value),
-            ]
+        normalized_metric_name = {
+            "Gross Profit": "Gross_Profit",
+            "Net Profit": "Net_Profit",
+            "Gross Profit Margin": "Gross_Profit_Margin",
+            "Net Profit Margin": "Net_Profit_Margin",
+            "Customer Acquisition Cost (CAC)": "CAC",
+            "Marketing Efficiency Ratio": "Marketing_Efficiency_Ratio",
+        }.get(metric_name, metric_name.replace(" ", "_"))
+        dashboard_records.append(
+            {
+                "Metric": normalized_metric_name,
+                f"{quarter_label}_Actual": _round_dashboard_numeric(metric_name, actual),
+                "Target": _round_dashboard_numeric(metric_name, target_value),
+                "Variance": _round_dashboard_numeric(metric_name, variance),
+                "Assessment": _dashboard_assessment(metric_name, actual, target_value),
+            }
         )
 
-    dashboard_header = [
-        "Performance Metric",
-        "Q1 Actual",
-        "Q1 Target",
-        "Variance (Actual - Target)",
-        "Assessment",
-    ]
-    detail_data = [
-        ["Title: Output - Financial Performance Dashboard", "", "", "", ""],
-        ["[File: q1_performance_dashboard.xlsx]", "", "", "", ""],
-        ["", "", "", "", ""],
-        dashboard_header,
-    ] + dashboard_rows
-
-    output_df = pd.DataFrame(dashboard_rows, columns=dashboard_header)
+    output_df = pd.DataFrame(
+        dashboard_records,
+        columns=["Metric", f"{quarter_label}_Actual", "Target", "Variance", "Assessment"],
+    )
+    detail_data = [output_df.columns.tolist()] + output_df.where(pd.notna(output_df), None).values.tolist()
     monthly_df = merged[
         [month_col, revenue_col, "Gross Profit", "Net Profit", "Customer Acquisition Cost (CAC)"]
     ].copy()
@@ -3164,12 +3689,19 @@ def build_inventory_eoq_report(
         if _normalize_cell_text(parameter)
     }
 
-    demand = float(param_lookup[_normalize_header_name("Annual Demand (D)")])
-    ordering_cost = float(param_lookup[_normalize_header_name("Ordering Cost (S)")])
-    holding_cost = float(param_lookup[_normalize_header_name("Holding Cost (H)")])
-    unit_cost = float(param_lookup[_normalize_header_name("Unit Cost (C)")])
-    lead_time_days = float(param_lookup[_normalize_header_name("Lead Time (L)")])
-    working_days = float(param_lookup[_normalize_header_name("Working Days per Year")])
+    def _require_param(*aliases: str) -> float:
+        for alias in aliases:
+            key = _normalize_header_name(alias)
+            if key in param_lookup and param_lookup[key] is not None:
+                return float(param_lookup[key])
+        raise KeyError(_normalize_header_name(aliases[0]))
+
+    demand = _require_param("Annual Demand (D)", "Annual_Demand_units", "Annual Demand")
+    ordering_cost = _require_param("Ordering Cost (S)", "Order_Cost_USD", "Order Cost")
+    holding_cost = _require_param("Holding Cost (H)", "Holding_Cost_per_unit_USD", "Holding Cost Per Unit")
+    unit_cost = _require_param("Unit Cost (C)", "Unit_Cost_USD", "Unit Cost")
+    lead_time_days = _require_param("Lead Time (L)", "Lead_Time_days", "Lead Time")
+    working_days = _require_param("Working Days per Year", "Working_Days_per_year")
 
     def _compute_metrics(annual_demand: float, quantity: float | None = None) -> Dict[str, float]:
         eoq = quantity if quantity is not None else float(np.sqrt((2.0 * annual_demand * ordering_cost) / holding_cost))
@@ -3245,11 +3777,11 @@ def build_inventory_eoq_report(
     }
 
 
-def build_hospital_utilisation_report(
+def build_multi_source_utilisation_summary_report(
     world: SpreadsheetWorld,
     range_ref: str = "A1:Z10000",
 ) -> Dict[str, Any]:
-    """Aggregate hospital resource tables into one service-level utilisation report."""
+    """Aggregate multiple operational tables into one utilisation report."""
     tables = load_all_tables(
         world,
         range_ref=range_ref,
@@ -3257,7 +3789,252 @@ def build_hospital_utilisation_report(
         stop_at_note_row=True,
     )
     if len(tables) < 3:
-        raise ValueError("Hospital utilisation workflow expects patient, service, and staff tables.")
+        raise ValueError("Utilisation workflow expects at least three related operational tables.")
+
+    normalized_headers = [
+        {_normalize_header_name(col) for col in table.get("header", [])}
+        for table in tables
+    ]
+    school_required = {
+        _normalize_header_name("Department"),
+        _normalize_header_name("VisitsPerMonth"),
+        _normalize_header_name("MaxCapacity_per_month"),
+    }
+    has_department_capacity_schema = any(
+        school_required.issubset(header)
+        for header in normalized_headers
+    )
+    if has_department_capacity_schema:
+        staff_table = find_table_by_headers(
+            tables,
+            required_headers=["StaffID", "Department", "ContractHours_per_week"],
+        )
+        schedule_table = find_table_by_headers(
+            tables,
+            required_headers=["StaffID", "Week", "ActualHours"],
+        )
+        service_table = find_table_by_headers(
+            tables,
+            required_headers=["Department", "VisitsPerMonth", "MaxCapacity_per_month"],
+        )
+
+        staff_df = staff_table["df"].copy()
+        schedule_df = schedule_table["df"].copy()
+        service_df = service_table["df"].copy()
+
+        staff_id_col = _resolve_column_name(staff_df.columns, "StaffID")
+        dept_col = _resolve_column_name(staff_df.columns, "Department")
+        contract_col = _resolve_column_name(staff_df.columns, "ContractHours_per_week")
+        schedule_staff_id_col = _resolve_column_name(schedule_df.columns, "StaffID")
+        actual_col = _resolve_column_name(schedule_df.columns, "ActualHours")
+        service_dept_col = _resolve_column_name(service_df.columns, "Department")
+        visits_col = _resolve_column_name(service_df.columns, "VisitsPerMonth")
+        capacity_col = _resolve_column_name(service_df.columns, "MaxCapacity_per_month")
+
+        staff_df[contract_col] = pd.to_numeric(staff_df[contract_col], errors="coerce")
+        schedule_df[actual_col] = pd.to_numeric(schedule_df[actual_col], errors="coerce")
+        service_df[visits_col] = pd.to_numeric(service_df[visits_col], errors="coerce")
+        service_df[capacity_col] = pd.to_numeric(service_df[capacity_col], errors="coerce")
+
+        staff_usage = schedule_df.groupby(schedule_staff_id_col, dropna=False)[actual_col].sum().reset_index()
+        staff_usage = staff_usage.merge(
+            staff_df[[staff_id_col, dept_col, contract_col]],
+            left_on=schedule_staff_id_col,
+            right_on=staff_id_col,
+            how="left",
+        )
+        dept_staff = (
+            staff_usage.groupby(dept_col, dropna=False)
+            .agg(total_actual=(actual_col, "sum"), total_contract=(contract_col, "sum"))
+            .reset_index()
+        )
+        dept_staff["Staff Utilisation (%)"] = (
+            dept_staff["total_actual"] / dept_staff["total_contract"] * 100.0
+        )
+
+        service_df["Service Utilisation (%)"] = service_df[visits_col] / service_df[capacity_col] * 100.0
+        output_df = service_df[[service_dept_col, "Service Utilisation (%)"]].merge(
+            dept_staff[[dept_col, "Staff Utilisation (%)"]],
+            left_on=service_dept_col,
+            right_on=dept_col,
+            how="left",
+        )
+        output_df = output_df.rename(columns={service_dept_col: "Department"})
+        output_df = output_df[["Department", "Service Utilisation (%)", "Staff Utilisation (%)"]]
+        output_df = output_df.sort_values(by="Department", kind="stable").reset_index(drop=True)
+        highlight_rows = [
+            index + 2
+            for index, row in output_df.iterrows()
+            if float(row["Service Utilisation (%)"]) > 90.0 or float(row["Staff Utilisation (%)"]) > 90.0
+        ]
+        detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
+        return {
+            "output_df": output_df,
+            "detail_data": detail_data,
+            "highlight_rows": highlight_rows,
+        }
+
+    has_university_utilisation_schema = (
+        any(
+            {
+                _normalize_header_name("SectionID"),
+                _normalize_header_name("CourseID"),
+                _normalize_header_name("Instructor"),
+                _normalize_header_name("RoomID"),
+                _normalize_header_name("Capacity"),
+            }.issubset(header)
+            for header in normalized_headers
+        )
+        and any(
+            {
+                _normalize_header_name("StudentID"),
+                _normalize_header_name("SectionID"),
+                _normalize_header_name("EnrollStatus"),
+            }.issubset(header)
+            for header in normalized_headers
+        )
+        and any(
+            {
+                _normalize_header_name("RoomID"),
+                _normalize_header_name("Building"),
+            }.issubset(header)
+            for header in normalized_headers
+        )
+    )
+    if has_university_utilisation_schema:
+        section_table = find_table_by_headers(
+            tables,
+            required_headers=["SectionID", "CourseID", "Instructor", "RoomID", "Capacity"],
+        )
+        enrollment_table = find_table_by_headers(
+            tables,
+            required_headers=["StudentID", "SectionID", "EnrollStatus"],
+        )
+        room_table = find_table_by_headers(
+            tables,
+            required_headers=["RoomID", "Building"],
+        )
+
+        section_df = section_table["df"].copy()
+        enrollment_df = enrollment_table["df"].copy()
+        room_df = room_table["df"].copy()
+
+        section_id_col = _resolve_column_name(section_df.columns, "SectionID")
+        course_id_col = _resolve_column_name(section_df.columns, "CourseID")
+        instructor_col = _resolve_column_name(section_df.columns, "Instructor")
+        room_id_col = _resolve_column_name(section_df.columns, "RoomID")
+        section_capacity_col = _resolve_column_name(section_df.columns, "Capacity")
+        scheduled_hours_col = _resolve_column_name(section_df.columns, "ScheduledHours")
+        enrollment_section_col = _resolve_column_name(enrollment_df.columns, "SectionID")
+        enroll_status_col = _resolve_column_name(enrollment_df.columns, "EnrollStatus")
+        room_room_id_col = _resolve_column_name(room_df.columns, "RoomID")
+        building_col = _resolve_column_name(room_df.columns, "Building")
+
+        section_df[section_capacity_col] = pd.to_numeric(section_df[section_capacity_col], errors="coerce")
+        section_df[scheduled_hours_col] = pd.to_numeric(section_df[scheduled_hours_col], errors="coerce")
+        enrollment_df[enroll_status_col] = enrollment_df[enroll_status_col].map(_normalize_cell_text)
+
+        def _count_status(series: pd.Series, accepted: tuple[str, ...]) -> int:
+            normalized = series.fillna("").map(_normalize_cell_text).str.lower()
+            return int(normalized.isin([item.lower() for item in accepted]).sum())
+
+        enrollment_summary = (
+            enrollment_df.groupby(enrollment_section_col, dropna=False)
+            .agg(
+                Enrolled_Count=(enroll_status_col, lambda s: _count_status(s, ("Registered", "Enrolled"))),
+                Waitlisted_Count=(enroll_status_col, lambda s: _count_status(s, ("Waitlisted", "Waitlist"))),
+            )
+            .reset_index()
+        )
+
+        section_output = section_df[
+            [section_id_col, course_id_col, instructor_col, room_id_col, section_capacity_col, scheduled_hours_col]
+        ].merge(
+            enrollment_summary,
+            left_on=section_id_col,
+            right_on=enrollment_section_col,
+            how="left",
+        )
+        section_output = section_output.merge(
+            room_df[[room_room_id_col, building_col]],
+            left_on=room_id_col,
+            right_on=room_room_id_col,
+            how="left",
+        )
+        section_output["Enrolled_Count"] = pd.to_numeric(section_output["Enrolled_Count"], errors="coerce").fillna(0).astype(int)
+        section_output["Waitlisted_Count"] = pd.to_numeric(section_output["Waitlisted_Count"], errors="coerce").fillna(0).astype(int)
+        section_output["Fill_Rate"] = np.where(
+            section_output[section_capacity_col].fillna(0) > 0,
+            section_output["Enrolled_Count"] / section_output[section_capacity_col] * 100.0,
+            0.0,
+        )
+        section_output["Waitlist_Rate"] = np.where(
+            section_output[section_capacity_col].fillna(0) > 0,
+            section_output["Waitlisted_Count"] / section_output[section_capacity_col] * 100.0,
+            0.0,
+        )
+        section_output = section_output.rename(
+            columns={
+                section_id_col: "SectionID",
+                course_id_col: "CourseID",
+                instructor_col: "Instructor",
+                room_id_col: "RoomID",
+                section_capacity_col: "Capacity",
+                scheduled_hours_col: "Scheduled_Hours",
+                building_col: "Building",
+            }
+        )
+        section_output = section_output[
+            [
+                "SectionID",
+                "CourseID",
+                "Instructor",
+                "RoomID",
+                "Building",
+                "Capacity",
+                "Enrolled_Count",
+                "Waitlisted_Count",
+                "Fill_Rate",
+                "Waitlist_Rate",
+                "Scheduled_Hours",
+            ]
+        ].sort_values(by=["SectionID"], kind="stable").reset_index(drop=True)
+
+        instructor_output = (
+            section_output.groupby("Instructor", dropna=False)
+            .agg(
+                Section_Count=("SectionID", "count"),
+                Total_Enrolled=("Enrolled_Count", "sum"),
+                Scheduled_Hours=("Scheduled_Hours", "sum"),
+            )
+            .reset_index()
+            .sort_values(by=["Instructor"], kind="stable")
+            .reset_index(drop=True)
+        )
+
+        room_output = (
+            section_output.groupby("Building", dropna=False)
+            .agg(Average_Fill_Rate=("Fill_Rate", "mean"))
+            .reset_index()
+            .sort_values(by=["Building"], kind="stable")
+            .reset_index(drop=True)
+        )
+
+        highlight_rows = [
+            index + 2
+            for index, row in section_output.iterrows()
+            if float(row["Fill_Rate"]) > 90.0 or float(row["Waitlist_Rate"]) > 20.0
+        ]
+        return {
+            "output_df": section_output,
+            "detail_data": [section_output.columns.tolist()] + section_output.fillna("").values.tolist(),
+            "highlight_rows": highlight_rows,
+            "sheet_outputs": {
+                "Section_Utilisation": section_output,
+                "Instructor_Load": instructor_output,
+                "Room_Utilisation": room_output,
+            },
+        }
 
     patient_table = find_table_by_headers(
         tables,
@@ -3536,18 +4313,28 @@ def _has_directed_cycle(edges_df: pd.DataFrame, from_col: str, to_col: str) -> b
 
 
 def build_cycle_detection_report(
-    tables: Sequence[Dict[str, Any]],
+    tables: Sequence[Dict[str, Any]] | pd.DataFrame,
     from_col: str = "Node From",
     to_col: str = "Node To",
 ) -> Dict[str, Any]:
     """Detect cycles for a sequence of directed-graph adjacency-list tables."""
-    if not tables:
+    if isinstance(tables, pd.DataFrame):
+        normalized_tables: list[Dict[str, Any]] = [
+            {
+                "df": tables.copy(),
+                "file_name": None,
+            }
+        ]
+    else:
+        normalized_tables = list(tables or [])
+
+    if not normalized_tables:
         raise ValueError("No tables available for cycle detection.")
 
-    rows: List[List[Any]] = [["Graph ID", "Contains Cycle (True / False)"]]
+    rows: List[List[Any]] = [["GraphID", "Contains_Cycle (True / False)"]]
     result_records: List[Dict[str, Any]] = []
 
-    for index, table in enumerate(tables, start=1):
+    for index, table in enumerate(normalized_tables, start=1):
         df = table.get("df")
         if not isinstance(df, pd.DataFrame):
             raise ValueError("Each table must include a pandas DataFrame under `df`.")
@@ -3558,18 +4345,19 @@ def build_cycle_detection_report(
         rows.append([graph_id, bool(contains_cycle)])
         result_records.append(
             {
-                "Graph ID": graph_id,
-                "Contains Cycle (True / False)": bool(contains_cycle),
+                "GraphID": graph_id,
+                "Contains_Cycle (True / False)": bool(contains_cycle),
                 "file_name": table.get("file_name"),
             }
         )
 
-    output_df = pd.DataFrame(result_records)[["Graph ID", "Contains Cycle (True / False)"]]
+    output_df = pd.DataFrame(result_records)[["GraphID", "Contains_Cycle (True / False)"]]
     return {
         "output_df": output_df,
         "detail_data": rows,
         "row_count": int(len(output_df)),
         "column_count": int(len(output_df.columns)),
+        "contains_cycle": bool(result_records[0]["Contains_Cycle (True / False)"]) if len(result_records) == 1 else None,
     }
 
 
@@ -3745,16 +4533,16 @@ __all__ = [
     "build_correlation_matrix_table",
     "fit_linear_regression_weights",
     "build_region_growth_analysis",
-    "build_market_share_shipment_report",
+    "build_weighted_share_value_report",
     "build_cash_flow_efficiency_report",
-    "build_diabetes_region_report",
-    "build_mobile_reviews_summary_report",
-    "build_store_feature_analysis_report",
+    "build_region_share_cost_report",
+    "build_two_dimension_mean_count_summary_report",
+    "build_multi_source_group_comparison_report",
     "build_ecommerce_merge_report",
     "build_financial_dashboard_report",
     "build_candidate_screening_report",
     "build_inventory_eoq_report",
-    "build_hospital_utilisation_report",
+    "build_multi_source_utilisation_summary_report",
     "build_dependency_schedule",
     "build_cycle_detection_report",
 ]

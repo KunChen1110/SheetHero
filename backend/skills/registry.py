@@ -16,9 +16,11 @@ from .detectors import (
     is_target_feature_correlation,
     is_dependency_schedule, is_missing_data_scan, is_allocation,
     is_weighted_scoring, is_ratio_computation, is_share_computation,
-    is_cash_flow_efficiency,
+    is_cash_flow_efficiency, is_financial_dashboard, is_inventory_policy,
     is_relational_assignment_schedule, is_region_growth_chart,
-    is_market_share_shipment,
+    is_market_share_shipment, is_region_share_cost,
+    is_two_dimension_mean_count_summary_helper, is_multi_source_group_comparison_helper,
+    is_multi_source_utilisation_summary_helper,
 )
 from .strategies import (
     MERGE_STRATEGY, AGGREGATE_STRATEGY, STATISTICAL_STRATEGY,
@@ -47,6 +49,10 @@ def _skill_specs() -> tuple[SkillSpec, ...]:
                            self_loading=True,
                            description="Join tables on a shared key column",
                            sub_detector=is_key_based_join),
+                HelperSpec("build_multi_source_group_comparison_report",
+                           self_loading=True,
+                           description="Join two related operational tables and produce grouped comparison summaries",
+                           sub_detector=is_multi_source_group_comparison_helper),
                 HelperSpec("concat_tables_with_same_headers",
                            description="Stack tables with identical columns"),
             ),
@@ -59,6 +65,14 @@ def _skill_specs() -> tuple[SkillSpec, ...]:
                 HelperSpec("build_region_growth_analysis",
                            description="Compute regional averages/growth and create a chart",
                            sub_detector=is_region_growth_chart),
+                HelperSpec("build_two_dimension_mean_count_summary_report",
+                           self_loading=True,
+                           description="Build a two-dimension mean-and-count summary table from one dataset",
+                           sub_detector=is_two_dimension_mean_count_summary_helper),
+                HelperSpec("build_multi_source_utilisation_summary_report",
+                           self_loading=True,
+                           description="Aggregate multi-source utilisation ratios and return threshold-based highlight rows",
+                           sub_detector=is_multi_source_utilisation_summary_helper),
                 HelperSpec("build_time_series_aggregation_report",
                            self_loading=True,
                            description="Aggregate by time period (month, quarter, year)",
@@ -143,6 +157,14 @@ def _skill_specs() -> tuple[SkillSpec, ...]:
                            self_loading=True,
                            description="Compute operating cash flow efficiency and free cash flow from financial statements",
                            sub_detector=is_cash_flow_efficiency),
+                HelperSpec("build_financial_dashboard_report",
+                           self_loading=True,
+                           description="Build a period-level financial dashboard from complementary monthly sources",
+                           sub_detector=is_financial_dashboard),
+                HelperSpec("build_inventory_eoq_report",
+                           self_loading=True,
+                           description="Build EOQ, reorder-point, and sensitivity scenario tables from an inventory parameter sheet",
+                           sub_detector=is_inventory_policy),
                 HelperSpec("compute_ratio_column",
                            description="Add a ratio column (numerator / denominator)",
                            sub_detector=is_ratio_computation),
@@ -153,7 +175,11 @@ def _skill_specs() -> tuple[SkillSpec, ...]:
             detector=is_proportion_request,
             strategy_doc=PROPORTION_STRATEGY,
             helpers=(
-                HelperSpec("build_market_share_shipment_report",
+                HelperSpec("build_region_share_cost_report",
+                           self_loading=True,
+                           description="Build a regional population-share and expenditure-per-person summary",
+                           sub_detector=is_region_share_cost),
+                HelperSpec("build_weighted_share_value_report",
                            description="Estimate brand shipments from market share and total shipment tables",
                            sub_detector=is_market_share_shipment),
                 HelperSpec("compute_percentage_share",
@@ -170,29 +196,111 @@ def _skill_specs() -> tuple[SkillSpec, ...]:
     )
 
 
+_SKILL_PRIORITY = {
+    "schedule": 70,
+    "statistical": 60,
+    "financial": 50,
+    "proportion": 45,
+    "merge": 40,
+    "aggregate": 30,
+    "rank": 20,
+    "scan": 10,
+    "highlight": 0,
+}
+
+
 def all_skills() -> Sequence[SkillSpec]:
     return _skill_specs()
 
 
 def detect_skill(user_question: str) -> Optional[SkillSpec]:
-    """Return the first matching skill, or None. Use detect_skills() for multi-skill."""
-    for skill in all_skills():
-        if skill.detector(user_question):
-            return skill
-    return None
+    """Return the highest-priority matching skill, or None. Use detect_skills() for multi-skill."""
+    matched = detect_skills(user_question)
+    if not matched:
+        return None
+    best_skill = matched[0]
+    best_explicit = False
+    best_priority = _SKILL_PRIORITY.get(best_skill.name, -1)
+    for skill in matched:
+        _, explicit = _select_helper_with_reason(skill, user_question)
+        priority = _SKILL_PRIORITY.get(skill.name, -1)
+        if explicit and not best_explicit:
+            best_skill = skill
+            best_explicit = True
+            best_priority = priority
+            continue
+        if explicit == best_explicit and priority > best_priority:
+            best_skill = skill
+            best_priority = priority
+    return best_skill
 
 
 def detect_skills(user_question: str) -> list[SkillSpec]:
     """Return all matching skills. A question may belong to multiple skills."""
-    return [skill for skill in all_skills() if skill.detector(user_question)]
+    matched = [skill for skill in all_skills() if skill.detector(user_question)]
+    return sorted(matched, key=lambda skill: _SKILL_PRIORITY.get(skill.name, -1), reverse=True)
 
 
-def select_helper(skill: SkillSpec, user_question: str) -> Optional[HelperSpec]:
+def _select_helper_with_reason(skill: SkillSpec, user_question: str) -> tuple[Optional[HelperSpec], bool]:
+    def _find_helper(name: str) -> Optional[HelperSpec]:
+        return next((helper for helper in skill.helpers if helper.name == name), None)
+
+    def _merge_default_helper(question: str) -> Optional[HelperSpec]:
+        q = (question or "").lower()
+        same_schema_markers = (
+            "append",
+            "concatenate",
+            "concat",
+            "stack",
+            "stacking",
+            "union",
+            "same headers",
+            "same schema",
+            "first half",
+            "second half",
+        )
+        summary_followup_markers = (
+            "average",
+            "mean",
+            "total",
+            "sum",
+            "highlight",
+            "highest",
+            "lowest",
+            "max",
+            "min",
+        )
+        explicit_join_markers = (
+            "using the",
+            "based on",
+            "common key",
+            "shared key",
+            "shared column",
+            "matching",
+            " id",
+            "column",
+        )
+        if any(marker in q for marker in same_schema_markers):
+            return _find_helper("concat_tables_with_same_headers"), False
+        if any(marker in q for marker in summary_followup_markers) and not any(marker in q for marker in explicit_join_markers):
+            return _find_helper("concat_tables_with_same_headers"), False
+        return (
+            _find_helper("build_relational_join_enrichment_report") or _find_helper("concat_tables_with_same_headers"),
+            False,
+        )
+
     fallback = None
     for helper in skill.helpers:
         if helper.sub_detector is not None:
             if helper.sub_detector(user_question):
-                return helper
+                return helper, True
         elif fallback is None:
             fallback = helper
-    return fallback
+    if skill.name == "merge":
+        return _merge_default_helper(user_question)
+    return fallback, False
+
+
+def select_helper(skill: SkillSpec, user_question: str) -> Optional[HelperSpec]:
+    helper, _ = _select_helper_with_reason(skill, user_question)
+    return helper

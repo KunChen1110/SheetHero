@@ -35,6 +35,23 @@ export default function App() {
   // The session id in use, used for individual backend sessions
   const [sessionId, setSessionId] = useState<string | null>(null);
 
+  // Refs that mirror isWaiting / sessionId so closures always read the latest
+  // value even before React commits the batched state update.
+  const isWaitingRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+
+  /** Update isWaiting state and keep the ref in sync immediately. */
+  function updateIsWaiting(value: boolean): void {
+    isWaitingRef.current = value;
+    setIsWaiting(value);
+  }
+
+  /** Update sessionId state and keep the ref in sync immediately. */
+  function updateSessionId(value: string | null): void {
+    sessionIdRef.current = value;
+    setSessionId(value);
+  }
+
   // Reference used to scroll to the bottom of the chat box
   const scrollReference = useRef<HTMLDivElement>(null);
 
@@ -104,8 +121,8 @@ export default function App() {
     };
     setChats((prev) => [newChat, ...prev]);
     setActiveChatId(newChat.id);
-    setSessionId(null);
-    setIsWaiting(false);
+    updateSessionId(null);
+    updateIsWaiting(false);
   }
 
   async function createNewMessage(content: string): Promise<void> {
@@ -135,19 +152,31 @@ export default function App() {
     try {
       let assistantContent: string;
 
-      // Start the session if one doesnt exist, otherwise reply to the existing session
-      if (isWaiting && sessionId) assistantContent = await sendReply(content);
+      // Use refs (not state) for the routing decision so we always read the
+      // latest committed value even if React hasn't re-rendered yet.
+      const waitingNow = isWaitingRef.current;
+      const sessionNow = sessionIdRef.current;
+      console.debug(
+        `[SheetHero] send — isWaiting=${waitingNow}, sessionId=${sessionNow}`,
+        "→ routing to:", waitingNow && sessionNow ? "sendReply" : "startConversation",
+      );
+
+      if (waitingNow && sessionNow) assistantContent = await sendReply(content);
       else assistantContent = await startConversation(content);
 
     let parsedContent = assistantContent;
     let hasOutputFile = false;
     let outputPath: string | null = null;
+    let detailsMarkdown = "";
+    let uiThoughts = undefined;
 
     try {
       const parsed = JSON.parse(assistantContent);
       parsedContent = parsed.message;
       hasOutputFile = parsed.has_output_file ?? false;
       outputPath = parsed.output_path ?? null;
+      detailsMarkdown = parsed.details_markdown ?? "";
+      uiThoughts = parsed.ui_thoughts ?? undefined;
     } catch {
       // Not JSON, plain string response — that's fine
     }
@@ -158,6 +187,8 @@ export default function App() {
       content: parsedContent,
       hasOutputFile,
       outputPath,
+      detailsMarkdown,
+      uiThoughts,
     };
 
       setChats((prevChats) =>
@@ -189,7 +220,9 @@ export default function App() {
   // Creates a new session conversation
   async function startConversation(userMessage: string): Promise<string> {
     const newSessionId = Date.now().toString();
-    setSessionId(newSessionId);
+    // updateSessionId keeps the ref in sync immediately so processEvents
+    // (called after the await) reads the correct session ID via the ref.
+    updateSessionId(newSessionId);
 
     const result = await api.post("/sheet-hero/start", {
       session_id: newSessionId,
@@ -209,7 +242,7 @@ export default function App() {
   // Sends a reply to an existing session
   async function sendReply(userReply: string): Promise<string> {
     const result = await api.post("/sheet-hero/reply", {
-      session_id: sessionId,
+      session_id: sessionIdRef.current,
       user_reply: userReply,
     });
 
@@ -217,32 +250,51 @@ export default function App() {
   }
 
   // Handles specific event types from backend
-function processEvents(events: Record<string, string>[]): string {
-  for (const event of events) {
-    const type = event.type;
-
-    if (type === "clarification") {
-      setIsWaiting(true);
-      return event.message;
-    }
-
-    if (type === "final" || type === "error") {
-      setIsWaiting(false);
-      if (sessionId) {
-        api.delete(`/sheet-hero/session/${sessionId}`).catch(console.error);
-        setSessionId(null);
+  function processEvents(events: Record<string, unknown>[]): string {
+    const allThoughts: unknown[] = [];
+    for (const event of events) {
+      if (Array.isArray(event.ui_thoughts)) {
+        allThoughts.push(...event.ui_thoughts);
       }
-      // Return JSON string so createNewMessage can parse out file info
-      return JSON.stringify({
-        message: event.message,
-        has_output_file: event.has_output_file ?? false,
-        output_path: event.output_path ?? null,
-      });
     }
-  }
 
-  return "Processing...";
-}
+    for (const event of events) {
+      const type = event.type;
+
+      if (type === "clarification") {
+        console.debug("[SheetHero] event=clarification → isWaiting=true");
+        updateIsWaiting(true);
+        return JSON.stringify({
+          message: event.message,
+          details_markdown: event.details_markdown || "",
+          ui_thoughts: allThoughts,
+        });
+      }
+
+      if (type === "final" || type === "error") {
+        // Use the ref for sessionId — state may be stale inside this closure
+        // (e.g. when called from startConversation after setSessionId was
+        // called but before React committed the batch).
+        const activeSessionId = sessionIdRef.current;
+        console.debug(
+          `[SheetHero] event=${type} → isWaiting=false, deleting session=${activeSessionId}`,
+        );
+        updateIsWaiting(false);
+        if (activeSessionId) {
+          api.delete(`/sheet-hero/session/${activeSessionId}`).catch(console.error);
+          updateSessionId(null);
+        }
+        return JSON.stringify({
+          message: event.message,
+          has_output_file: event.has_output_file ?? false,
+          output_path: event.output_path ?? null,
+          ui_thoughts: allThoughts,
+        });
+      }
+    }
+
+    return "Processing...";
+  }
 
   // Renders the chat if there are existing chats with messages
   function renderChat() {
@@ -255,6 +307,8 @@ function processEvents(events: Record<string, string>[]): string {
             content={message.content}
             hasOutputFile={message.hasOutputFile}
             outputPath={message.outputPath}
+            detailsMarkdown={message.detailsMarkdown}
+            uiThoughts={message.uiThoughts}
           />
         ))}
         <div ref={scrollReference} />

@@ -24,6 +24,7 @@ class HelperRuntimeMetadata:
     bounded_error_extra_note: str = ""
     documented_result_keys: tuple[str, ...] = ()
     uses_post_table_summary_row: bool = False
+    embeds_summary_in_primary_table: bool = False
     scalar_answer_keywords: tuple[str, ...] = ()
     requires_chart_embedding: bool = False
     supports_highlight_rows: bool = False
@@ -63,6 +64,19 @@ _HELPER_METADATA: dict[str, HelperRuntimeMetadata] = {
         final_response_label="grouped aggregation report",
         text_preview_inspector_name="_inspect_text_preview_grouped_aggregation",
         saved_workbook_inspector_name="_inspect_saved_grouped_aggregation_workbook",
+    ),
+    "build_two_dimension_mean_count_summary_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="grouped summary report",
+    ),
+    "build_multi_source_group_comparison_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="group comparison report",
+    ),
+    "build_multi_source_utilisation_summary_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="utilisation summary report",
+        supports_highlight_rows=True,
     ),
     "build_time_series_aggregation_report": HelperRuntimeMetadata(
         runtime_mode="temporal_aggregation",
@@ -155,13 +169,21 @@ _HELPER_METADATA: dict[str, HelperRuntimeMetadata] = {
         runtime_mode="atomic_transform",
         final_response_label="ranked spreadsheet",
     ),
-    "build_market_share_shipment_report": HelperRuntimeMetadata(
+    "build_weighted_share_value_report": HelperRuntimeMetadata(
         runtime_mode="zero_arg_helper",
-        final_response_label="market share and shipment report",
-        preflight_guard_names=("market_share_shipment_guard",),
+        final_response_label="weighted share-value report",
+        preflight_guard_names=("weighted_share_value_guard",),
         bounded_error_signatures=("Could not identify both market-share and shipment tables from the loaded workbooks.",),
-        bounded_error_task_label="market-share shipment task",
-        bounded_error_extra_note="- Do not manually rebuild the shipment-versus-market-share comparison in code.",
+        bounded_error_task_label="weighted share-and-total-value task",
+        bounded_error_extra_note="- Do not manually rebuild the weighted share-versus-total-value comparison in code.",
+    ),
+    "build_region_share_cost_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="regional share and expenditure report",
+        embeds_summary_in_primary_table=True,
+        bounded_error_signatures=("Could not identify both region-population and region-expenditure tables.",),
+        bounded_error_task_label="regional share-and-cost task",
+        bounded_error_extra_note="- Do not manually rebuild the regional share and expenditure-per-person calculations in code.",
     ),
     "build_cash_flow_efficiency_report": HelperRuntimeMetadata(
         runtime_mode="zero_arg_helper",
@@ -169,6 +191,21 @@ _HELPER_METADATA: dict[str, HelperRuntimeMetadata] = {
         bounded_error_signatures=("No workbook available for cash-flow analysis.",),
         bounded_error_task_label="cash-flow task",
         bounded_error_extra_note="- Do not manually reconstruct the cash-flow analysis grid in code.",
+    ),
+    "build_financial_dashboard_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="dashboard",
+        embeds_summary_in_primary_table=True,
+        bounded_error_signatures=("Could not identify the P&L, sales/marketing, and KPI target tables.",),
+        bounded_error_task_label="financial dashboard task",
+        bounded_error_extra_note="- Do not manually rebuild the cross-file dashboard joins and KPI calculations in code.",
+    ),
+    "build_inventory_eoq_report": HelperRuntimeMetadata(
+        runtime_mode="zero_arg_helper",
+        final_response_label="inventory report",
+        bounded_error_signatures=("No inventory parameter table was loaded.",),
+        bounded_error_task_label="inventory policy task",
+        bounded_error_extra_note="- Do not manually reconstruct EOQ, reorder-point, or scenario tables in code.",
     ),
     "build_region_growth_analysis": HelperRuntimeMetadata(
         runtime_mode="temporal_growth",
@@ -258,6 +295,11 @@ def get_helper_rule_inspector_name(helper_name: str) -> Optional[str]:
 def helper_uses_post_table_summary_row(helper_name: str) -> bool:
     metadata = get_helper_metadata(helper_name)
     return bool(metadata and metadata.uses_post_table_summary_row)
+
+
+def helper_embeds_summary_in_primary_table(helper_name: str) -> bool:
+    metadata = get_helper_metadata(helper_name)
+    return bool(metadata and metadata.embeds_summary_in_primary_table)
 
 
 def helper_scalar_answer_keywords(helper_name: str) -> tuple[str, ...]:

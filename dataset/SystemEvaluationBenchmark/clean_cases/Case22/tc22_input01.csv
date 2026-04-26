@@ -1,0 +1,6 @@
+StudentID,Name,FinalGrade,Email
+S001,Alice Wang,92,alice@uni.edu
+S002,Bob Chen,,bob@uni.edu
+S003,Carol Liu,88,carol@uni.edu
+S004,David Kim,75,david@uni.edu
+S005,Emma Zhou,95,emma@uni.edu

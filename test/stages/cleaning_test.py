@@ -17,10 +17,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _development_dataset_dir() -> Path:
+    return _repo_root() / "dataset" / "DevelopmentBenchmark"
+
+
 def _load_tasks(dataset_dir: Path) -> list[dict]:
     candidates = [
         dataset_dir / "dataset.json",
-        _repo_root() / "dataset" / "dataset.json",
+        _development_dataset_dir() / "dataset.json",
         ]
     for path in candidates:
         if path.exists():
@@ -103,7 +107,7 @@ def main() -> int:
         description="Test DataCleaningStage with smart token management."
     )
     parser.add_argument("--test-id", type=int, required=True, help="Dataset entry index")
-    parser.add_argument("--dataset-dir", type=str, default=str(_repo_root() / "dataset"))
+    parser.add_argument("--dataset-dir", type=str, default=str(_development_dataset_dir()))
     parser.add_argument("--actions", type=str, default=None, help='JSON array of actions (default: ["remove duplicate rows"])')
     parser.add_argument("--model", type=str, default=None, help="Model override (default: from Config)")
     parser.add_argument("--max-files", type=int, default=2, help="Max files to show in schema")
@@ -115,8 +119,8 @@ def main() -> int:
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root))
 
-    from src.backend.config.settings import Config
-    from src.backend.environment import Sandbox
+    from backend.config.settings import Config
+    from backend.environment import Sandbox
 
     config = Config()
 
@@ -158,8 +162,8 @@ def main() -> int:
     )
 
     # Build schema with smart limiting
-    from src.backend.stages.understanding.context_builder import ExcelContextBuilder
-    from src.backend.prompt.prompt_builder import PromptBuilder
+    from backend.stages.understanding.context_builder import ExcelContextBuilder
+    from backend.prompt.prompt_builder import PromptBuilder
 
     workbooks = getattr(sandbox, "workbooks", {}) or {}
 

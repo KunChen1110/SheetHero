@@ -183,6 +183,11 @@ class ExcelOutputWriter:
 
     def _normalize_output_value(self, value: Any) -> Any:
         """Normalize common model formatting artifacts before writing."""
+        if isinstance(value, dict):
+            for scalar_key in ("contains_cycle", "Contains_Cycle", "success", "value", "answer"):
+                scalar_value = value.get(scalar_key)
+                if isinstance(scalar_value, (str, int, float, bool)):
+                    return scalar_value
         if not isinstance(value, str):
             return value
 

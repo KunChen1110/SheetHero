@@ -176,7 +176,13 @@ class QualityAssuranceStage(Stage):
             )
 
     def export_cleaning_actions(self) -> list:
-        return self.cleaning_actions or []
+        result = []
+        for action in (self.cleaning_actions or []):
+            for line in str(action).split("\n"):
+                line = line.strip()
+                if line:
+                    result.append(line)
+        return result
 
     def export_cleaning_policy_plans(self) -> list:
         return [dict(plan) for plan in (self.cleaning_policy_plans or [])]
@@ -430,6 +436,44 @@ class QualityAssuranceStage(Stage):
                 )
             ):
                 return True, "NO_OP", ""
+            # Extract fill value from the reply (more aggressively for grouped policy questions)
+            _stripped_policy = re.sub(r"[£$€¥]", "", (reply or "")).replace(",", "")
+            _embedded_policy = re.search(
+                r"(?:treat(?:ed)?(?:\s+(?:it|them|this|that))?\s+as"
+                r"|set\s+(?:it\s+)?to"
+                r"|use"
+                r"|fill\s+(?:(?:it|them)\s+)?with(?:\s+(?:default|a))?"
+                r"(?:\s+value(?:\s+of)?)?|=)\s*([-+]?\d+(?:\.\d+)?)",
+                _stripped_policy,
+                flags=re.IGNORECASE,
+            )
+            _policy_numeric = None
+            if re.fullmatch(r"\s*[-+]?\d+(?:\.\d+)?\s*", _stripped_policy):
+                _policy_numeric = _stripped_policy.strip()
+            elif _embedded_policy:
+                _policy_numeric = _embedded_policy.group(1)
+            else:
+                # Fallback: any number mentioned in the reply
+                _any_num = re.search(r"\b([-+]?\d+(?:\.\d+)?)\b", _stripped_policy)
+                if _any_num:
+                    _policy_numeric = _any_num.group(1)
+            if _policy_numeric is not None:
+                column_name = str(metadata.get("column") or "value")
+                pairs = metadata.get("all_sheet_row_pairs") or []
+                if pairs:
+                    actions = [
+                        f"Fill the missing value in `{column_name}` at Excel row {p['excel_row']} in `{p['sheet_key']}` with {_policy_numeric}."
+                        for p in pairs if p.get("sheet_key") and p.get("excel_row") is not None
+                    ]
+                    if actions:
+                        return True, "\n".join(actions), ""
+                # Fallback to all_sheet_keys without row numbers
+                all_sheet_keys = metadata.get("all_sheet_keys") or [str(metadata.get("sheet_key") or "current sheet")]
+                actions = [
+                    f"Fill the missing value in `{column_name}` in `{sk}` with {_policy_numeric}."
+                    for sk in all_sheet_keys
+                ]
+                return True, "\n".join(actions), ""
         if issue_type == "unit_or_time_format":
             formats = [str(value).strip() for value in metadata.get("formats", []) if str(value).strip()]
             if formats:
@@ -535,8 +579,8 @@ class QualityAssuranceStage(Stage):
                     numeric_str = any_number.group(1)
 
             if numeric_str is not None:
-                sheet_key = str(metadata.get("sheet_key") or "current sheet")
                 column_name = str(metadata.get("column") or "value")
+                sheet_key = str(metadata.get("sheet_key") or "current sheet")
                 excel_row = metadata.get("excel_row")
                 row_text = f" at Excel row {excel_row}" if excel_row else ""
                 return (
@@ -544,6 +588,21 @@ class QualityAssuranceStage(Stage):
                     f"Fill the missing value in `{column_name}`{row_text} in `{sheet_key}` with {numeric_str}.",
                     "",
                 )
+
+        if issue_type == "data_issue":
+            sheet_key = str(metadata.get("sheet_key") or "current sheet")
+            column_name = str(metadata.get("column") or "value")
+            if "skip" in normalized_reply or "drop" in normalized_reply:
+                # Extract the bad value from the question or description
+                bad_val = self._extract_quoted_value(
+                    str((problem or {}).get("question") or (problem or {}).get("description") or "")
+                )
+                if bad_val:
+                    return (
+                        True,
+                        f"Drop rows in `{sheet_key}` where `{column_name}` == {bad_val}.",
+                        "",
+                    )
 
         metadata_choice = self._resolve_metadata_choice(problem, reply)
         if metadata_choice is not None:
@@ -707,6 +766,13 @@ class QualityAssuranceStage(Stage):
             return None
         if "depends on" in description or "depends on" in question:
             return None
+        # Cell-level issues that materially affect the result must NOT be grouped —
+        # each needs its own question with its own context preview.
+        if (
+            str(problem.get("preview_kind") or "") == "cell_issue"
+            and problem.get("material_to_result") is True
+        ):
+            return None
         # Group by (issue_type, column) across all files — same column name in multiple
         # files warrants a single user decision.
         return (str(problem.get("issue_type") or ""), column)
@@ -723,10 +789,18 @@ class QualityAssuranceStage(Stage):
             )
             if row is not None
         ]
-        # Collect distinct sheet/file keys across all grouped problems.
+        # Collect distinct (sheet_key, excel_row) pairs across all grouped problems.
+        seen_pairs: list[Dict[str, Any]] = []
+        seen_pair_keys: set[tuple] = set()
         seen_sheets: list[str] = []
         for p in problems:
-            sk = str((p.get("metadata") or {}).get("sheet_key") or "")
+            pmeta = p.get("metadata") or {}
+            sk = str(pmeta.get("sheet_key") or "")
+            row = pmeta.get("excel_row")
+            pair_key = (sk, row)
+            if sk and pair_key not in seen_pair_keys:
+                seen_pair_keys.add(pair_key)
+                seen_pairs.append({"sheet_key": sk, "excel_row": row})
             if sk and sk not in seen_sheets:
                 seen_sheets.append(sk)
         primary_sheet_key = seen_sheets[0] if seen_sheets else str(metadata.get("sheet_key") or "current sheet")
@@ -738,6 +812,8 @@ class QualityAssuranceStage(Stage):
         )
         metadata["affected_rows"] = list(issue_group.affected_rows)
         metadata["sheet_key"] = primary_sheet_key
+        metadata["all_sheet_keys"] = seen_sheets
+        metadata["all_sheet_row_pairs"] = seen_pairs
         first["id"] = f"missing_value::{primary_sheet_key}::{column}"
         first["issue_type"] = issue_group.issue_type
         if len(seen_sheets) > 1:
@@ -919,20 +995,67 @@ class QualityAssuranceStage(Stage):
             context_lines.extend(metadata_lines)
         return "\n".join(context_lines).strip()
 
+    @staticmethod
+    def _extract_quoted_value(text: str) -> str:
+        """Extract the first quoted or double-quoted value from text."""
+        m = re.search(r'"([^"]+)"|\'([^\']+)\'', text)
+        if m:
+            return (m.group(1) or m.group(2) or "").strip()
+        return ""
+
+    @classmethod
+    def _is_cell_level_material(cls, problem: Optional[Dict[str, Any]]) -> bool:
+        """Return True iff this is a single-cell missing-value issue that materially affects the result."""
+        if not isinstance(problem, dict):
+            return False
+        return (
+            str(problem.get("issue_type") or "") == "missing_value"
+            and str(problem.get("preview_kind") or "") == "cell_issue"
+            and problem.get("material_to_result") is True
+        )
+
     @classmethod
     def _coerce_action_from_structured_decision(
         cls,
         problem: Optional[Dict[str, Any]],
         decision: Dict[str, str],
     ) -> str:
-        action = str(decision.get("action") or "").strip()
-        if action:
-            return action
         if not problem:
-            return ""
+            action = str(decision.get("action") or "").strip()
+            return action
+
         issue_type = str(problem.get("issue_type") or "")
         metadata = problem.get("metadata") or {}
         decision_kind = cls._normalize_reply(decision.get("decision_kind", "").replace("_", " "))
+
+        # For single-cell material missing-value issues always reconstruct canonically —
+        # the raw decision["action"] from the LLM may lack the exact row number and would
+        # cause deterministic cleaning to miss, triggering an over-broad LLM fallback.
+        if cls._is_cell_level_material(problem):
+            if decision_kind in {"no op", "no_op", "no change", "keep", "keep as is"}:
+                return "NO_OP"
+            numeric_str = str(decision.get("value") or "").strip()
+            if not numeric_str:
+                # Try to pull the number out of the raw action string as a last resort.
+                raw = str(decision.get("action") or "")
+                m = re.search(r"[-+]?\d+(?:\.\d+)?", raw)
+                if m:
+                    numeric_str = m.group()
+            if numeric_str:
+                sheet_key = str(metadata.get("sheet_key") or "current sheet")
+                column_name = str(metadata.get("column") or "value")
+                excel_row = metadata.get("excel_row")
+                row_text = f" at Excel row {excel_row}" if excel_row else ""
+                return (
+                    f"Fill the missing value in `{column_name}`{row_text} in `{sheet_key}` with {numeric_str}."
+                )
+            return ""
+
+        # For all other issue types trust the raw action from the LLM (policy-level decisions,
+        # grouped issues, etc.) and fall back to structured reconstruction only when empty.
+        action = str(decision.get("action") or "").strip()
+        if action:
+            return action
         if decision_kind in {"no op", "no_op", "no change", "keep", "keep as is"}:
             return "NO_OP"
         if issue_type == "missing_value" and decision_kind == "fill value":
