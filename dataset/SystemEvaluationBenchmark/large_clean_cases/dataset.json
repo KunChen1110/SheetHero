@@ -1,0 +1,311 @@
+[
+    {
+        "task_id": "Test 1",
+        "title": "Large Retail H2 Revenue and Target Analysis",
+        "scenario": "Retail operations / sales performance analysis",
+        "category": "join four clean tables; filter H2 months; aggregate revenue by region and category; compare against targets; rank stores; summarise category profitability",
+        "atomic_operations": [
+            "join stores with sales on StoreID",
+            "join products with sales on ProductID",
+            "filter rows to H2 2024 months",
+            "compute net revenue after discount",
+            "aggregate revenue and units by Region and Category",
+            "aggregate H2 targets by Region and Category",
+            "compute target achievement percentage",
+            "rank stores by H2 revenue",
+            "summarise category revenue and gross profit",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 10,
+        "spreadsheets": [
+            "Case01/tc01_input01.csv",
+            "Case01/tc01_input02.csv",
+            "Case01/tc01_input03.csv",
+            "Case01/tc01_input04.csv"
+        ],
+        "prompt": "You have four clean tables: stores, products, monthly sales, and monthly targets. Join the tables using StoreID and ProductID, keep only the H2 2024 months (2024-07 to 2024-12), compute net revenue as UnitsSold × UnitPrice × (1 - DiscountPct), aggregate the results by Region and Category, and compare each aggregate to the summed H2 revenue target. Then create a Top 10 store leaderboard by H2 revenue and a category summary with revenue, gross profit, and discounted-unit share. Output everything into a new Excel workbook with three sheets: Region_Category_H2, Store_Leaderboard, and Category_Summary.",
+        "answer": "Top H2 target achievement: Central / Sports at 189.8%. Highest-revenue store: Store_022 (North) with 9690.00. Most profitable category in H2: Sports with gross profit 8681.80.",
+        "expected_output_file": [
+            "Case01/tc01_output01.xlsx"
+        ],
+        "feedback": "The four input tables are clean and fully keyed. I plan to compute net revenue after discount, restrict the analysis to 2024-07 through 2024-12, sum targets over the same scope, and then produce the three requested sheets.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the four clean retail tables, keep only H2 2024, compare actual revenue against targets by region and category, rank stores by H2 revenue, and summarise category profitability."
+            },
+            {
+                "role": "assistant",
+                "content": "I will treat DiscountPct as a percentage reduction applied before aggregation, limit the scope to 2024-07 through 2024-12, and aggregate targets over the same region/category scope. Then I'll write the three result sheets."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. Best H2 achievement is Central / Sports at 189.8%. The top store is Store_022 with H2 revenue 9690.00, and Sports leads gross profit."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 2",
+        "title": "Large Procurement Supplier Scorecard",
+        "scenario": "Procurement / supplier performance analytics",
+        "category": "join five clean tables; calculate on-time rate, inspection average, acceptance rate, and weighted supplier score; summarise buyers; build supplier risk watchlist",
+        "atomic_operations": [
+            "join purchase orders with suppliers on SupplierID",
+            "join purchase orders with buyers on BuyerID",
+            "join deliveries to purchase orders on POID",
+            "join quality results to purchase orders on POID",
+            "compute supplier on-time delivery rate",
+            "compute supplier inspection average",
+            "compute supplier acceptance rate",
+            "compute supplier defect rate",
+            "compute weighted supplier score",
+            "aggregate supplier scores to buyer-level summary",
+            "filter risky suppliers into a watchlist",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 12,
+        "spreadsheets": [
+            "Case02/tc02_input01.csv",
+            "Case02/tc02_input02.csv",
+            "Case02/tc02_input03.csv",
+            "Case02/tc02_input04.csv",
+            "Case02/tc02_input05.csv"
+        ],
+        "prompt": "You have five clean procurement tables: suppliers, buyers, purchase orders, deliveries, and quality results. Join the records by SupplierID, BuyerID, and POID. For each supplier, calculate PO count, on-time delivery rate, average inspection score, acceptance rate, defect rate, and a weighted score defined as 50% on-time rate + 30% inspection average + 20% acceptance rate. Then create a buyer summary showing managed order value and weighted supplier score, and a risk watchlist of suppliers with low scores or high defect rates. Output the results into a new Excel workbook with sheets Supplier_Scorecard, Buyer_Summary, and Risk_Watchlist.",
+        "answer": "Top supplier: Supplier_024 with weighted score 98.29. Best buyer portfolio: Buyer_066 with weighted supplier score 98.29. Highest-risk supplier on the watchlist: Supplier_064 (score 40.18, defect rate 6.55%).",
+        "expected_output_file": [
+            "Case02/tc02_output01.xlsx"
+        ],
+        "feedback": "The tables are already clean and keyed, so I will score suppliers at the supplier level after joining each PO with its delivery and quality record, and then roll those supplier scores up to the buyer summary.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the five procurement tables, score suppliers, summarise buyer portfolios, and build a risk watchlist."
+            },
+            {
+                "role": "assistant",
+                "content": "I will compute supplier metrics from PO-level joins first, apply the weighted-score formula exactly as given, then aggregate those scores into the buyer summary and create the risk watchlist."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. Supplier_024 has the top weighted score at 98.29. Buyer_066 leads the buyer summary, and Supplier_064 appears first on the risk watchlist."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 3",
+        "title": "Large University Section Utilisation Analysis",
+        "scenario": "Education operations / enrollment analytics",
+        "category": "join five clean tables; compute section fill and waitlist rates; summarise instructor teaching load; measure room utilisation by building",
+        "atomic_operations": [
+            "join sections with courses on CourseID",
+            "join sections with rooms on RoomID",
+            "join enrollments with sections on SectionID",
+            "count enrolled students per section",
+            "count waitlisted students per section",
+            "compute section fill rate",
+            "compute section waitlist rate",
+            "aggregate section load by instructor",
+            "aggregate room utilisation by building",
+            "rank sections by fill rate",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 11,
+        "spreadsheets": [
+            "Case03/tc03_input01.csv",
+            "Case03/tc03_input02.csv",
+            "Case03/tc03_input03.csv",
+            "Case03/tc03_input04.csv",
+            "Case03/tc03_input05.csv"
+        ],
+        "prompt": "You have five clean university tables: students, courses, sections, enrollments, and rooms. Join the tables using StudentID, CourseID, SectionID, and RoomID. For each section, calculate enrolled count, waitlisted count, fill rate, and waitlist rate. Then summarise instructor load with section count, total enrolled, and scheduled hours, and create a room-utilisation summary by building using average section fill rate. Output the results into a new Excel workbook with sheets Section_Utilisation, Instructor_Load, and Room_Utilisation.",
+        "answer": "Highest-fill section: SEC001 (Course_001) at 15.38% fill. Busiest instructor: Instructor_001 with 8 enrolled students across 5 sections. Highest average building utilisation: North at 3.29%.",
+        "expected_output_file": [
+            "Case03/tc03_output01.xlsx"
+        ],
+        "feedback": "The tables are already rectangular and clean. I will count enrolled and waitlisted students at the section level first, then derive instructor and building summaries from those section-level results.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the five university tables, calculate section fill and waitlist rates, summarise instructor load, and add a building-level room utilisation sheet."
+            },
+            {
+                "role": "assistant",
+                "content": "I will compute section-level metrics first, then roll them up into instructor and building summaries so the final workbook stays consistent across all three sheets."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. SEC001 is the fullest section at 15.38%. Instructor_001 has the largest teaching load by enrollment, and North has the highest average building utilisation."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 4",
+        "title": "Large Clinic Appointment and Billing Analysis",
+        "scenario": "Healthcare operations / appointment and revenue analysis",
+        "category": "join five clean tables; compute no-show and collection rates by clinic and specialty; summarise doctor productivity; compare payer collection performance",
+        "atomic_operations": [
+            "join appointments with clinics on ClinicID",
+            "join appointments with doctors on DoctorID",
+            "join appointments with patients on PatientID",
+            "join billing with appointments on ApptID",
+            "count appointments by clinic",
+            "compute clinic no-show rate",
+            "sum clinic charges and collections",
+            "compute clinic collection rate",
+            "filter completed visits for doctor productivity",
+            "aggregate doctor productivity metrics",
+            "aggregate payer-level collection metrics",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 12,
+        "spreadsheets": [
+            "Case04/tc04_input01.csv",
+            "Case04/tc04_input02.csv",
+            "Case04/tc04_input03.csv",
+            "Case04/tc04_input04.csv",
+            "Case04/tc04_input05.csv"
+        ],
+        "prompt": "You have five clean clinic tables: clinics, doctors, patients, appointments, and billing. Join the data using ClinicID, DoctorID, PatientID, and ApptID. For each clinic, calculate appointment count, no-show rate, total charges, total collected, and collection rate, keeping the clinic's specialty in the result. Then summarise doctor productivity using completed visits, charges, collections, and average booked minutes per completed visit, and add a payer-level collection summary. Output a new Excel workbook with sheets Clinic_Summary, Doctor_Productivity, and Payer_Collection.",
+        "answer": "Highest no-show clinic: Clinic_041 (General) at 28.57%. Top doctor by collected revenue: Doctor_022 with 1362.00 collected. Best payer collection rate: Private at 94.73%.",
+        "expected_output_file": [
+            "Case04/tc04_output01.xlsx"
+        ],
+        "feedback": "The input tables are clean and keyed one-to-many, so I will calculate clinic metrics from all appointments, but doctor and payer productivity only from completed visits where collection values are meaningful.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the clinic, doctor, patient, appointment, and billing tables. Compute clinic no-show and collection metrics, doctor productivity, and payer collection performance."
+            },
+            {
+                "role": "assistant",
+                "content": "I will compute clinic metrics across all appointments, while doctor productivity and payer collection will be based on completed visits so the revenue measures stay comparable."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. Clinic_041 has the highest no-show rate at 28.57%. Doctor_022 leads doctor collections, and Private has the strongest payer collection rate."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 5",
+        "title": "Large Warehouse Fulfilment and Inventory Analysis",
+        "scenario": "Logistics / warehouse performance analytics",
+        "category": "join five clean tables; compute warehouse fill rate and on-time rate; derive category inventory-turns proxy; identify largest order backlogs",
+        "atomic_operations": [
+            "join orders with warehouses on WarehouseID",
+            "join orders with SKUs on SKU",
+            "join shipments with orders on OrderID",
+            "join inventory snapshots on WarehouseID and SKU",
+            "compute warehouse fill rate",
+            "compute warehouse on-time rate",
+            "sum warehouse freight cost",
+            "aggregate shipped quantity by category",
+            "compute average inventory proxy by category",
+            "compute category inventory-turns proxy",
+            "compute backlog quantity per order",
+            "rank backlog orders descending",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 13,
+        "spreadsheets": [
+            "Case05/tc05_input01.csv",
+            "Case05/tc05_input02.csv",
+            "Case05/tc05_input03.csv",
+            "Case05/tc05_input04.csv",
+            "Case05/tc05_input05.csv"
+        ],
+        "prompt": "You have five clean logistics tables: warehouses, SKUs, inventory snapshots, orders, and shipments. Join the tables using WarehouseID, SKU, and OrderID. For each warehouse, calculate order count, fill rate (ShippedQty / OrderedQty), on-time rate, and total freight cost. Then summarise category performance with total shipped quantity and an inventory-turns proxy defined as shipped quantity divided by summed average inventory across matched warehouse-SKU records. Finally, create a backlog alert sheet showing the largest order shortfalls sorted by backlog quantity descending. Output a new Excel workbook with sheets Warehouse_Service, Category_Turns, and Backlog_Alert.",
+        "answer": "Best warehouse fill rate: Warehouse_066 (South) at 94.62%. Fastest-turning category: Electronics with turns proxy 0.12. Largest backlog order: O116 for SKU086 with backlog 7.",
+        "expected_output_file": [
+            "Case05/tc05_output01.xlsx"
+        ],
+        "feedback": "The inputs are clean and aligned by WarehouseID, SKU, and OrderID. I will compute service metrics at warehouse level, derive category turns from matched inventory rows, and sort the backlog sheet by absolute shortfall.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the five warehouse tables, measure service levels, estimate category inventory turns, and build a backlog alert sheet."
+            },
+            {
+                "role": "assistant",
+                "content": "I will calculate fill rate and on-time rate at warehouse level first, then compute category turns only where order and inventory records align on the same warehouse and SKU."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. Warehouse_066 has the highest fill rate at 94.62%. Electronics leads the category turns proxy, and O116 is the largest backlog order."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 6",
+        "title": "Large Workforce Utilisation and Performance Analysis",
+        "scenario": "HR analytics / workforce planning",
+        "category": "join five clean tables; calculate employee utilisation, required-training completion, and average performance; summarise departments; create employee risk list",
+        "atomic_operations": [
+            "join employees with departments on DepartmentID",
+            "join timesheets with employees on EmployeeID",
+            "join training records with employees on EmployeeID",
+            "join performance records with employees on EmployeeID",
+            "compute employee utilisation",
+            "compute required-training completion rate",
+            "compute average Q1-Q4 performance",
+            "assign performance tier",
+            "aggregate employee metrics to department summaries",
+            "count high-potential employees by department",
+            "filter employees into a risk list",
+            "export results to a multi-sheet workbook"
+        ],
+        "number_of_atomic_operations": 12,
+        "spreadsheets": [
+            "Case06/tc06_input01.csv",
+            "Case06/tc06_input02.csv",
+            "Case06/tc06_input03.csv",
+            "Case06/tc06_input04.csv",
+            "Case06/tc06_input05.csv"
+        ],
+        "prompt": "You have five clean HR tables: departments, employees, timesheets, training records, and performance scores. Join the data using DepartmentID and EmployeeID. For each employee, calculate utilisation as BillableHours / (BillableHours + NonBillableHours), required-training completion rate, average performance across Q1-Q4, and assign a performance tier (Top, Strong, Core, At_Risk). Then produce a department summary with headcount, average utilisation, required-training completion, average performance, and high-potential count. Finally, create a risk list for employees with low utilisation, incomplete required training, or At_Risk performance. Output the results into a new Excel workbook with sheets Employee_Summary, Department_Summary, and Risk_List.",
+        "answer": "Top employee: Employee_042 with average performance 88.50 and utilisation 78.05%. Highest-performing department summary row: HR (APAC) with average performance 88.50. First employee on the risk list: Employee_001 (Consulting), tier At_Risk.",
+        "expected_output_file": [
+            "Case06/tc06_output01.xlsx"
+        ],
+        "feedback": "All input tables are clean and keyed. I will compute employee-level utilisation and training completion first, then aggregate those employee metrics to the department level and build the risk list from the same employee summary.\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the five HR tables, compute employee utilisation and performance, summarise departments, and generate a risk list."
+            },
+            {
+                "role": "assistant",
+                "content": "I will derive a single employee-level summary first so the department summary and risk list are both based on the same utilisation, training, and performance calculations."
+            },
+            {
+                "role": "user",
+                "content": "Proceed."
+            },
+            {
+                "role": "assistant",
+                "content": "Completed. Employee_042 leads the employee summary, HR is the strongest department by average performance, and Employee_001 appears first on the risk list."
+            }
+        ]
+    }
+]

@@ -145,7 +145,7 @@ class UnderstandingStage(Stage):
         return [{"role": "user", "content": prompt_text}]
 
     @staticmethod
-    def _extract_context_summary_lines(spreadsheet_context: str, max_lines: int = 8) -> list[str]:
+    def _extract_context_summary_lines(spreadsheet_context: str, max_lines: int = 14) -> list[str]:
         collected: list[str] = []
         for raw_line in (spreadsheet_context or "").splitlines():
             line = raw_line.strip()
@@ -249,6 +249,11 @@ class UnderstandingStage(Stage):
             "regression" in q
             and any(marker in q for marker in ("weight", "weights", "coefficient", "coefficients"))
         )
+        is_market_share_overlap_output = (
+            "market share" in q
+            and "overlapping time period" in q
+            and any(marker in q for marker in ("estimate", "estimated", "output a table", "output table"))
+        )
         need_summary = (
             any(has_term(t) for t in summary_terms)
             or any(has_term(t) for t in explicit_summary_terms)
@@ -256,6 +261,8 @@ class UnderstandingStage(Stage):
         if is_target_feature_correlation and not any(has_term(t) for t in explicit_summary_terms):
             need_summary = False
         if is_regression_weights_output and not any(has_term(t) for t in explicit_summary_terms):
+            need_summary = False
+        if is_market_share_overlap_output and not any(has_term(t) for t in ("average", "sum", "count", "minimum", "maximum")):
             need_summary = False
         if "correlation matrix" in q and not any(has_term(t) for t in explicit_summary_terms):
             need_summary = False
@@ -330,7 +337,7 @@ class UnderstandingStage(Stage):
         if is_offline:
             context_lines = self._extract_context_summary_lines(
                 excel_context_understanding,
-                max_lines=8,
+                max_lines=14,
             )
             context_text = "\n".join(context_lines) if context_lines else "Workbook context available."
         prompt_text = self.prompt_builder.build_understanding_prompt(

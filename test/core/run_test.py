@@ -4,7 +4,7 @@ Dataset Runner - Unified Test Execution Script
 
 Usage:
     python3 test/core/run_test.py --test-n 1
-    python3 test/core/run_test.py --test-n 3 --dataset-dir dataset
+    python3 test/core/run_test.py --test-n 3 --dataset-dir dataset/DevelopmentBenchmark
 """
 
 import sys
@@ -201,7 +201,7 @@ def main():
     parser.add_argument("--test-n", type=int, required=True,
                         help="Task number to run (e.g. 1, 2, 3)")
     parser.add_argument("--dataset-dir", type=str, default=None,
-                        help="Path to dataset directory (default: <project_root>/dataset)")
+                        help="Path to dataset directory (default: <project_root>/dataset/DevelopmentBenchmark)")
     parser.add_argument("--base-url", type=str, default=None,
                         help="Override model base URL for this run.")
     parser.add_argument("--deployment", type=str, default=None,
@@ -215,7 +215,7 @@ def main():
     dataset_dir = (
         Path(args.dataset_dir).resolve()
         if args.dataset_dir
-        else PROJECT_ROOT / "dataset"
+        else PROJECT_ROOT / "dataset" / "DevelopmentBenchmark"
     )
     if not dataset_dir.exists():
         print(f"Error: dataset directory not found: {dataset_dir}", file=sys.stderr)

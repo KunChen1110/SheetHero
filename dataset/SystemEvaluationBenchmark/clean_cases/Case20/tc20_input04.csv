@@ -1,0 +1,9 @@
+BookingID,StudentID,Department,BooksOrEquipment
+B001,ST101,Sciences,3
+B002,ST102,Arts,2
+B003,ST103,Mathematics,4
+B004,ST104,Languages,1
+B005,ST105,Sports,2
+B006,ST106,Sciences,2
+B007,ST107,Arts,3
+B008,ST108,Languages,2

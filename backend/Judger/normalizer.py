@@ -18,8 +18,9 @@ def find_file(filename: str) -> str:
         os.path.join(script_dir, "../../artifacts/tests/Task01_output"),
         os.path.join(script_dir, "../../artifacts/tests/Task02_output"),
         os.path.join(script_dir, "../../artifacts/tests"),
-        os.path.join(script_dir, "../../dataset/Task01"),
-        os.path.join(script_dir, "../../dataset/Task02"),
+        os.path.join(script_dir, "../../dataset/DevelopmentBenchmark/Task01"),
+        os.path.join(script_dir, "../../dataset/DevelopmentBenchmark/Task02"),
+        os.path.join(script_dir, "../../dataset/DevelopmentBenchmark"),
         os.path.join(script_dir, "../../dataset"),
     ]
     for path in search_paths:

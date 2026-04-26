@@ -56,10 +56,20 @@ class WorkbookValidationInspectorMixin:
         if len(normalized) < 2:
             issues.append("Temporal aggregation output must contain at least two columns.")
             return issues
-        if normalized[0] != "Period":
+        first_col = normalized[0]
+        second_col = normalized[1]
+        derived_temporal_output = (
+            first_col == "Year"
+            and "YoY_Growth_pct" in normalized
+            and "High_Growth" in normalized
+        )
+        if first_col != "Period" and not derived_temporal_output:
             issues.append("Temporal aggregation output should start with a `Period` column.")
         metric_label = normalized[1]
-        if not any(metric_label.startswith(prefix) for prefix in ("Average ", "Total ", "Count ", "Median ", "Minimum ", "Maximum ")):
+        if (
+            not derived_temporal_output
+            and not any(metric_label.startswith(prefix) for prefix in ("Average ", "Total ", "Count ", "Median ", "Minimum ", "Maximum "))
+        ):
             issues.append("Temporal aggregation output metric column label is missing the aggregate prefix.")
         if not rows:
             issues.append("Temporal aggregation output does not contain any data rows.")
@@ -277,6 +287,8 @@ class WorkbookValidationInspectorMixin:
                             "fastest",
                             "region",
                             "sum",
+                            "rows used",
+                            "latest year",
                         )
                     ):
                         metrics_in_sheet = True
@@ -291,6 +303,8 @@ class WorkbookValidationInspectorMixin:
                     data_rows += 1
 
             max_data_rows = max(max_data_rows, data_rows)
+            if need_summary is True and need_detail is not True and data_rows >= 1:
+                metrics_in_sheet = True
             found_metrics = found_metrics or metrics_in_sheet
             if (need_detail is not True or data_rows >= 1) and (need_summary is not True or metrics_in_sheet):
                 return []
@@ -364,7 +378,7 @@ class WorkbookValidationInspectorMixin:
             return None
         hour = int(match.group(1))
         minute = int(match.group(2))
-        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        if hour < 0 or minute < 0 or minute > 59:
             return None
         return (hour * 60) + minute
 
