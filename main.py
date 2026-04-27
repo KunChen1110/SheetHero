@@ -1,10 +1,14 @@
 import uvicorn
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
 
-from backend.agent.core.SheetHero import SheetHero
 from backend.config.settings import Config
 from backend.service.sheethero_service import SheetHeroService
 from backend.service.stream_dialogue_driver import StreamDialogueDriver
