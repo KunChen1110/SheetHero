@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { api } from "@/util/api";
 import { useSettings } from "@/util/storage";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
-import { loadAllChatsFromStorage, saveChatToStorage } from "@/util/chatStorage";
+import {
+  loadAllChatsFromStorage,
+  saveChatToStorage,
+  deleteChatFromStorage,
+} from "@/util/chatStorage";
+
 import { MessageCircle } from "lucide-react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { AppInput } from "@/renderer/app/components/AppInput";
@@ -40,6 +45,17 @@ export default function App() {
   // value even before React commits the batched state update.
   const isWaitingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
+
+  // Delete a chat by id (must be inside App to access state)
+  function handleDeleteChat(chatId: string) {
+    setChats((prev) => {
+      const updated = prev.filter((chat) => chat.id !== chatId);
+      deleteChatFromStorage(chatId);
+      // If the deleted chat was active, clear activeChatId
+      if (activeChatId === chatId) setActiveChatId(undefined);
+      return updated;
+    });
+  }
 
   /** Update isWaiting state and keep the ref in sync immediately. */
   function updateIsWaiting(value: boolean): void {
@@ -404,6 +420,7 @@ export default function App() {
         onFilesChange={setExcelFiles}
         onChatSelect={handleChatSelect}
         onNewChat={createNewChat}
+        onDeleteChat={handleDeleteChat}
       />
 
       {/* =-=-= Main content =-=-= */}
