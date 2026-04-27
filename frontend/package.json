@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "lint": "eslint",
     "dev:frontend": "vite",
-    "dev:backend": "python ../main.py",
+    "dev:backend": "npx kill-port 8000 && python ../main.py",
     "dev:electron": "electron .",
     "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\""
   },
