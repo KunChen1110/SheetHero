@@ -32,42 +32,14 @@ export default function App() {
   // If the model is considered to be typing
   const [isTyping, setIsTyping] = useState(false);
 
-  // If the model is considered to be waiting for a reply from the user
-  const [isWaiting, setIsWaiting] = useState(false);
-
   // If the settings display is currently open
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // The session id in use, used for individual backend sessions
-  const [sessionId, setSessionId] = useState<string | null>(null);
-
-  // Refs that mirror isWaiting / sessionId so closures always read the latest
-  // value even before React commits the batched state update.
+  // Ref to keep track of whether we are waiting for a response from the backend
   const isWaitingRef = useRef(false);
+
+  // Ref to keep track of the current session ID for ongoing conversations
   const sessionIdRef = useRef<string | null>(null);
-
-  // Delete a chat by id (must be inside App to access state)
-  function handleDeleteChat(chatId: string) {
-    setChats((prev) => {
-      const updated = prev.filter((chat) => chat.id !== chatId);
-      deleteChatFromStorage(chatId);
-      // If the deleted chat was active, clear activeChatId
-      if (activeChatId === chatId) setActiveChatId(undefined);
-      return updated;
-    });
-  }
-
-  /** Update isWaiting state and keep the ref in sync immediately. */
-  function updateIsWaiting(value: boolean): void {
-    isWaitingRef.current = value;
-    setIsWaiting(value);
-  }
-
-  /** Update sessionId state and keep the ref in sync immediately. */
-  function updateSessionId(value: string | null): void {
-    sessionIdRef.current = value;
-    setSessionId(value);
-  }
 
   // Reference used to scroll to the bottom of the chat box
   const scrollReference = useRef<HTMLDivElement>(null);
@@ -83,6 +55,27 @@ export default function App() {
 
   // The current output mode (file or text)
   const [outputMode, setOutputMode] = useState<"file" | "text">("file");
+
+  // Delete a chat by id (must be inside App to access state)
+  function handleDeleteChat(chatId: string) {
+    setChats((prev) => {
+      const updated = prev.filter((chat) => chat.id !== chatId);
+      deleteChatFromStorage(chatId);
+      // If the deleted chat was active, clear activeChatId
+      if (activeChatId === chatId) setActiveChatId(undefined);
+      return updated;
+    });
+  }
+
+  // Update isWaiting state and keep the ref in sync immediately.
+  function updateIsWaiting(value: boolean): void {
+    isWaitingRef.current = value;
+  }
+
+  // Update sessionId state and keep the ref in sync immediately.
+  function updateSessionId(value: string | null): void {
+    sessionIdRef.current = value;
+  }
 
   // Handles when the settings button is clicked
   function handleSettingsClick(): void {
@@ -135,6 +128,7 @@ export default function App() {
     else return words;
   }
 
+  // Creates a new chat with a default title and sets it as the active chat
   function createNewChat(): void {
     const newChat: Chat = {
       id: Date.now().toString(),
@@ -151,6 +145,7 @@ export default function App() {
     updateIsWaiting(false);
   }
 
+  // Creates a new message in the active chat and gets a response from the backend
   async function createNewMessage(content: string): Promise<void> {
     const userMessage: Message = {
       id: Date.now().toString(),
