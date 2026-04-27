@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { api } from "@/util/api";
 import { useSettings } from "@/util/storage";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
+import { loadAllChatsFromStorage, saveChatToStorage } from "@/util/chatStorage";
 import { MessageCircle } from "lucide-react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { AppInput } from "@/renderer/app/components/AppInput";
@@ -15,7 +16,7 @@ export default function App() {
   const { settings, saveSettings } = useSettings();
 
   // The array of chat histories
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [chats, setChats] = useState<Chat[]>(() => loadAllChatsFromStorage());
 
   // The current active chat id
   const [activeChatId, setActiveChatId] = useState<string>();
@@ -106,6 +107,11 @@ export default function App() {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  // Automatically load all chats from storage (in case localStorage changes externally)
+  useEffect(() => {
+    setChats(loadAllChatsFromStorage());
+  }, []);
+
   // Creates a basic chat title for the chat history
   function generateChatTitle(firstMessage: string): string {
     const words = firstMessage.split(" ").slice(0, 4).join(" ");
@@ -119,7 +125,11 @@ export default function App() {
       title: "New Chat",
       messages: [],
     };
-    setChats((prev) => [newChat, ...prev]);
+    setChats((prev) => {
+      const updated = [newChat, ...prev];
+      saveChatToStorage(newChat);
+      return updated;
+    });
     setActiveChatId(newChat.id);
     updateSessionId(null);
     updateIsWaiting(false);
@@ -132,8 +142,8 @@ export default function App() {
       content,
     };
 
-    setChats((prevChats) =>
-      prevChats.map((chat) =>
+    setChats((prevChats) => {
+      const updated = prevChats.map((chat) =>
         chat.id === activeChatId
           ? {
               ...chat,
@@ -144,60 +154,66 @@ export default function App() {
                   : chat.title,
             }
           : chat,
-      ),
-    );
+      );
+      // Save updated chat
+      const updatedChat = updated.find((c) => c.id === activeChatId);
+      if (updatedChat) saveChatToStorage(updatedChat);
+      return updated;
+    });
 
     setIsTyping(true);
 
     try {
       let assistantContent: string;
-
-      // Use refs (not state) for the routing decision so we always read the
-      // latest committed value even if React hasn't re-rendered yet.
       const waitingNow = isWaitingRef.current;
       const sessionNow = sessionIdRef.current;
       console.debug(
         `[SheetHero] send — isWaiting=${waitingNow}, sessionId=${sessionNow}`,
-        "→ routing to:", waitingNow && sessionNow ? "sendReply" : "startConversation",
+        "→ routing to:",
+        waitingNow && sessionNow ? "sendReply" : "startConversation",
       );
 
       if (waitingNow && sessionNow) assistantContent = await sendReply(content);
       else assistantContent = await startConversation(content);
 
-    let parsedContent = assistantContent;
-    let hasOutputFile = false;
-    let outputPath: string | null = null;
-    let detailsMarkdown = "";
-    let uiThoughts = undefined;
+      let parsedContent = assistantContent;
+      let hasOutputFile = false;
+      let outputPath: string | null = null;
+      let detailsMarkdown = "";
+      let uiThoughts = undefined;
 
-    try {
-      const parsed = JSON.parse(assistantContent);
-      parsedContent = parsed.message;
-      hasOutputFile = parsed.has_output_file ?? false;
-      outputPath = parsed.output_path ?? null;
-      detailsMarkdown = parsed.details_markdown ?? "";
-      uiThoughts = parsed.ui_thoughts ?? undefined;
-    } catch {
-      // Not JSON, plain string response — that's fine
-    }
+      try {
+        const parsed = JSON.parse(assistantContent);
+        parsedContent = parsed.message;
+        hasOutputFile = parsed.has_output_file ?? false;
+        outputPath = parsed.output_path ?? null;
+        detailsMarkdown = parsed.details_markdown ?? "";
+        uiThoughts = parsed.ui_thoughts ?? undefined;
+      } catch {
+        // Not JSON, plain string response — that's fine
+      }
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: Role.ASSISTANT,
-      content: parsedContent,
-      hasOutputFile,
-      outputPath,
-      detailsMarkdown,
-      uiThoughts,
-    };
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: Role.ASSISTANT,
+        content: parsedContent,
+        hasOutputFile,
+        outputPath,
+        detailsMarkdown,
+        uiThoughts,
+      };
 
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
+      setChats((prevChats) => {
+        const updated = prevChats.map((chat) =>
           chat.id === activeChatId
             ? { ...chat, messages: [...chat.messages, assistantMessage] }
             : chat,
-        ),
-      );
+        );
+        // Save updated chat
+        const updatedChat = updated.find((c) => c.id === activeChatId);
+        if (updatedChat) saveChatToStorage(updatedChat);
+        return updated;
+      });
     } catch (error) {
       console.error(error);
       const errorMessage: Message = {
@@ -205,13 +221,17 @@ export default function App() {
         role: Role.ASSISTANT,
         content: "Error: Could not get response from backend",
       };
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
+      setChats((prevChats) => {
+        const updated = prevChats.map((chat) =>
           chat.id === activeChatId
             ? { ...chat, messages: [...chat.messages, errorMessage] }
             : chat,
-        ),
-      );
+        );
+        // Save updated chat
+        const updatedChat = updated.find((c) => c.id === activeChatId);
+        if (updatedChat) saveChatToStorage(updatedChat);
+        return updated;
+      });
     } finally {
       setIsTyping(false);
     }
@@ -281,7 +301,9 @@ export default function App() {
         );
         updateIsWaiting(false);
         if (activeSessionId) {
-          api.delete(`/sheet-hero/session/${activeSessionId}`).catch(console.error);
+          api
+            .delete(`/sheet-hero/session/${activeSessionId}`)
+            .catch(console.error);
           updateSessionId(null);
         }
         return JSON.stringify({
