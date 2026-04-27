@@ -70,14 +70,15 @@ function createWindow() {
   }
 }
 
-
 function waitForBackend(retries = 20): Promise<void> {
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      http.get("http://localhost:8000/docs", (res) => {
-        if (res.statusCode === 200) resolve();
-        else retry();
-      }).on("error", retry);
+      http
+        .get("http://localhost:8000/docs", (res) => {
+          if (res.statusCode === 200) resolve();
+          else retry();
+        })
+        .on("error", retry);
     };
     const retry = () => {
       if (retries-- > 0) setTimeout(attempt, 500);
@@ -87,18 +88,16 @@ function waitForBackend(retries = 20): Promise<void> {
   });
 }
 
-
-
 function getBackendPath(): string {
   if (app.isPackaged) {
-    const binaryName = process.platform === "win32"
-      ? "sheet-hero-backend.exe"
-      : "sheet-hero-backend";
-    return path.join(process.resourcesPath, binaryName);
+    const binaryName =
+      process.platform === "win32"
+        ? "sheet-hero-backend.exe"
+        : "sheet-hero-backend";
+    return path.join(process.resourcesPath, "backend", binaryName);
   }
   return "";
 }
-
 
 function startBackend() {
   if (app.isPackaged) {
@@ -108,12 +107,11 @@ function startBackend() {
 }
 
 // Creates the main window when the app is ready
-  app.on("ready", async () => {
-    startBackend();
+app.on("ready", async () => {
+  startBackend();
   if (app.isPackaged) await waitForBackend();
   createWindow();
 });
-
 
 app.on("will-quit", () => {
   if (backendProcess) backendProcess.kill();
