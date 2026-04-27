@@ -4,6 +4,10 @@ const CHAT_PREFIX = "chat-";
 
 // Saves a chat to localStorage
 export function saveChatToStorage(chat: Chat) {
+  // Do not save empty chats
+  if (!chat.messages || chat.messages.length === 0) {
+    return;
+  }
   try {
     localStorage.setItem(`${CHAT_PREFIX}${chat.id}`, JSON.stringify(chat));
   } catch (error) {
