@@ -431,7 +431,7 @@ export default function App() {
             )}
 
             {/* Chats container */}
-            {chats.length === 0
+            {chats.length === 0 || !activeChatId
               ? renderEmptyChat()
               : messages.length === 0
                 ? renderChatEmptyMessages()
@@ -447,6 +447,7 @@ export default function App() {
           <AppInput
             onSendMessage={createNewMessage}
             hasApiKey={hasApiKey}
+            hasActiveChat={!!activeChatId}
             isTyping={isTyping}
             outputMode={outputMode}
             onOutputModeChange={setOutputMode}
