@@ -1,19 +1,19 @@
 {
   "name": "sheet-hero",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "src/main/electron.ts",
   "scripts": {
-    "build:backend": "cd ../backend && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && shx mkdir -p ../frontend/python-dist && shx cp dist/sheet-hero-backend* ../frontend/python-dist/",
+    "build:backend": "cd .. && pyinstaller --onefile --noconsole --name sheet-hero-backend main.py && shx mkdir -p frontend/python-dist && shx cp dist/sheet-hero-backend* frontend/python-dist/",
     "build:electron": "vite build && electron-builder",
     "build": "npm run build:backend && npm run build:electron",
     "preview": "vite preview",
     "lint": "eslint",
     "dev:frontend": "vite",
-    "dev:backend": "python ../main.py",
+    "dev:backend": "npx kill-port 8000 && python ../main.py",
     "dev:electron": "electron .",
-    "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\" "
+    "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:backend\" \"npm:dev:electron\""
   },
   "dependencies": {
     "lucide-react": "^0.563.0",

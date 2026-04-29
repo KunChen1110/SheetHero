@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { api } from "@/util/api";
 import { useSettings } from "@/util/storage";
 import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
+import {
+  loadAllChatsFromStorage,
+  saveChatToStorage,
+  deleteChatFromStorage,
+} from "@/util/chatStorage";
+
 import { MessageCircle } from "lucide-react";
 import { Sidebar } from "@/renderer/app/components/Sidebar";
 import { AppInput } from "@/renderer/app/components/AppInput";
@@ -15,7 +21,7 @@ export default function App() {
   const { settings, saveSettings } = useSettings();
 
   // The array of chat histories
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [chats, setChats] = useState<Chat[]>(() => loadAllChatsFromStorage());
 
   // The current active chat id
   const [activeChatId, setActiveChatId] = useState<string>();
@@ -26,31 +32,14 @@ export default function App() {
   // If the model is considered to be typing
   const [isTyping, setIsTyping] = useState(false);
 
-  // If the model is considered to be waiting for a reply from the user
-  const [isWaiting, setIsWaiting] = useState(false);
-
   // If the settings display is currently open
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // The session id in use, used for individual backend sessions
-  const [sessionId, setSessionId] = useState<string | null>(null);
-
-  // Refs that mirror isWaiting / sessionId so closures always read the latest
-  // value even before React commits the batched state update.
+  // Ref to keep track of whether we are waiting for a response from the backend
   const isWaitingRef = useRef(false);
+
+  // Ref to keep track of the current session ID for ongoing conversations
   const sessionIdRef = useRef<string | null>(null);
-
-  /** Update isWaiting state and keep the ref in sync immediately. */
-  function updateIsWaiting(value: boolean): void {
-    isWaitingRef.current = value;
-    setIsWaiting(value);
-  }
-
-  /** Update sessionId state and keep the ref in sync immediately. */
-  function updateSessionId(value: string | null): void {
-    sessionIdRef.current = value;
-    setSessionId(value);
-  }
 
   // Reference used to scroll to the bottom of the chat box
   const scrollReference = useRef<HTMLDivElement>(null);
@@ -66,6 +55,27 @@ export default function App() {
 
   // The current output mode (file or text)
   const [outputMode, setOutputMode] = useState<"file" | "text">("file");
+
+  // Delete a chat by id (must be inside App to access state)
+  function handleDeleteChat(chatId: string) {
+    setChats((prev) => {
+      const updated = prev.filter((chat) => chat.id !== chatId);
+      deleteChatFromStorage(chatId);
+      // If the deleted chat was active, clear activeChatId
+      if (activeChatId === chatId) setActiveChatId(undefined);
+      return updated;
+    });
+  }
+
+  // Update isWaiting state and keep the ref in sync immediately.
+  function updateIsWaiting(value: boolean): void {
+    isWaitingRef.current = value;
+  }
+
+  // Update sessionId state and keep the ref in sync immediately.
+  function updateSessionId(value: string | null): void {
+    sessionIdRef.current = value;
+  }
 
   // Handles when the settings button is clicked
   function handleSettingsClick(): void {
@@ -106,6 +116,11 @@ export default function App() {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  // Automatically load all chats from storage (in case localStorage changes externally)
+  useEffect(() => {
+    setChats(loadAllChatsFromStorage());
+  }, []);
+
   // Creates a basic chat title for the chat history
   function generateChatTitle(firstMessage: string): string {
     const words = firstMessage.split(" ").slice(0, 4).join(" ");
@@ -113,18 +128,24 @@ export default function App() {
     else return words;
   }
 
+  // Creates a new chat with a default title and sets it as the active chat
   function createNewChat(): void {
     const newChat: Chat = {
       id: Date.now().toString(),
       title: "New Chat",
       messages: [],
     };
-    setChats((prev) => [newChat, ...prev]);
+    setChats((prev) => {
+      const updated = [newChat, ...prev];
+      saveChatToStorage(newChat);
+      return updated;
+    });
     setActiveChatId(newChat.id);
     updateSessionId(null);
     updateIsWaiting(false);
   }
 
+  // Creates a new message in the active chat and gets a response from the backend
   async function createNewMessage(content: string): Promise<void> {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -132,8 +153,8 @@ export default function App() {
       content,
     };
 
-    setChats((prevChats) =>
-      prevChats.map((chat) =>
+    setChats((prevChats) => {
+      const updated = prevChats.map((chat) =>
         chat.id === activeChatId
           ? {
               ...chat,
@@ -144,60 +165,66 @@ export default function App() {
                   : chat.title,
             }
           : chat,
-      ),
-    );
+      );
+      // Save updated chat
+      const updatedChat = updated.find((c) => c.id === activeChatId);
+      if (updatedChat) saveChatToStorage(updatedChat);
+      return updated;
+    });
 
     setIsTyping(true);
 
     try {
       let assistantContent: string;
-
-      // Use refs (not state) for the routing decision so we always read the
-      // latest committed value even if React hasn't re-rendered yet.
       const waitingNow = isWaitingRef.current;
       const sessionNow = sessionIdRef.current;
       console.debug(
         `[SheetHero] send — isWaiting=${waitingNow}, sessionId=${sessionNow}`,
-        "→ routing to:", waitingNow && sessionNow ? "sendReply" : "startConversation",
+        "→ routing to:",
+        waitingNow && sessionNow ? "sendReply" : "startConversation",
       );
 
       if (waitingNow && sessionNow) assistantContent = await sendReply(content);
       else assistantContent = await startConversation(content);
 
-    let parsedContent = assistantContent;
-    let hasOutputFile = false;
-    let outputPath: string | null = null;
-    let detailsMarkdown = "";
-    let uiThoughts = undefined;
+      let parsedContent = assistantContent;
+      let hasOutputFile = false;
+      let outputPath: string | null = null;
+      let detailsMarkdown = "";
+      let uiThoughts = undefined;
 
-    try {
-      const parsed = JSON.parse(assistantContent);
-      parsedContent = parsed.message;
-      hasOutputFile = parsed.has_output_file ?? false;
-      outputPath = parsed.output_path ?? null;
-      detailsMarkdown = parsed.details_markdown ?? "";
-      uiThoughts = parsed.ui_thoughts ?? undefined;
-    } catch {
-      // Not JSON, plain string response — that's fine
-    }
+      try {
+        const parsed = JSON.parse(assistantContent);
+        parsedContent = parsed.message;
+        hasOutputFile = parsed.has_output_file ?? false;
+        outputPath = parsed.output_path ?? null;
+        detailsMarkdown = parsed.details_markdown ?? "";
+        uiThoughts = parsed.ui_thoughts ?? undefined;
+      } catch {
+        // Not JSON, plain string response — that's fine
+      }
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: Role.ASSISTANT,
-      content: parsedContent,
-      hasOutputFile,
-      outputPath,
-      detailsMarkdown,
-      uiThoughts,
-    };
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: Role.ASSISTANT,
+        content: parsedContent,
+        hasOutputFile,
+        outputPath,
+        detailsMarkdown,
+        uiThoughts,
+      };
 
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
+      setChats((prevChats) => {
+        const updated = prevChats.map((chat) =>
           chat.id === activeChatId
             ? { ...chat, messages: [...chat.messages, assistantMessage] }
             : chat,
-        ),
-      );
+        );
+        // Save updated chat
+        const updatedChat = updated.find((c) => c.id === activeChatId);
+        if (updatedChat) saveChatToStorage(updatedChat);
+        return updated;
+      });
     } catch (error) {
       console.error(error);
       const errorMessage: Message = {
@@ -205,13 +232,17 @@ export default function App() {
         role: Role.ASSISTANT,
         content: "Error: Could not get response from backend",
       };
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
+      setChats((prevChats) => {
+        const updated = prevChats.map((chat) =>
           chat.id === activeChatId
             ? { ...chat, messages: [...chat.messages, errorMessage] }
             : chat,
-        ),
-      );
+        );
+        // Save updated chat
+        const updatedChat = updated.find((c) => c.id === activeChatId);
+        if (updatedChat) saveChatToStorage(updatedChat);
+        return updated;
+      });
     } finally {
       setIsTyping(false);
     }
@@ -281,7 +312,9 @@ export default function App() {
         );
         updateIsWaiting(false);
         if (activeSessionId) {
-          api.delete(`/sheet-hero/session/${activeSessionId}`).catch(console.error);
+          api
+            .delete(`/sheet-hero/session/${activeSessionId}`)
+            .catch(console.error);
           updateSessionId(null);
         }
         return JSON.stringify({
@@ -382,6 +415,7 @@ export default function App() {
         onFilesChange={setExcelFiles}
         onChatSelect={handleChatSelect}
         onNewChat={createNewChat}
+        onDeleteChat={handleDeleteChat}
       />
 
       {/* =-=-= Main content =-=-= */}
@@ -397,7 +431,7 @@ export default function App() {
             )}
 
             {/* Chats container */}
-            {chats.length === 0
+            {chats.length === 0 || !activeChatId
               ? renderEmptyChat()
               : messages.length === 0
                 ? renderChatEmptyMessages()
@@ -413,6 +447,7 @@ export default function App() {
           <AppInput
             onSendMessage={createNewMessage}
             hasApiKey={hasApiKey}
+            hasActiveChat={!!activeChatId}
             isTyping={isTyping}
             outputMode={outputMode}
             onOutputModeChange={setOutputMode}

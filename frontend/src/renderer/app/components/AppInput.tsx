@@ -5,14 +5,16 @@ import { Send } from "lucide-react";
 interface AppInputProperties {
   onSendMessage: (message: string) => void;
   hasApiKey?: boolean;
+  hasActiveChat?: boolean;
   isTyping?: boolean;
-    outputMode: "file" | "text";
+  outputMode: "file" | "text";
   onOutputModeChange: (mode: "file" | "text") => void;
 }
 
 export function AppInput({
   onSendMessage,
   hasApiKey,
+  hasActiveChat,
   isTyping,
   outputMode,
   onOutputModeChange,
@@ -24,7 +26,7 @@ export function AppInput({
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
 
-    if (input.trim() && !isTyping && hasApiKey) {
+    if (input.trim() && !isTyping && hasApiKey && hasActiveChat) {
       onSendMessage(input.trim());
       setInput("");
     }
@@ -39,7 +41,7 @@ export function AppInput({
           <textarea
             className="flex-1 resize-none p-4 text-sm text-(--sh-white) placeholder-(--sh-grey) focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             value={input}
-            disabled={!hasApiKey || isTyping}
+            disabled={!hasApiKey || !hasActiveChat || isTyping}
             rows={1}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -52,9 +54,11 @@ export function AppInput({
               // Different hints depending on state
               !hasApiKey
                 ? "Configure API key in settings to start..."
-                : isTyping
-                  ? "Thinking of a response..."
-                  : "Ask me a question"
+                : !hasActiveChat
+                  ? "Select a chat to start messaging..."
+                  : isTyping
+                    ? "Thinking of a response..."
+                    : "Ask me a question"
             }
             style={{
               minHeight: "50px",
@@ -97,7 +101,7 @@ export function AppInput({
           <button
             className="mr-2 p-2 rounded-lg bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             type="submit"
-            disabled={!input.trim() || isTyping || !hasApiKey}
+            disabled={!input.trim() || isTyping || !hasApiKey || !hasActiveChat}
           >
             <Send size={22} />
           </button>
