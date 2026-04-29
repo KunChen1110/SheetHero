@@ -1,10 +1,14 @@
 import uvicorn
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
 
-from backend.agent.core.SheetHero import SheetHero
 from backend.config.settings import Config
 from backend.service.sheethero_service import SheetHeroService
 from backend.service.stream_dialogue_driver import StreamDialogueDriver
@@ -87,4 +91,20 @@ def end_session(session_id: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port = 8000)
+    import subprocess
+    import threading
+    import time
+
+    frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+
+    def run_frontend():
+        subprocess.run(["npm", "run", "dev:frontend"], cwd=frontend_dir, shell=os.name == "nt")
+
+    def run_electron():
+        time.sleep(3)
+        subprocess.run(["npx", "electron", "."], cwd=frontend_dir, shell=os.name == "nt")
+
+    threading.Thread(target=run_frontend, daemon=True).start()
+    threading.Thread(target=run_electron, daemon=True).start()
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
