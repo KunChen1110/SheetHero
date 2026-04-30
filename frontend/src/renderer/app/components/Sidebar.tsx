@@ -11,6 +11,7 @@ interface SidebarProperties {
   onFilesChange: (files: ExcelFile[]) => void;
   onChatSelect: (chatId: string) => void;
   onNewChat: () => void;
+  onDeleteChat: (chatId: string) => void;
   files: ExcelFile[];
   chats: Chat[];
   activeChat?: string;
@@ -40,6 +41,7 @@ export function Sidebar({
   onFilesChange,
   onChatSelect,
   onNewChat,
+  onDeleteChat,
   files,
   chats,
   activeChat,
@@ -76,11 +78,6 @@ export function Sidebar({
     } catch (error) {
       console.error("Error opening file dialog:", error);
     }
-  }
-
-  // TODO: this does not work with drag and drop, and is not used at all with manual selection
-  function addFiles(newFiles: File[]): void {
-    console.log(newFiles);
   }
 
   // Removes a file from the file list
@@ -127,11 +124,7 @@ export function Sidebar({
         }
       />
 
-      <SidebarFileDisplay
-        files={files}
-        onAddFiles={addFiles}
-        onRemoveFile={removeFile}
-      />
+      <SidebarFileDisplay files={files} onRemoveFile={removeFile} />
 
       {/* =-=-= Chat display =-=-= */}
       <SidebarHeader
@@ -153,6 +146,7 @@ export function Sidebar({
           activeChat={activeChat}
           onChatSelect={onChatSelect}
           onNewChat={onNewChat}
+          onRemoveChat={onDeleteChat}
         />
       </div>
 
