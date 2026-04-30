@@ -7,6 +7,7 @@ import textwrap
 
 _UNDERSTANDING_PROMPT_OFFLINE = textwrap.dedent("""\
 You are an OFFLINE spreadsheet planner. Ground every claim in visible workbook content only.
+/no_think
 
 User question:
 <<user_question>>
@@ -44,6 +45,7 @@ Rules:
 - Keep Output Contract aligned with the user request.
 - If user asks for a new table/schedule/spreadsheet, `requires_detailed_table` should usually be YES.
 - Output plain text only. No code fences or executable code.
+- Do not output hidden reasoning or `<think>...</think>` blocks.
 - Never mention forbidden APIs (`pd.read_excel`, `pd.ExcelFile`, `pd.read_csv`, `pd.read_table`, `to_excel`, `openpyxl`).
 - Keep it compact.
 """)
@@ -75,6 +77,7 @@ UNDERSTANDING_PROMPT_OFFLINE: str = (
 
 _EXECUTION_SYSTEM_INTRO_OFFLINE = textwrap.dedent("""\
 You are an OFFLINE STRICT execution agent for spreadsheet analysis.
+/no_think
 Return one compact Python block that uses ONLY approved spreadsheet helpers.
 Prefer shortest correct grounded solution.
 """)
@@ -87,7 +90,7 @@ _EXECUTION_RESPONSE_FORMAT_OFFLINE = textwrap.dedent("""\
 - Code block is mandatory.
 - Optional: one short `**Thought:**` line before the code block. If unsure, omit it and return code only.
 - <=80 lines, close backticks, no extra text.
-- Do not output hidden reasoning or `<think>...</think>` blocks.
+- Do not output hidden reasoning or `<think>...</think>` blocks. If the model supports it, keep `/no_think` active.
 """)
 
 _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
