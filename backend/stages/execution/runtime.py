@@ -57,7 +57,7 @@ def _resolve_initial_exec_max_tokens(deployment: str, bounded_exec_max_tokens: i
         except ValueError:
             pass
     if _is_thinking_model(deployment):
-        return min(bounded_exec_max_tokens, 1024)
+        return min(bounded_exec_max_tokens, 768)
     return 768
 
 
@@ -69,7 +69,7 @@ def _resolve_recovery_max_tokens(deployment: str, bounded_exec_max_tokens: int) 
         except ValueError:
             pass
     if _is_thinking_model(deployment):
-        return bounded_exec_max_tokens
+        return min(bounded_exec_max_tokens, 768)
     return 768
 
 
@@ -425,6 +425,26 @@ class ExecutionRuntime(StageRuntime):
             "- Do not use placeholder outputs; write real result rows."
         )
 
+    @staticmethod
+    def _offline_no_think_prefix() -> str:
+        return (
+            "/no_think\n"
+            "Return exactly one runnable ```python ... ``` block. "
+            "Do not include Thought, explanation, or hidden reasoning.\n"
+        )
+
+    @staticmethod
+    def _compact_text_for_prompt(text: str, max_chars: int = 1200) -> str:
+        """Keep repair prompts within small local-model context windows."""
+        cleaned = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r"</?think>", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+\n", "\n", cleaned).strip()
+        if len(cleaned) <= max_chars:
+            return cleaned
+        head = cleaned[: max_chars // 2].rstrip()
+        tail = cleaned[-max_chars // 2 :].lstrip()
+        return f"{head}\n...[truncated for context budget]...\n{tail}"
+
     def _handle_offline_forbidden(
         self,
         code_action: str,
@@ -539,6 +559,7 @@ class ExecutionRuntime(StageRuntime):
         if self._is_offline_strict:
             user_content = (
                 "OFFLINE_EXECUTION_START:\n"
+                f"{self._offline_no_think_prefix()}"
                 "Return ONE short complete ```python ... ``` block only.\n"
                 "Skip the Thought section unless it is one short line and the code block follows immediately.\n"
                 "Keep code under 60 lines.\n"
@@ -561,6 +582,7 @@ class ExecutionRuntime(StageRuntime):
         schema_snapshot = self._build_schema_snapshot()
         user_content = (
             "LLM_CONNECTION_RECOVERY: the previous response could not be generated.\n"
+            f"{self._offline_no_think_prefix()}"
             "Return ONE short complete ```python ... ``` block only.\n"
             "Do not spend tokens on a standalone Thought section.\n"
             "Keep code under 60 lines.\n"
@@ -570,6 +592,7 @@ class ExecutionRuntime(StageRuntime):
             f"User Question:\n{user_question}\n"
         )
         if schema_snapshot:
+            schema_snapshot = self._compact_text_for_prompt(schema_snapshot, max_chars=1200)
             user_content += (
                 f"\nRuntime schema snapshot:\n{schema_snapshot}\n"
                 "Use these exact files and headers.\n"
@@ -589,9 +612,14 @@ class ExecutionRuntime(StageRuntime):
             return None, None
 
         task_loop_breaker = get_task_specific_loop_breaker(user_question)
-        schema_snapshot = self._build_schema_snapshot()
+        schema_snapshot = self._compact_text_for_prompt(
+            self._build_schema_snapshot(),
+            max_chars=1200,
+        )
+        plan_text = self._compact_text_for_prompt(plan_text, max_chars=900)
         user_content = (
             "PLAN_TO_CODE_RECOVERY: your previous reply explained the solution but did not include executable code.\n"
+            f"{self._offline_no_think_prefix()}"
             "Convert the plan below into exactly one runnable ```python ... ``` block.\n"
             "Start the very first line with ```python.\n"
             "Do not include Thought, explanation, or markdown outside the code block.\n"
@@ -901,6 +929,7 @@ class ExecutionRuntime(StageRuntime):
                         )
                     format_msg = (
                         "FORMAT_ERROR_EXECUTION: executable code is required.\n"
+                        f"{self._offline_no_think_prefix() if self._is_offline_strict else ''}"
                         "Reply with exactly one ```python ... ``` block.\n"
                         "Start the very first line with ```python.\n"
                         "Any Thought, explanation, or planning text will be discarded.\n"
@@ -909,6 +938,11 @@ class ExecutionRuntime(StageRuntime):
                         f"{strict_repair}"
                     )
                     if schema_snapshot:
+                        if self._is_offline_strict:
+                            schema_snapshot = self._compact_text_for_prompt(
+                                schema_snapshot,
+                                max_chars=1200,
+                            )
                         format_msg += f"\nRuntime schema snapshot:\n{schema_snapshot}\nUse these exact files and headers.\n"
                     if task_loop_breaker:
                         format_msg += task_loop_breaker
@@ -941,6 +975,8 @@ class ExecutionRuntime(StageRuntime):
                         + "\nReturn one full corrected ```python ... ``` block. "
                         "Keep minimal edits and preserve task logic."
                     )
+                    if self._is_offline_strict:
+                        preflight_feedback = self._offline_no_think_prefix() + preflight_feedback
                     task_loop_breaker = get_task_specific_loop_breaker(user_question)
                     if task_loop_breaker and (turn >= 1 or self._same_preflight_streak >= self._max_same_preflight_streak):
                         preflight_feedback += task_loop_breaker
