@@ -241,6 +241,7 @@ def test_offline_runtime_format_repair_demands_code_first_response(monkeypatch):
     )
 
     assert result["success"] is True
+    assert "/no_think" in calls["repair_prompt"]
     assert "Start the very first line with ```python." in calls["repair_prompt"]
     assert "Any Thought, explanation, or planning text will be discarded." in calls["repair_prompt"]
 
@@ -323,7 +324,70 @@ def test_offline_runtime_uses_plan_to_code_recovery_for_thought_only_response(mo
     assert result["success"] is True
     assert calls["count"] == 2
     assert "PLAN_TO_CODE_RECOVERY" in calls["recovery_prompt"]
+    assert "/no_think" in calls["recovery_prompt"]
     assert "Plan: merge the tables, summarize spending, then save the workbook." in calls["recovery_prompt"]
+
+
+def test_offline_runtime_compacts_qwen3_thought_only_recovery_prompt(monkeypatch):
+    monkeypatch.delenv("SHEETHERO_ENABLE_SKILL_FAST_PATH", raising=False)
+    monkeypatch.delenv("SHEETHERO_INITIAL_EXEC_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("SHEETHERO_LLM_RECOVERY_MAX_TOKENS", raising=False)
+    runtime = ExecutionRuntime(
+        client=_ClientStub(),
+        deployment="qwen3:8b",
+        sandbox=_SandboxStub(),
+        excel_context_execution="",
+        prompt_profile="offline_strict",
+    )
+
+    long_plan = "<think>\n" + ("reasoning about table operations. " * 220)
+    captured = {"prompts": [], "max_tokens": []}
+
+    def _get_response(messages, **kwargs):
+        captured["prompts"].append(messages[-1]["content"])
+        captured["max_tokens"].append(kwargs.get("max_tokens"))
+        if len(captured["prompts"]) == 1:
+            return SimpleNamespace(content=long_plan)
+        return SimpleNamespace(
+            content=(
+                "```python\n"
+                "tables = load_all_tables()\n"
+                "create_output_sheet('Output')\n"
+                "write_dataframe_to_sheet([['Metric', 'Value'], ['Rows', 1]], 'Output', 'A1')\n"
+                "saved_file = save_workbook_to(output_path)\n"
+                "print('SAVED_FILE:', saved_file)\n"
+                "saved_file\n"
+                "```"
+            )
+        )
+
+    runtime.llm_client = SimpleNamespace(get_response=_get_response)
+    runtime.executor = SimpleNamespace(
+        check_forbidden_bounded=lambda _code: None,
+        execute=lambda _code: "Wrote 2 rows to Output!A1:B2\nSAVED_FILE: /tmp/out.xlsx",
+    )
+    runtime.grounding = SimpleNamespace(
+        build_schema_snapshot=lambda: "\n".join(
+            f"- `file_{i}.csv` | columns=ColA, ColB, ColC"
+            for i in range(80)
+        ),
+        available_workbook_basenames=lambda: [],
+        observed_header_set=lambda: set(),
+        detect_unknown_filename_lookup=lambda _code: None,
+    )
+
+    result = runtime.run(
+        understanding_output="requires_detailed_table: YES",
+        user_question="Create an output spreadsheet.",
+        max_turns=1,
+    )
+
+    assert result["success"] is True
+    assert captured["max_tokens"][0] == 768
+    assert captured["max_tokens"][1] == 768
+    assert "/no_think" in captured["prompts"][1]
+    assert "...[truncated for context budget]..." in captured["prompts"][1]
+    assert len(captured["prompts"][1]) < 3000
 
 
 def test_offline_runtime_still_calls_llm_for_skill_matched_questions(monkeypatch):
@@ -594,6 +658,7 @@ def test_offline_runtime_compacts_repair_turn_after_preflight(monkeypatch):
     assert calls["message_counts"][1] == 3
     assert calls["max_tokens"][0] == 768
     assert calls["max_tokens"][1] <= 768
+    assert calls["last_user"][1].startswith("/no_think")
     assert "PREFLIGHT_ASSIGNMENT_SCHEDULE" in calls["last_user"][1]
 
 

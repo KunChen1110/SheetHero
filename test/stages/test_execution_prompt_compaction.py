@@ -46,6 +46,8 @@ def test_offline_execution_and_understanding_prompts_align_on_helper_first_loadi
 
     assert "load_all_tables()" in execution_prompt
     assert "load_all_tables()" in understanding_prompt
+    assert "/no_think" in understanding_prompt
+    assert "Do not output hidden reasoning" in understanding_prompt
     assert "read_table_multi" not in understanding_prompt
 
 
@@ -63,7 +65,7 @@ def test_execution_runtime_uses_tighter_offline_token_budget_by_default(monkeypa
     assert runtime._bounded_exec_max_tokens == 1536
 
 
-def test_qwen3_execution_runtime_uses_larger_initial_and_recovery_budgets(monkeypatch):
+def test_qwen3_execution_runtime_uses_context_safe_initial_and_recovery_budgets(monkeypatch):
     monkeypatch.delenv("SHEETHERO_EXECUTION_MAX_TOKENS", raising=False)
     monkeypatch.delenv("SHEETHERO_INITIAL_EXEC_MAX_TOKENS", raising=False)
     monkeypatch.delenv("SHEETHERO_LLM_RECOVERY_MAX_TOKENS", raising=False)
@@ -77,8 +79,8 @@ def test_qwen3_execution_runtime_uses_larger_initial_and_recovery_budgets(monkey
     )
 
     assert runtime._bounded_exec_max_tokens == 1536
-    assert runtime._initial_exec_max_tokens == 1024
-    assert runtime._llm_recovery_max_tokens == 1536
+    assert runtime._initial_exec_max_tokens == 768
+    assert runtime._llm_recovery_max_tokens == 768
 
 
 def test_execution_llm_client_uses_tighter_wall_timeout_by_default(monkeypatch):
@@ -142,6 +144,7 @@ def test_offline_execution_prompt_bans_think_tags():
         "write result to output file"
     )
 
+    assert "/no_think" in prompt
     assert "<think>" in prompt
     assert "Do not output hidden reasoning" in prompt
 

@@ -65,7 +65,7 @@ class UnderstandingStage(Stage):
         # LLM-first instead of bypassing it with a fixed scaffold.
         llm_kwargs = {}
         if self.prompt_builder.profile == "offline_strict":
-            llm_kwargs["max_tokens"] = 3000
+            llm_kwargs["max_tokens"] = 900
         try:
             understanding_output = call_llm(self.client, self.deployment, messages, **llm_kwargs)
             if not understanding_output.strip():
@@ -127,6 +127,7 @@ class UnderstandingStage(Stage):
             context_lines = ["- Workbook context available."]
         skill_block = f"\nPrimary skill hint:\n{skill_hint}\n" if skill_hint else ""
         prompt_text = (
+            "/no_think\n"
             "Return a short planning summary only.\n"
             "Use this structure exactly:\n"
             "### 1. Sheet Summary\n"
@@ -140,7 +141,7 @@ class UnderstandingStage(Stage):
             f"User Question:\n{user_question}\n\n"
             f"Workbook Context:\n{chr(10).join(context_lines)}\n"
             f"{skill_block}"
-            "Ground the plan in the visible schema. Do not output code."
+            "Ground the plan in the visible schema. Do not output code or hidden reasoning."
         )
         return [{"role": "user", "content": prompt_text}]
 
