@@ -55,6 +55,226 @@ def test_finalize_exports_structured_cleaning_policy_plan():
     assert policy_plans[0]["resolution"] == "leave_blank"
 
 
+def test_missing_value_question_payload_includes_structured_response_schema():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+            "value_type": "number",
+        },
+    }
+
+    stage.start([problem], original_question="Calculate spending totals.")
+    payload = stage.next_question_payload()
+
+    assert payload is not None
+    schema = payload["response_schema"]
+    assert schema["kind"] == "missing_value"
+    assert schema["metadata"]["column"] == "Daily Spending (£)"
+    assert [control["decision_kind"] for control in schema["controls"]] == [
+        "fill_value",
+        "skip_row",
+        "custom_reply",
+    ]
+    assert schema["controls"][0]["input"]["type"] == "number"
+    assert schema["controls"][0]["input"]["min"] == 0
+
+
+def test_structured_missing_value_reply_bypasses_natural_language_matching():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    stage.start([problem], original_question="Calculate spending totals.")
+    assert stage.next_question_payload() is not None
+    stage.consume_user_reply('{"decision_kind":"fill_value","value":50}')
+    stage.finalize_decision()
+
+    assert stage.get_last_mismatch() == ""
+    assert stage.export_cleaning_actions() == [
+        "Fill the missing value in `Daily Spending (£)` at Excel row 5 in `tc01_input01.xlsx::Sheet1` with 50."
+    ]
+
+
+def test_structured_missing_value_rejects_negative_numeric_fill_value():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        '{"decision_kind":"fill_value","value":-10}',
+    )
+
+    assert matched is False
+    assert action == ""
+    assert feedback == "Please enter a non-negative number."
+
+
+def test_structured_missing_value_rejects_non_numeric_fill_value():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        '{"decision_kind":"fill_value","value":"abc"}',
+    )
+
+    assert matched is False
+    assert action == ""
+    assert feedback == "Please enter a numeric value."
+
+
+def test_structured_custom_reply_routes_to_llm_semantic_parser(monkeypatch):
+    from backend.stages.qa import stage as qa_stage_module
+
+    monkeypatch.setattr(
+        qa_stage_module,
+        "call_llm",
+        lambda *_args, **_kwargs: "\n".join(
+            [
+                "MATCH: YES",
+                "DECISION_KIND: fill_value",
+                "VALUE: 25",
+                "SELECTED_OPTION:",
+                "POLICY_KIND:",
+                "ACTION:",
+            ]
+        ),
+    )
+
+    stage = QualityAssuranceStage(client=object(), deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        '{"decision_kind":"custom_reply","reply":"use half of the previous day spending"}',
+    )
+
+    assert matched is True
+    assert action == "Fill the missing value in `Daily Spending (£)` at Excel row 5 in `tc01_input01.xlsx::Sheet1` with 25."
+    assert feedback == ""
+
+
+def test_structured_duplicate_header_reply_creates_policy_without_text_matching():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 3,
+        "issue_type": "duplicate_header",
+        "description": "Equivalent headers compete.",
+        "question": "Which header should I treat as authoritative?",
+        "metadata": {
+            "sheet_key": "roster.xlsx::Sheet1",
+            "headers": ["Student ID", "Student_ID"],
+        },
+    }
+
+    stage.start([problem], original_question="Join roster files.")
+    assert stage.next_question_payload() is not None
+    stage.consume_user_reply('{"decision_kind":"select_header","selected_option":"Student_ID"}')
+    stage.finalize_decision()
+
+    assert stage.export_cleaning_actions() == []
+    assert stage.export_interpretation_policies() == [
+        "Treat header `Student_ID` as the authoritative field in `roster.xlsx::Sheet1` when equivalent normalized headers compete."
+    ]
+
+
+def test_structured_missing_value_policy_leave_blank_creates_policy_plan():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    grouped_problem = {
+        "id": "missing_value::titanic.xlsx::Sheet1::Cabin",
+        "issue_type": "missing_value_policy",
+        "description": "Column `Cabin` has multiple missing values.",
+        "question": "For missing `Cabin` values, should I leave them blank, fill a default, or drop those rows?",
+        "metadata": {"sheet_key": "titanic.xlsx::Sheet1", "column": "Cabin", "affected_rows": [12, 45]},
+    }
+
+    stage.start([grouped_problem], original_question="Calculate the correlation coefficient for the target and other factors.")
+    assert stage.next_question_payload() is not None
+    stage.consume_user_reply('{"decision_kind":"leave_blank","selected_option":"Leave blanks"}')
+    stage.finalize_decision()
+
+    assert stage.export_cleaning_policy_plans() == [
+        {
+            "policy_kind": "missing_value",
+            "sheet_key": "titanic.xlsx::Sheet1",
+            "column": "Cabin",
+            "affected_rows": [12, 45],
+            "resolution": "leave_blank",
+        }
+    ]
+
+
+def test_structured_missing_period_endpoint_creates_requested_window_policy():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 11,
+        "issue_type": "missing_period_endpoint",
+        "description": "Requested 2020-2024 but 2020 is missing.",
+        "question": "Should I use latest available, use available range, interpolate, or state unavailable?",
+        "metadata": {
+            "sheet_key": "growth.xlsx::Data",
+            "available_years": [2021, 2022, 2023, 2024],
+            "requested_years": [2020, 2021, 2022, 2023, 2024],
+            "available_requested_years": [2021, 2022, 2023, 2024],
+        },
+    }
+
+    stage.start([problem], original_question="Calculate the average rate for 2020 to 2024.")
+    assert stage.next_question_payload() is not None
+    stage.consume_user_reply('{"decision_kind":"shrink_window","selected_option":"Use available range"}')
+    stage.finalize_decision()
+
+    assert stage.export_interpretation_policies() == [
+        "When requested years are unavailable in `growth.xlsx::Data`, restrict the analysis window to the available requested years `2021`-`2024` and state that adjustment in the result."
+    ]
+
+
 def test_match_reply_accepts_short_normalization_choice_without_llm():
     stage = QualityAssuranceStage(client=None, deployment="offline-test")
     problem = {
@@ -100,6 +320,51 @@ def test_missing_dependency_root_reply_resolves_without_llm():
     assert stage.export_interpretation_policies() == [
         "Interpret blank `Depends on` at Excel row 7 in `plan.xlsx::Tasks` as meaning the task is a root task with no prerequisite dependency."
     ]
+
+
+def test_missing_value_reply_extracts_natural_replace_value_without_llm():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        "replace it with a daily_spending of 50",
+    )
+
+    assert matched is True
+    assert action == "Fill the missing value in `Daily Spending (£)` at Excel row 5 in `tc01_input01.xlsx::Sheet1` with 50."
+    assert feedback == ""
+
+
+def test_missing_value_reply_does_not_treat_skip_row_number_as_fill_value():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(problem, "skip row 5")
+
+    assert matched is False
+    assert action == ""
+    assert feedback == "Please answer the question directly."
 
 
 def test_match_reply_resolves_spacing_preference_without_llm():
@@ -391,6 +656,48 @@ def test_missing_value_natural_language_reply_uses_llm_semantic_fallback(monkeyp
 
     assert matched is True
     assert action == "Fill the missing value in `Daily Spending (£)` at Excel row 5 in `tc01_input01.xlsx::Sheet1` with 100."
+    assert feedback == ""
+
+
+def test_natural_language_reply_uses_llm_before_legacy_heuristics(monkeypatch):
+    from backend.stages.qa import stage as qa_stage_module
+
+    monkeypatch.setattr(
+        qa_stage_module,
+        "call_llm",
+        lambda *_args, **_kwargs: "\n".join(
+            [
+                "MATCH: YES",
+                "DECISION_KIND: fill_value",
+                "VALUE: 75",
+                "SELECTED_OPTION:",
+                "POLICY_KIND:",
+                "ACTION:",
+            ]
+        ),
+    )
+
+    stage = QualityAssuranceStage(
+        client=object(),
+        deployment="offline-test",
+        prompt_profile="offline_strict",
+    )
+    problem = {
+        "id": 10,
+        "issue_type": "missing_value",
+        "description": "Daily spending is missing.",
+        "question": "How should I handle the missing `Daily Spending (£)` value?",
+        "metadata": {
+            "sheet_key": "tc01_input01.xlsx::Sheet1",
+            "column": "Daily Spending (£)",
+            "excel_row": 5,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(problem, "replace it with 50")
+
+    assert matched is True
+    assert action == "Fill the missing value in `Daily Spending (£)` at Excel row 5 in `tc01_input01.xlsx::Sheet1` with 75."
     assert feedback == ""
 
 

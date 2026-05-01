@@ -67,6 +67,25 @@ class InteractStage(Stage):
             )
         return decision
 
+    def workbook_matches_request(self, user_message: str, workbook_summary: str) -> bool:
+        prompt_text = (
+            "You are checking whether the uploaded spreadsheet files match the user's requested task.\n"
+            "Do not solve the task. Do not infer missing files.\n\n"
+            "Return YES if the workbook summary contains the entities, columns, or tables needed to attempt the task.\n"
+            "Return NO if the request appears to refer to a different domain, different files, or required tables/columns are absent.\n"
+            "Cleaning problems inside otherwise relevant files should still be YES.\n\n"
+            "Output only YES or NO.\n\n"
+            f"User request:\n{user_message}\n\n"
+            f"Uploaded workbook summary:\n{workbook_summary or '(empty)'}"
+        )
+        decision = self._ask_yes_no(prompt_text, default=True)
+        if self.progress_logger:
+            self.progress_logger.log(
+                f"[INTERACT] workbook_matches_request={decision}",
+                to_terminal=False,
+            )
+        return decision
+
     def summarize_context(self, user_message: str) -> str:
         prompt_text = PromptBuilder().build_interact_context_summary_prompt(
             user_message=user_message
@@ -114,4 +133,3 @@ class InteractStage(Stage):
         if upper.startswith("NO"):
             return False
         return None
-

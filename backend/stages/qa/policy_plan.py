@@ -13,7 +13,9 @@ class QAIssueGroup:
     affected_rows: tuple[int, ...] = ()
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["affected_rows"] = list(self.affected_rows)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -26,4 +28,8 @@ class CleaningPolicyPlan:
     fill_value: str | None = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["affected_rows"] = list(self.affected_rows)
+        if payload.get("fill_value") is None:
+            payload.pop("fill_value", None)
+        return payload

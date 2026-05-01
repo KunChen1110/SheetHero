@@ -355,6 +355,28 @@ class SheetHero:
                 active_workbooks
             ).build(self.config.total_token_budget)
 
+        if not self.interact_module.workbook_matches_request(
+            current_request,
+            session.spreadsheet_summary or "",
+        ):
+            append_ui_thought(
+                session,
+                "understanding",
+                "error",
+                "Uploaded workbook schema does not match the requested task",
+            )
+            message = (
+                "The uploaded spreadsheet files do not appear to match this request. "
+                "Please upload the files that contain the tables/columns needed for the task, then run the request again."
+            )
+            session.result = {"final_answer": message}
+            session.state = "done"
+            return {
+                "type": "error",
+                "stage": "understanding",
+                "message": message,
+            }
+
         append_ui_thought(session, "understanding", "running", "Understanding workbook/task context")
         session.understanding = self.understanding_module.run(
             current_request,
@@ -495,6 +517,7 @@ class SheetHero:
                     "stage": "qa",
                     "message": question_payload.get("message"),
                     "details_markdown": question_payload.get("details_markdown", ""),
+                    "response_schema": question_payload.get("response_schema", {}),
                 }
 
             self.qa_stage.finalize_decision()
@@ -526,6 +549,7 @@ class SheetHero:
                     "stage": "qa",
                     "message": f"{hint}\n\nPlease answer this question:\n{followup_payload.get('message', '')}",
                     "details_markdown": followup_payload.get("details_markdown", ""),
+                    "response_schema": followup_payload.get("response_schema", {}),
                 }
             qa_stage.clear_last_mismatch()
         question_payload = qa_stage.next_question_payload()
@@ -535,6 +559,7 @@ class SheetHero:
                 "stage": "qa",
                 "message": question_payload.get("message"),
                 "details_markdown": question_payload.get("details_markdown", ""),
+                "response_schema": question_payload.get("response_schema", {}),
             }
 
         qa_stage.finalize_decision()

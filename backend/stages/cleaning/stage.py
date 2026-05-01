@@ -24,6 +24,10 @@ _DROP_ROW_ACTION_RE = re.compile(
     r"^Drop rows in `(?P<sheet_key>[^`]+)` where `(?P<column>[^`]+)` == (?P<value>.+?)\.$"
 )
 
+_DROP_EXCEL_ROW_ACTION_RE = re.compile(
+    r"^Drop Excel row (?P<row>\d+) in `(?P<sheet_key>[^`]+)`\.$"
+)
+
 
 class DataCleaningStage(Stage):
     """Cleaning stage driven by action list (LLM-produced)."""
@@ -182,6 +186,10 @@ class DataCleaningStage(Stage):
         if drop_match:
             return self._apply_drop_rows_action(workbooks, drop_match, text)
 
+        drop_excel_row_match = _DROP_EXCEL_ROW_ACTION_RE.match(text)
+        if drop_excel_row_match:
+            return self._apply_drop_excel_row_action(workbooks, drop_excel_row_match, text)
+
         match = _FILL_MISSING_ACTION_RE.match(text)
         if not match:
             return None
@@ -209,6 +217,24 @@ class DataCleaningStage(Stage):
                 f"Skipped deterministic fill for `{column_name}` at Excel row {excel_row} in `{sheet_key}` because the cell already has a value."
             )
         cell.value = parsed_value
+        return "applied_actions", text
+
+    def _apply_drop_excel_row_action(
+        self,
+        workbooks: Dict[str, Any],
+        match: re.Match,
+        text: str,
+    ) -> tuple[str, str]:
+        sheet_key = match.group("sheet_key").strip()
+        excel_row = int(match.group("row"))
+
+        workbook, worksheet = self._resolve_sheet(workbooks, sheet_key)
+        if workbook is None or worksheet is None:
+            return "skipped_actions", f"Could not resolve sheet `{sheet_key}` for action: {text}"
+        if excel_row <= 1 or excel_row > worksheet.max_row:
+            return "skipped_actions", f"Excel row {excel_row} is outside the data range in `{sheet_key}`."
+
+        worksheet.delete_rows(excel_row)
         return "applied_actions", text
 
     def _apply_drop_rows_action(

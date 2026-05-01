@@ -19,6 +19,18 @@ class _SandboxStub:
         self.workbooks = {"titanic.xlsx": wb}
 
 
+class _DropRowSandboxStub:
+    def __init__(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws.append(["Date", "Daily Spending (£)"])
+        ws.append(["2025-11-03", 89.53])
+        ws.append(["2025-11-04", None])
+        ws.append(["2025-11-05", 12.0])
+        self.workbooks = {"tc01_input01.xlsx": wb}
+
+
 def test_apply_policy_plan_leaves_missing_values_blank_without_llm():
     stage = DataCleaningStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
     sandbox = _SandboxStub()
@@ -40,3 +52,18 @@ def test_apply_policy_plan_leaves_missing_values_blank_without_llm():
     ws = sandbox.workbooks["titanic.xlsx"]["Sheet1"]
     assert ws["A2"].value is None
     assert ws["A3"].value is None
+
+
+def test_deterministic_cleaning_can_drop_exact_excel_row():
+    stage = DataCleaningStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    sandbox = _DropRowSandboxStub()
+
+    report = stage.apply(
+        sandbox,
+        ["Drop Excel row 3 in `tc01_input01.xlsx::Sheet1`."],
+    )
+
+    assert report["applied_actions"] == ["Drop Excel row 3 in `tc01_input01.xlsx::Sheet1`."]
+    ws = sandbox.workbooks["tc01_input01.xlsx"]["Sheet1"]
+    assert ws.max_row == 3
+    assert ws["A3"].value == "2025-11-05"
