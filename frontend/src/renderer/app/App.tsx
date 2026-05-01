@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/util/api";
 import { useSettings } from "@/util/storage";
-import { Chat, ExcelFile, Message, Role } from "@/util/interfaces";
+import { Chat, ClarificationResponseSchema, ExcelFile, Message, Role } from "@/util/interfaces";
 import {
   loadAllChatsFromStorage,
   saveChatToStorage,
@@ -146,11 +146,11 @@ export default function App() {
   }
 
   // Creates a new message in the active chat and gets a response from the backend
-  async function createNewMessage(content: string): Promise<void> {
+  async function createNewMessage(content: string, displayContent?: string): Promise<void> {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: Role.USER,
-      content,
+      content: displayContent ?? content,
     };
 
     setChats((prevChats) => {
@@ -161,7 +161,7 @@ export default function App() {
               messages: [...chat.messages, userMessage],
               title:
                 chat.messages.length === 0
-                  ? generateChatTitle(content)
+                  ? generateChatTitle(displayContent ?? content)
                   : chat.title,
             }
           : chat,
@@ -192,6 +192,7 @@ export default function App() {
       let outputPath: string | null = null;
       let detailsMarkdown = "";
       let uiThoughts = undefined;
+      let responseSchema: ClarificationResponseSchema | undefined = undefined;
 
       try {
         const parsed = JSON.parse(assistantContent);
@@ -200,6 +201,7 @@ export default function App() {
         outputPath = parsed.output_path ?? null;
         detailsMarkdown = parsed.details_markdown ?? "";
         uiThoughts = parsed.ui_thoughts ?? undefined;
+        responseSchema = parsed.response_schema ?? undefined;
       } catch {
         // Not JSON, plain string response — that's fine
       }
@@ -212,6 +214,7 @@ export default function App() {
         outputPath,
         detailsMarkdown,
         uiThoughts,
+        responseSchema,
       };
 
       setChats((prevChats) => {
@@ -298,6 +301,7 @@ export default function App() {
         return JSON.stringify({
           message: event.message,
           details_markdown: event.details_markdown || "",
+          response_schema: event.response_schema || null,
           ui_thoughts: allThoughts,
         });
       }
@@ -348,6 +352,11 @@ export default function App() {
       </div>
     );
   }
+
+  const activeResponseSchema = [...messages]
+    .reverse()
+    .find((message) => message.role === Role.ASSISTANT && message.responseSchema)
+    ?.responseSchema;
 
   // Renders instructions to begin the conversation if there is an active chat but no messages
   function renderChatEmptyMessages() {
@@ -451,6 +460,7 @@ export default function App() {
             isTyping={isTyping}
             outputMode={outputMode}
             onOutputModeChange={setOutputMode}
+            responseSchema={isWaitingRef.current ? activeResponseSchema : undefined}
           />
         </div>
       </div>
