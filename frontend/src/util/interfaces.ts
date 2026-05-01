@@ -17,6 +17,27 @@ export interface UiThought {
   content: unknown;
 }
 
+export interface ClarificationControlInput {
+  name: string;
+  type: "number" | "text";
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  validation_message?: string;
+}
+
+export interface ClarificationControl {
+  decision_kind: string;
+  label: string;
+  input?: ClarificationControlInput;
+}
+
+export interface ClarificationResponseSchema {
+  kind: string;
+  metadata?: Record<string, unknown>;
+  controls: ClarificationControl[];
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -25,6 +46,7 @@ export interface Message {
   outputPath?: string | null;
   detailsMarkdown?: string;
   uiThoughts?: UiThought[];
+  responseSchema?: ClarificationResponseSchema;
 }
 
 export interface ExcelFile {
