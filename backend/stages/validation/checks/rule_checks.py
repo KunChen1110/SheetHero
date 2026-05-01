@@ -119,6 +119,10 @@ class ValidationRuleCheckAdvisor:
                         "Highlight rows appear out of expected table range: "
                         + ", ".join(str(v) for v in invalid[:5])
                     )
+            if final_answer and runtime._looks_like_file_path(final_answer):
+                workbook_highlight_inspector = getattr(runtime, "_inspect_saved_highlighted_max_rows", None)
+                if callable(workbook_highlight_inspector):
+                    hard_issues.extend(workbook_highlight_inspector(final_answer, user_question))
 
         if need_summary is True:
             has_summary_signal = (

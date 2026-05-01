@@ -279,7 +279,7 @@ User message:
 """)
 
 _QA_MATCH_PROMPT = textwrap.dedent("""\
-Check whether the user's reply answers the data-cleaning question.
+Convert the user's clarification reply into a structured decision.
 
 Question:
 <<question>>
@@ -289,14 +289,25 @@ User reply:
 
 Rules:
 - Treat the reply semantically. Short, indirect, or multilingual replies still count as a match.
-- MATCH=YES if the reply gives any decision, preference, or "no change" intent.
+- MATCH=YES if the reply gives any decision, preference, selected option, fill value, or "no change" intent.
 - MATCH=NO only if the reply is completely unrelated or empty.
-- If MATCH=YES and no change is needed, set ACTION to NO_OP.
-- If MATCH=YES and a change is needed, ACTION must specify file, sheet, column(s), and operation.
+- Prefer structured fields over prose ACTION.
+- DECISION_KIND should be one of: fill_value, choose_option, select_key, select_header, normalize_to, restrict_window, use_latest, interpolate, unavailable, no_change.
+- VALUE is the exact numeric/string fill value when needed.
+- SELECTED_OPTION is the exact option/header/key/format chosen by the user when relevant.
+- ACTION is optional. Use NO_OP when no spreadsheet cell edit is needed.
+- MISSING_SLOT names the missing field if MATCH=NO.
 
-Output exactly two lines:
+Output exactly six lines:
 MATCH: YES or NO
-ACTION: <cleaning instruction>, NO_OP, or empty
+DECISION_KIND: <decision kind or empty>
+VALUE: <value or empty>
+SELECTED_OPTION: <selected option or empty>
+POLICY_KIND: <policy tag or empty>
+ACTION: <cleaning instruction, NO_OP, or empty>
+
+If MATCH=NO, add a seventh line:
+MISSING_SLOT: <short slot name>
 """)
 
 _QA_INSTRUCTION_PROMPT = textwrap.dedent("""\

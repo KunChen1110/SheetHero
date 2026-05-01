@@ -1,6 +1,7 @@
 """Quality assurance stage (LLM-assisted matching + cleaning action)."""
 
 from copy import deepcopy
+import json
 import re
 from typing import Any, Dict, Optional
 
@@ -75,7 +76,7 @@ class QualityAssuranceStage(Stage):
             f"[QA] Started with {len(self.unresolved_problems)} issue(s) to clarify."
         )
 
-    def next_question_payload(self) -> Optional[Dict[str, str]]:
+    def next_question_payload(self) -> Optional[Dict[str, Any]]:
         if not self.unresolved_problems and self.current_problem is None:
             return None
         if self.qa_rounds >= self.max_qa_rounds:
@@ -96,6 +97,7 @@ class QualityAssuranceStage(Stage):
             return {
                 "message": direct_question,
                 "details_markdown": details_markdown,
+                "response_schema": self._build_response_schema(self.current_problem),
             }
 
         prompt_text = self.prompt_builder.build_qa_question_prompt(
@@ -114,6 +116,7 @@ class QualityAssuranceStage(Stage):
         return {
             "message": self._ensure_qa_scope(question),
             "details_markdown": details_markdown,
+            "response_schema": self._build_response_schema(self.current_problem),
         }
 
     def next_question(self) -> Optional[str]:
@@ -217,6 +220,106 @@ class QualityAssuranceStage(Stage):
         if isinstance(problem, dict):
             return problem.get("description", str(problem))
         return str(problem)
+
+    @classmethod
+    def _build_response_schema(cls, problem: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a frontend-friendly structured answer schema for a QA issue."""
+        problem = problem or {}
+        issue_type = str(problem.get("issue_type") or "data_issue")
+        metadata = deepcopy(problem.get("metadata") or {})
+        column = str(metadata.get("column") or "value")
+        value_type = str(metadata.get("value_type") or "").strip().lower()
+        if not value_type:
+            normalized_column = column.lower()
+            value_type = "number" if any(token in normalized_column for token in ("amount", "spending", "cost", "price", "rate", "score", "total", "average", "qty", "count")) else "text"
+
+        def _control(decision_kind: str, label: str, input_spec: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+            control = {"decision_kind": decision_kind, "label": label}
+            if input_spec is not None:
+                control["input"] = input_spec
+            return control
+
+        def _fill_input() -> Dict[str, Any]:
+            input_spec: Dict[str, Any] = {
+                "name": "value",
+                "type": value_type,
+                "placeholder": f"Enter {column} value",
+            }
+            if value_type == "number":
+                input_spec["min"] = 0
+                input_spec["validation_message"] = "Enter a non-negative number."
+            return input_spec
+
+        if issue_type == "missing_value":
+            controls = [
+                _control(
+                    "fill_value",
+                    "Fill with value",
+                    _fill_input(),
+                ),
+                _control("skip_row", "Skip row"),
+                _control(
+                    "custom_reply",
+                    "Custom instruction",
+                    {"name": "reply", "type": "text", "placeholder": "Describe what SheetHero should do"},
+                ),
+            ]
+        elif issue_type == "missing_value_policy":
+            controls = [
+                _control(
+                    "fill_value",
+                    "Fill all with value",
+                    _fill_input(),
+                ),
+                _control("skip_rows", "Skip affected rows"),
+                _control(
+                    "custom_reply",
+                    "Custom instruction",
+                    {"name": "reply", "type": "text", "placeholder": "Describe how to handle these missing values"},
+                ),
+            ]
+        elif issue_type == "missing_key_column":
+            options = [str(value) for value in metadata.get("candidate_keys", []) if str(value).strip()]
+            controls = [_control("select_key", option) for option in options]
+        elif issue_type == "duplicate_header":
+            options = [str(value) for value in metadata.get("headers", []) if str(value).strip()]
+            controls = [_control("select_header", option) for option in options]
+        elif issue_type in {"format_inconsistency", "unit_or_time_format"}:
+            options = [str(value) for value in (metadata.get("formats") or metadata.get("format_kinds") or []) if str(value).strip()]
+            controls = [_control("normalize_to", option) for option in options]
+            controls.append(_control("keep_as_is", "Keep as-is"))
+        elif issue_type == "missing_period_endpoint":
+            controls = [
+                _control("use_latest", "Use latest available"),
+                _control("shrink_window", "Use available range"),
+                _control("interpolate", "Interpolate missing period"),
+                _control("unavailable", "State unavailable"),
+            ]
+        elif issue_type in {"duplicate_conflicting_rows", "conflicting_mapping"}:
+            values = [str(value) for value in metadata.get("candidate_values", []) if str(value).strip()]
+            controls = [
+                _control("keep_first", "Keep first"),
+                _control("keep_latest", "Keep latest"),
+            ]
+            controls.extend(_control("choose_value", value) for value in values)
+            controls.append(_control("manual_value", "Manual value", {"name": "value", "type": "text", "placeholder": "Enter correct value"}))
+        elif issue_type == "blank_row":
+            controls = [
+                _control("ignore_blank", "Ignore blank row"),
+                _control("split_table", "Treat as table separator"),
+            ]
+        else:
+            controls = [
+                _control("keep_as_is", "Keep as-is"),
+                _control("skip_row", "Skip affected row"),
+                _control("correct_value", "Correct value", {"name": "value", "type": "text", "placeholder": "Enter corrected value"}),
+            ]
+
+        return {
+            "kind": issue_type,
+            "metadata": metadata,
+            "controls": controls,
+        }
 
     @staticmethod
     def _normalize_reply(reply: str) -> str:
@@ -415,6 +518,58 @@ class QualityAssuranceStage(Stage):
             )
         return True, matched_option, ""
 
+    @classmethod
+    def _extract_numeric_fill_value(cls, reply: str, *, allow_any_number: bool = False) -> Optional[str]:
+        """Extract a user-specified numeric fill value from natural clarification text."""
+        stripped = re.sub(r"[£$€¥]", "", (reply or "")).replace(",", "")
+        normalized = cls._normalize_reply(stripped)
+        if not normalized:
+            return None
+        if any(marker in normalized for marker in ("skip", "drop", "remove", "delete", "leave blank", "keep blank")):
+            return None
+
+        bare_match = re.fullmatch(r"\s*[-+]?\d+(?:\.\d+)?\s*", stripped)
+        if bare_match:
+            return bare_match.group().strip()
+
+        patterns = (
+            r"(?:treat(?:ed)?(?:\s+(?:it|them|this|that|the\s+\w+))?\s+as)\s*([-+]?\d+(?:\.\d+)?)",
+            r"(?:set(?:\s+(?:it|them|this|that|the\s+[\w\s()/_-]+?))?\s+to)\s*([-+]?\d+(?:\.\d+)?)",
+            r"(?:use)\s*([-+]?\d+(?:\.\d+)?)",
+            r"(?:fill\s+(?:(?:it|them|this|that)\s+)?with(?:\s+(?:default|a|an|the|value(?:\s+of)?))?)\s*([-+]?\d+(?:\.\d+)?)",
+            r"(?:replace\s+(?:(?:it|them|this|that)\s+)?with\s+(?:a\s+|an\s+|the\s+)?(?:[\w\s()/_-]+?\s+of\s+)?)\s*([-+]?\d+(?:\.\d+)?)",
+            r"(?:=)\s*([-+]?\d+(?:\.\d+)?)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, stripped, flags=re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        if any(
+            marker in normalized
+            for marker in (
+                "0 spending",
+                "zero spending",
+                "0 value",
+                "zero value",
+                "0 amount",
+                "zero amount",
+                "0 cost",
+                "zero cost",
+                "0 pound",
+                "zero pound",
+                "0 pounds",
+                "zero pounds",
+            )
+        ):
+            return "0"
+
+        if allow_any_number:
+            any_number = re.search(r"\b([-+]?\d+(?:\.\d+)?)\b", stripped)
+            if any_number:
+                return any_number.group(1)
+        return None
+
     def _heuristic_match_reply(self, question: str, reply: str, problem: Optional[Dict[str, Any]] = None) -> Optional[tuple[bool, str, str]]:
         normalized_reply = self._normalize_reply(reply)
         if not normalized_reply:
@@ -437,26 +592,7 @@ class QualityAssuranceStage(Stage):
             ):
                 return True, "NO_OP", ""
             # Extract fill value from the reply (more aggressively for grouped policy questions)
-            _stripped_policy = re.sub(r"[£$€¥]", "", (reply or "")).replace(",", "")
-            _embedded_policy = re.search(
-                r"(?:treat(?:ed)?(?:\s+(?:it|them|this|that))?\s+as"
-                r"|set\s+(?:it\s+)?to"
-                r"|use"
-                r"|fill\s+(?:(?:it|them)\s+)?with(?:\s+(?:default|a))?"
-                r"(?:\s+value(?:\s+of)?)?|=)\s*([-+]?\d+(?:\.\d+)?)",
-                _stripped_policy,
-                flags=re.IGNORECASE,
-            )
-            _policy_numeric = None
-            if re.fullmatch(r"\s*[-+]?\d+(?:\.\d+)?\s*", _stripped_policy):
-                _policy_numeric = _stripped_policy.strip()
-            elif _embedded_policy:
-                _policy_numeric = _embedded_policy.group(1)
-            else:
-                # Fallback: any number mentioned in the reply
-                _any_num = re.search(r"\b([-+]?\d+(?:\.\d+)?)\b", _stripped_policy)
-                if _any_num:
-                    _policy_numeric = _any_num.group(1)
+            _policy_numeric = self._extract_numeric_fill_value(reply, allow_any_number=True)
             if _policy_numeric is not None:
                 column_name = str(metadata.get("column") or "value")
                 pairs = metadata.get("all_sheet_row_pairs") or []
@@ -523,45 +659,10 @@ class QualityAssuranceStage(Stage):
                     return True, "NO_OP", ""
             stripped = re.sub(r"[£$€¥]", "", (reply or "")).replace(",", "")
             normalized_stripped = self._normalize_reply(stripped)
-            # Bare number: the entire reply is just a number ("0", "5.50").
-            bare_match = re.fullmatch(r"\s*[-+]?\d+(?:\.\d+)?\s*", stripped)
-            # Explicit action phrase: "treat as 0", "treat it as 0", "set to 200",
-            # "fill with 0", etc. Handles optional pronoun/article between verb and "as/to".
-            # Excludes ambiguous words like "is" / "equals" to avoid false positives.
-            embedded_match = re.search(
-                r"(?:treat(?:ed)?(?:\s+(?:it|them|this|that|the\s+\w+))?\s+as"
-                r"|set\s+(?:it\s+)?to"
-                r"|use"
-                r"|fill\s+(?:it\s+)?with"
-                r"|=)\s*([-+]?\d+(?:\.\d+)?)",
-                stripped,
-                flags=re.IGNORECASE,
-            )
-            numeric_str = None
-            if bare_match:
-                numeric_str = bare_match.group().strip()
-            elif embedded_match:
-                numeric_str = embedded_match.group(1)
-            elif any(
-                marker in normalized_stripped
-                for marker in (
-                    "0 spending",
-                    "zero spending",
-                    "0 value",
-                    "zero value",
-                    "0 amount",
-                    "zero amount",
-                    "0 cost",
-                    "zero cost",
-                    "0 pound",
-                    "zero pound",
-                    "0 pounds",
-                    "zero pounds",
-                )
-            ):
-                numeric_str = "0"
-            elif (
-                self._reply_polarity(reply) is True
+            numeric_str = self._extract_numeric_fill_value(reply)
+            if (
+                numeric_str is None
+                and self._reply_polarity(reply) is True
                 and any(
                     marker in normalized_stripped
                     for marker in ("missing value", "missing values", "blank", "empty")
@@ -574,9 +675,7 @@ class QualityAssuranceStage(Stage):
             # missing entries", "I think 100 is appropriate").  Only used in offline
             # mode to avoid false positives when the cloud LLM can handle ambiguity.
             if numeric_str is None and self._is_offline:
-                any_number = re.search(r"\b([-+]?\d+(?:\.\d+)?)\b", stripped)
-                if any_number:
-                    numeric_str = any_number.group(1)
+                numeric_str = self._extract_numeric_fill_value(reply, allow_any_number=True)
 
             if numeric_str is not None:
                 column_name = str(metadata.get("column") or "value")
@@ -627,6 +726,9 @@ class QualityAssuranceStage(Stage):
         if action != "NO_OP":
             return ""
         normalized_reply = self._normalize_reply(reply)
+        structured_reply = self._parse_structured_reply(reply)
+        structured_decision = str((structured_reply or {}).get("decision_kind") or "").strip()
+        structured_option = str((structured_reply or {}).get("selected_option") or (structured_reply or {}).get("value") or "").strip()
         question_text = self._normalize_reply(
             str(problem.get("question") or problem.get("description") or "")
         )
@@ -658,7 +760,7 @@ class QualityAssuranceStage(Stage):
         if issue_type == "missing_value_policy":
             sheet_key = str(metadata.get("sheet_key") or "current sheet")
             column_name = str(metadata.get("column") or "value")
-            if any(
+            if structured_decision == "leave_blank" or any(
                 marker in normalized_reply
                 for marker in (
                     "leave them blank",
@@ -671,7 +773,7 @@ class QualityAssuranceStage(Stage):
                 )
             ):
                 return f"Leave missing `{column_name}` values unchanged in `{sheet_key}`."
-        chosen_option = self._resolve_metadata_choice(problem, reply)
+        chosen_option = structured_option or self._resolve_metadata_choice(problem, reply)
         if issue_type == "missing_key_column" and chosen_option:
             sheet_key = str(metadata.get("sheet_key") or "current sheet")
             return (
@@ -708,7 +810,7 @@ class QualityAssuranceStage(Stage):
                 - set(available_years)
             )
             sheet_key = str(metadata.get("sheet_key") or "current sheet")
-            if any(marker in normalized_reply for marker in ("interpolate", "interpolation")):
+            if structured_decision == "interpolate" or any(marker in normalized_reply for marker in ("interpolate", "interpolation")):
                 missing_text = ", ".join(str(year) for year in missing_years) if missing_years else "missing years"
                 return (
                     f"When requested years are unavailable in `{sheet_key}`, interpolate the missing years "
@@ -716,7 +818,7 @@ class QualityAssuranceStage(Stage):
                 )
             if latest_available is None:
                 return ""
-            if any(
+            if structured_decision == "unavailable" or any(
                 marker in normalized_reply
                 for marker in (
                     "no",
@@ -733,9 +835,12 @@ class QualityAssuranceStage(Stage):
                     f"Do not substitute missing requested years ({requested_text}) in `{sheet_key}`; "
                     "state that the data is unavailable for the requested period."
                 )
-            if available_requested_years and any(
-                marker in normalized_reply
-                for marker in ("shift", "exclude", "available requested years", "2021", "2022", "2023", "2024")
+            if available_requested_years and (
+                structured_decision == "shrink_window"
+                or any(
+                    marker in normalized_reply
+                    for marker in ("shift", "exclude", "available requested years", "2021", "2022", "2023", "2024")
+                )
             ):
                 start_year = min(available_requested_years)
                 end_year = max(available_requested_years)
@@ -866,17 +971,22 @@ class QualityAssuranceStage(Stage):
         issue_type = str(problem.get("issue_type") or "")
         metadata = problem.get("metadata") or {}
         normalized_reply = " ".join((reply or "").strip().lower().split())
+        structured_reply = QualityAssuranceStage._parse_structured_reply(reply)
+        structured_decision = str((structured_reply or {}).get("decision_kind") or "").strip()
         if issue_type == "missing_value_policy":
-            if action == "NO_OP" and any(
-                marker in normalized_reply
-                for marker in (
-                    "leave them blank",
-                    "leave it blank",
-                    "leave blank",
-                    "leave as is",
-                    "keep blank",
-                    "keep them blank",
-                    "keep missing",
+            if action == "NO_OP" and (
+                structured_decision == "leave_blank"
+                or any(
+                    marker in normalized_reply
+                    for marker in (
+                        "leave them blank",
+                        "leave it blank",
+                        "leave blank",
+                        "leave as is",
+                        "keep blank",
+                        "keep them blank",
+                        "keep missing",
+                    )
                 )
             ):
                 return CleaningPolicyPlan(
@@ -896,32 +1006,170 @@ class QualityAssuranceStage(Stage):
             problem = None
             question = str(question_or_problem or "")
 
+        structured = self._parse_structured_reply(reply)
+        if structured is not None:
+            if str(structured.get("decision_kind") or "").strip() == "custom_reply":
+                reply = str(structured.get("reply") or structured.get("value") or "").strip()
+                if not reply:
+                    return False, "", "Please enter an instruction."
+            else:
+                return self._match_structured_reply(problem, structured)
+
+        if self.client is not None:
+            prompt_text = self.prompt_builder.build_qa_match_prompt(
+                self._augment_question_with_problem_context(question, problem),
+                reply,
+            )
+            messages = [{"role": "user", "content": prompt_text}]
+            llm_kwargs = {}
+            if self._is_offline:
+                llm_kwargs["max_tokens"] = 256
+            try:
+                content = call_llm(self.client, self.deployment, messages, **llm_kwargs)
+            except Exception:
+                heuristic = self._heuristic_match_reply(question, reply, problem)
+                return heuristic if heuristic is not None else (False, "", "Unable to verify reply.")
+
+            decision = self._parse_match_action(content)
+            self._last_structured_decision = decision
+            match = decision.get("match") == "YES"
+            action = self._coerce_action_from_structured_decision(problem, decision)
+            feedback = "" if match else self._build_match_feedback(problem, decision)
+            return match, action, feedback
+
         heuristic = self._heuristic_match_reply(question, reply, problem)
         if heuristic is not None:
             return heuristic
+        return False, "", "Please answer the question directly."
 
-        if self.client is None:
-            return False, "", "Please answer the question directly."
-
-        prompt_text = self.prompt_builder.build_qa_match_prompt(
-            self._augment_question_with_problem_context(question, problem),
-            reply,
-        )
-        messages = [{"role": "user", "content": prompt_text}]
-        llm_kwargs = {}
-        if self._is_offline:
-            llm_kwargs["max_tokens"] = 256
+    @staticmethod
+    def _parse_structured_reply(reply: str) -> Optional[Dict[str, Any]]:
         try:
-            content = call_llm(self.client, self.deployment, messages, **llm_kwargs)
-        except Exception:
-            return False, "", "Unable to verify reply."
+            parsed = json.loads(reply or "")
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        if not str(parsed.get("decision_kind") or "").strip():
+            return None
+        return parsed
 
-        decision = self._parse_match_action(content)
-        self._last_structured_decision = decision
-        match = decision.get("match") == "YES"
-        action = self._coerce_action_from_structured_decision(problem, decision)
-        feedback = "" if match else self._build_match_feedback(problem, decision)
-        return match, action, feedback
+    @classmethod
+    def _match_structured_reply(
+        cls,
+        problem: Optional[Dict[str, Any]],
+        payload: Dict[str, Any],
+    ) -> tuple[bool, str, str]:
+        if not problem:
+            return False, "", "No active clarification problem."
+        issue_type = str(problem.get("issue_type") or "")
+        metadata = problem.get("metadata") or {}
+        decision_kind = str(payload.get("decision_kind") or "").strip()
+        value = payload.get("value")
+        selected_option = str(payload.get("selected_option") or payload.get("value") or "").strip()
+        sheet_key = str(metadata.get("sheet_key") or "current sheet")
+        column_name = str(metadata.get("column") or "value")
+        excel_row = metadata.get("excel_row")
+        row_text = f" at Excel row {excel_row}" if excel_row else ""
+
+        if issue_type == "missing_value":
+            if decision_kind == "fill_value":
+                if value in (None, ""):
+                    return False, "", "Please enter a fill value."
+                valid, normalized_value, feedback = cls._validate_structured_fill_value(problem, value)
+                if not valid:
+                    return False, "", feedback
+                return (
+                    True,
+                    f"Fill the missing value in `{column_name}`{row_text} in `{sheet_key}` with {normalized_value}.",
+                    "",
+                )
+            if decision_kind == "leave_blank":
+                return True, "NO_OP", ""
+            if decision_kind == "skip_row":
+                if excel_row is None:
+                    return False, "", "Cannot skip the row because the row number is missing."
+                return True, f"Drop Excel row {excel_row} in `{sheet_key}`.", ""
+
+        if issue_type == "missing_value_policy":
+            pairs = metadata.get("all_sheet_row_pairs") or []
+            if decision_kind == "fill_value":
+                if value in (None, ""):
+                    return False, "", "Please enter a fill value."
+                valid, normalized_value, feedback = cls._validate_structured_fill_value(problem, value)
+                if not valid:
+                    return False, "", feedback
+                actions = [
+                    f"Fill the missing value in `{column_name}` at Excel row {pair['excel_row']} in `{pair['sheet_key']}` with {normalized_value}."
+                    for pair in pairs
+                    if pair.get("sheet_key") and pair.get("excel_row") is not None
+                ]
+                if actions:
+                    return True, "\n".join(actions), ""
+                return True, f"Fill the missing value in `{column_name}` in `{sheet_key}` with {normalized_value}.", ""
+            if decision_kind == "leave_blank":
+                return True, "NO_OP", ""
+            if decision_kind == "skip_rows":
+                actions = [
+                    f"Drop Excel row {pair['excel_row']} in `{pair['sheet_key']}`."
+                    for pair in pairs
+                    if pair.get("sheet_key") and pair.get("excel_row") is not None
+                ]
+                return True, "\n".join(actions) if actions else "NO_OP", ""
+
+        if issue_type == "missing_key_column" and decision_kind == "select_key":
+            options = cls._metadata_choice_options(problem)
+            if selected_option in options:
+                return True, "NO_OP", ""
+            return False, "", "Please choose one of the suggested key columns."
+
+        if issue_type == "duplicate_header" and decision_kind == "select_header":
+            options = cls._metadata_choice_options(problem)
+            if selected_option in options:
+                return True, "NO_OP", ""
+            return False, "", "Please choose one of the suggested headers."
+
+        if issue_type in {"format_inconsistency", "unit_or_time_format"}:
+            if decision_kind == "keep_as_is":
+                return True, "NO_OP", ""
+            if decision_kind == "normalize_to" and selected_option:
+                return True, f"Standardize `{column_name}` in `{sheet_key}` to `{selected_option}`.", ""
+
+        if issue_type == "missing_period_endpoint" and decision_kind in {"use_latest", "shrink_window", "interpolate", "unavailable"}:
+            return True, "NO_OP", ""
+
+        if decision_kind in {"keep_as_is", "ignore_blank", "split_table", "keep_first", "keep_latest"}:
+            return True, "NO_OP", ""
+
+        return False, "", "Please choose a valid option."
+
+    @classmethod
+    def _validate_structured_fill_value(
+        cls,
+        problem: Optional[Dict[str, Any]],
+        value: Any,
+    ) -> tuple[bool, Any, str]:
+        metadata = (problem or {}).get("metadata") or {}
+        value_type = str(metadata.get("value_type") or "").strip().lower()
+        column_name = str(metadata.get("column") or "")
+        if not value_type:
+            normalized_column = column_name.lower()
+            value_type = "number" if any(
+                token in normalized_column
+                for token in ("amount", "spending", "cost", "price", "rate", "score", "total", "average", "qty", "count")
+            ) else "text"
+        if value_type != "number":
+            return True, value, ""
+
+        try:
+            numeric_value = float(str(value).strip())
+        except (TypeError, ValueError):
+            return False, "", "Please enter a numeric value."
+        if numeric_value < 0:
+            return False, "", "Please enter a non-negative number."
+        if numeric_value.is_integer():
+            return True, int(numeric_value), ""
+        return True, numeric_value, ""
 
     @staticmethod
     def _parse_match_action(content: str) -> Dict[str, str]:

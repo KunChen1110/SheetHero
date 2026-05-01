@@ -1,5 +1,6 @@
 """Saved-workbook validation inspectors."""
 
+from datetime import date, datetime, time
 import os
 import re
 from typing import Any
@@ -8,6 +9,57 @@ from openpyxl import load_workbook
 
 
 class WorkbookValidationInspectorMixin:
+    _NUMERIC_VALUE_HEADER_MARKERS = (
+        "amount",
+        "average",
+        "avg",
+        "balance",
+        "cost",
+        "count",
+        "fee",
+        "growth",
+        "income",
+        "margin",
+        "measure",
+        "payment",
+        "price",
+        "profit",
+        "quantity",
+        "qty",
+        "rate",
+        "revenue",
+        "score",
+        "spending",
+        "sum",
+        "total",
+        "value",
+        "weight",
+    )
+    _NON_MEASURE_HEADER_MARKERS = (
+        "date",
+        "day",
+        "id",
+        "identifier",
+        "index",
+        "name",
+        "note",
+        "rank",
+        "time",
+        "timestamp",
+        "year",
+    )
+    _SUMMARY_LABEL_MARKERS = (
+        "average",
+        "avg",
+        "count",
+        "max",
+        "maximum",
+        "min",
+        "minimum",
+        "sum",
+        "total",
+    )
+
     @staticmethod
     def _load_first_table_rows(output_path: str) -> tuple[list[str], list[list[Any]], str] | None:
         if not output_path or not os.path.exists(output_path):
@@ -316,6 +368,184 @@ class WorkbookValidationInspectorMixin:
         if need_summary is True and not found_metrics:
             issues.append("Saved workbook does not contain the required summary metrics block.")
         return issues
+
+    @classmethod
+    def _question_requests_max_highlight(cls, user_question: str) -> bool:
+        lower = (user_question or "").lower()
+        if not any(marker in lower for marker in ("highlight", "mark", "colour", "color")):
+            return False
+        return any(
+            marker in lower
+            for marker in (
+                "max",
+                "maximum",
+                "highest",
+                "largest",
+                "greatest",
+                "peak",
+                "top",
+            )
+        )
+
+    @staticmethod
+    def _cell_has_non_default_fill(cell) -> bool:
+        fill = getattr(cell, "fill", None)
+        if fill is None or fill.fill_type in (None, "none"):
+            return False
+        color = getattr(fill, "fgColor", None) or getattr(fill, "start_color", None)
+        color_type = getattr(color, "type", None)
+        color_value = (
+            getattr(color, "rgb", None)
+            or getattr(color, "indexed", None)
+            or getattr(color, "theme", None)
+        )
+        if color_type == "indexed" and color_value in (None, 64):
+            return False
+        if str(color_value).upper() in {"00000000", "00FFFFFF", "FFFFFFFF", "64"}:
+            return False
+        return True
+
+    @classmethod
+    def _row_is_highlighted(cls, sheet, row_idx: int, max_col: int) -> bool:
+        filled_cells = 0
+        populated_cells = 0
+        for col_idx in range(1, max_col + 1):
+            cell = sheet.cell(row=row_idx, column=col_idx)
+            if cell.value not in (None, ""):
+                populated_cells += 1
+            if cls._cell_has_non_default_fill(cell):
+                filled_cells += 1
+        if filled_cells == 0:
+            return False
+        if populated_cells <= 1:
+            return filled_cells >= 1
+        return filled_cells >= min(2, populated_cells)
+
+    @classmethod
+    def _row_is_summary_like(cls, row_values: list[Any]) -> bool:
+        first_non_empty = ""
+        for value in row_values:
+            if value not in (None, ""):
+                first_non_empty = str(value).strip().lower()
+                break
+        if not first_non_empty:
+            return False
+        return any(marker in first_non_empty for marker in cls._SUMMARY_LABEL_MARKERS)
+
+    @staticmethod
+    def _numeric_cell_value(value: Any) -> float | None:
+        if value is None or value == "" or isinstance(value, bool):
+            return None
+        if isinstance(value, (datetime, date, time)):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip().replace(",", "")
+        if not text:
+            return None
+        if not re.fullmatch(r"[-+]?\d+(?:\.\d+)?%?", text):
+            return None
+        try:
+            parsed = float(text.rstrip("%"))
+        except ValueError:
+            return None
+        if text.endswith("%"):
+            parsed /= 100.0
+        return parsed
+
+    @classmethod
+    def _measure_column_priority(cls, header: str) -> int:
+        lower = (header or "").strip().lower()
+        if any(marker in lower for marker in cls._NON_MEASURE_HEADER_MARKERS):
+            return -1
+        if any(marker in lower for marker in cls._NUMERIC_VALUE_HEADER_MARKERS):
+            return 2
+        return 1
+
+    @classmethod
+    def _inspect_sheet_highlighted_max_rows(cls, sheet) -> list[str]:
+        max_col = min(sheet.max_column, 50)
+        header_row_idx = None
+        headers: list[str] = []
+        for row_idx in range(1, min(sheet.max_row, 20) + 1):
+            row_values = [sheet.cell(row=row_idx, column=col_idx).value for col_idx in range(1, max_col + 1)]
+            non_empty = [str(value).strip() for value in row_values if value not in (None, "")]
+            if len(non_empty) >= 2:
+                header_row_idx = row_idx
+                headers = [str(value).strip() if value not in (None, "") else "" for value in row_values]
+                break
+        if header_row_idx is None:
+            return []
+
+        data_row_numbers: list[int] = []
+        highlighted_rows: set[int] = set()
+        for row_idx in range(header_row_idx + 1, sheet.max_row + 1):
+            row_values = [sheet.cell(row=row_idx, column=col_idx).value for col_idx in range(1, max_col + 1)]
+            if not any(value not in (None, "") for value in row_values):
+                if data_row_numbers:
+                    break
+                continue
+            if cls._row_is_summary_like(row_values):
+                continue
+            data_row_numbers.append(row_idx)
+            if cls._row_is_highlighted(sheet, row_idx, max_col):
+                highlighted_rows.add(row_idx)
+
+        if not data_row_numbers or not highlighted_rows:
+            return []
+
+        candidate_columns: list[tuple[int, int, list[tuple[int, float]]]] = []
+        for col_idx in range(1, max_col + 1):
+            header = headers[col_idx - 1] if col_idx <= len(headers) else ""
+            priority = cls._measure_column_priority(header)
+            if priority < 0:
+                continue
+            values: list[tuple[int, float]] = []
+            for row_idx in data_row_numbers:
+                parsed = cls._numeric_cell_value(sheet.cell(row=row_idx, column=col_idx).value)
+                if parsed is not None:
+                    values.append((row_idx, parsed))
+            if len(values) < 2:
+                continue
+            candidate_columns.append((priority, col_idx, values))
+
+        if not candidate_columns:
+            return []
+
+        candidate_columns.sort(key=lambda item: item[0], reverse=True)
+        for _priority, _col_idx, values in candidate_columns:
+            max_value = max(value for _row_idx, value in values)
+            max_rows = {row_idx for row_idx, value in values if abs(value - max_value) <= 1e-9}
+            if highlighted_rows.issubset(max_rows):
+                return []
+
+        best_priority, best_col_idx, best_values = candidate_columns[0]
+        best_max_value = max(value for _row_idx, value in best_values)
+        best_max_rows = sorted(row_idx for row_idx, value in best_values if abs(value - best_max_value) <= 1e-9)
+        header = headers[best_col_idx - 1] if best_col_idx <= len(headers) else f"column {best_col_idx}"
+        highlighted_preview = ", ".join(str(row) for row in sorted(highlighted_rows)[:5])
+        expected_preview = ", ".join(str(row) for row in best_max_rows[:5])
+        return [
+            "Saved workbook highlighted row(s) do not match the maximum value row(s): "
+            f"highlighted {highlighted_preview}, expected {expected_preview} for `{header}`."
+        ]
+
+    @classmethod
+    def _inspect_saved_highlighted_max_rows(cls, output_path: str, user_question: str) -> list[str]:
+        if not cls._question_requests_max_highlight(user_question):
+            return []
+        if not output_path or not os.path.exists(output_path):
+            return []
+        try:
+            workbook = load_workbook(output_path, data_only=True)
+        except Exception:
+            return []
+
+        for sheet in workbook.worksheets:
+            issues = cls._inspect_sheet_highlighted_max_rows(sheet)
+            if issues:
+                return issues
+        return []
 
     @classmethod
     def _inspect_saved_region_growth_workbook(cls, output_path: str) -> list[str]:
