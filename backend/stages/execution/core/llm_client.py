@@ -9,6 +9,7 @@ from typing import Optional
 
 from openai import RateLimitError
 
+from ....log.llm_input_dump import dump_llm_input
 from ....log.logger_registry import LoggerRegistry
 from ...base.llm_client import BaseLLMClient
 
@@ -124,6 +125,11 @@ class ExecutionLLMClient(BaseLLMClient):
         client = self.client
 
         def _do_call():
+            dump_llm_input(
+                create_kwargs.get("model", self.deployment),
+                create_kwargs.get("messages", []),
+                **{k: v for k, v in create_kwargs.items() if k not in {"model", "messages"}},
+            )
             return client.chat.completions.create(**create_kwargs)
 
         if self._wall_timeout is None:

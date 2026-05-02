@@ -1,8 +1,22 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { fileURLToPath } from "url";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, execFile } from "child_process";
+import { promisify } from "util";
+import os from "os";
 import path from "path";
 import http from "http";
+
+const execFileAsync = promisify(execFile);
+
+function isWsl(): boolean {
+  if (process.platform !== "linux") return false;
+  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) return true;
+  try {
+    return /microsoft|wsl/i.test(os.release());
+  } catch {
+    return false;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,9 +55,22 @@ ipcMain.handle("app:getDocumentsPath", () => {
 });
 
 // Is exposed through the preload files,
-// It is used to open the folder containing the file, with the file highlighted
+// It is used to open the folder containing the file, with the file highlighted.
+// On WSL, xdg-open has no registered handler for inode/directory and fails,
+// so we fall through to explorer.exe with the path translated by wslpath.
 ipcMain.handle("app:openPath", async (_, filePath: string) => {
-  shell.showItemInFolder(path.normalize(filePath));
+  const normalized = path.normalize(filePath);
+  if (!isWsl()) {
+    shell.showItemInFolder(normalized);
+    return;
+  }
+  try {
+    const { stdout } = await execFileAsync("wslpath", ["-w", normalized]);
+    const winPath = stdout.trim();
+    execFile("explorer.exe", [`/select,${winPath}`]);
+  } catch {
+    execFile("explorer.exe", [normalized]);
+  }
 });
 
 // Creates the main window
