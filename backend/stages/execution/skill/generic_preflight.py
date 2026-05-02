@@ -116,10 +116,30 @@ class ExecutionGenericPreflightAdvisor:
             return None
 
         known_columns: dict[str, set[str]] = {}
+        # Tracks columns added via chained subscripts like `report['output_df']['NewCol'] = ...`.
+        # Keyed by the chain of names+keys, e.g. ('report', 'output_df').
+        subscript_path_columns: dict[tuple[str, ...], set[str]] = {}
         missing_sources: list[str] = []
 
         def _string_literals(node) -> list[str]:
             return cls._extract_string_literals(node)
+
+        def _subscript_chain(node) -> Optional[tuple[str, ...]]:
+            """Walk Subscript(...Subscript(Name(x), Const(k1))..., Const(kN)) → ('x', 'k1', ..., 'kN').
+
+            Returns None if any slice is non-literal or the base isn't a plain Name.
+            """
+            parts: list[str] = []
+            current = node
+            while isinstance(current, ast.Subscript):
+                slc = _string_literals(current.slice)
+                if len(slc) != 1:
+                    return None
+                parts.append(slc[0])
+                current = current.value
+            if not isinstance(current, ast.Name):
+                return None
+            return (current.id, *reversed(parts))
 
         def _groupby_keys(call: ast.Call) -> set[str]:
             keys: set[str] = set()
@@ -134,6 +154,9 @@ class ExecutionGenericPreflightAdvisor:
             if isinstance(node, ast.Name):
                 return set(known_columns.get(node.id, set())) or None
             if isinstance(node, ast.Subscript):
+                chain = _subscript_chain(node)
+                if chain is not None and chain in subscript_path_columns:
+                    return set(subscript_path_columns[chain])
                 literals = _string_literals(node.slice)
                 if "output_df" in literals or "df" in literals:
                     return set(observed_headers)
@@ -141,6 +164,16 @@ class ExecutionGenericPreflightAdvisor:
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr in {"copy", "reset_index"}:
                     return _known_columns_from_expr(node.func.value)
+                if node.func.attr == "assign":
+                    # `df.assign(NewCol=..., Other=...)` carries forward df's columns
+                    # plus the keyword names. Without this, a follow-up groupby+agg
+                    # using NewCol would falsely flag the column as missing.
+                    base = _known_columns_from_expr(node.func.value)
+                    base = set(base) if base else set(observed_headers)
+                    for keyword in node.keywords:
+                        if keyword.arg:
+                            base.add(keyword.arg)
+                    return base
                 if node.func.attr == "agg" and isinstance(node.func.value, ast.Call):
                     groupby_call = node.func.value
                     if isinstance(groupby_call.func, ast.Attribute) and groupby_call.func.attr == "groupby":
@@ -162,11 +195,32 @@ class ExecutionGenericPreflightAdvisor:
             if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
                 continue
             target = statement.targets[0]
-            if not isinstance(target, ast.Name):
-                continue
-            inferred_columns = _known_columns_from_expr(statement.value)
-            if inferred_columns is not None:
-                known_columns[target.id] = inferred_columns
+            if isinstance(target, ast.Name):
+                inferred_columns = _known_columns_from_expr(statement.value)
+                if inferred_columns is not None:
+                    known_columns[target.id] = inferred_columns
+            elif isinstance(target, ast.Subscript):
+                col_literals = _string_literals(target.slice)
+                if not col_literals:
+                    continue
+                if isinstance(target.value, ast.Name):
+                    # `df['NewCol'] = ...` registers NewCol on df.
+                    df_var = target.value.id
+                    existing = known_columns.get(df_var)
+                    base = set(existing) if existing else set(observed_headers)
+                    base.update(col_literals)
+                    known_columns[df_var] = base
+                elif isinstance(target.value, ast.Subscript):
+                    # `report['output_df']['NewCol'] = ...` — chained dict-of-DataFrame
+                    # pattern. Track the inner subscript chain so a later
+                    # `report['output_df'].groupby(...).agg(X=('NewCol', 'sum'))`
+                    # sees NewCol in scope.
+                    chain = _subscript_chain(target.value)
+                    if chain is not None:
+                        existing = subscript_path_columns.get(chain)
+                        base = set(existing) if existing else set(observed_headers)
+                        base.update(col_literals)
+                        subscript_path_columns[chain] = base
 
         if not missing_sources:
             return None
@@ -180,6 +234,35 @@ class ExecutionGenericPreflightAdvisor:
         for value in unique_missing[:4]:
             lines.append(f"- Missing source column: `{value}`.")
         return "\n".join(lines)
+
+    _PLACEHOLDER_COMMENT_PATTERN = re.compile(
+        r"#[^\n]*\b(?:placeholder|todo|fixme|hack|xxx|wip|stub|dummy|replace\s*me|fill\s*in\s*later)\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _placeholder_comment_guard(cls, code: str) -> Optional[str]:
+        """Reject code that admits via comment that a value is a placeholder / TODO / stub.
+
+        When the model writes `GrossProfit = revenue * 0.3  # Placeholder ...`, it has
+        explicitly self-flagged that the math is wrong. We bounce that back instead of
+        letting it ship — saves a validation round and a user-facing wrong number.
+        """
+        match = cls._PLACEHOLDER_COMMENT_PATTERN.search(code or "")
+        if not match:
+            return None
+        snippet = match.group(0).strip()
+        if len(snippet) > 160:
+            snippet = snippet[:157] + "..."
+        return (
+            "PREFLIGHT_PLACEHOLDER_COMMENT: code contains a self-admitted placeholder/TODO comment.\n"
+            f"- Detected: `{snippet}`\n"
+            "- Replace the placeholder with the real computation derived from the verified "
+            "schema — do NOT submit code with stub values like `revenue * 0.3` or `# TODO`.\n"
+            "- If the formula is unclear, derive it from the user question and the column "
+            "semantics (e.g. GrossProfit = sum(UnitsSold * (UnitPrice - UnitCost))).\n"
+            "- Remove the placeholder comment after fixing the value."
+        )
 
     @staticmethod
     def _duplicate_table_selector_guard(code_action: str, helper_name: str = "") -> Optional[str]:
@@ -284,6 +367,10 @@ class ExecutionGenericPreflightAdvisor:
                     guidance += f"\n{loop_breaker}"
             return guidance
 
+        placeholder_issue = self._placeholder_comment_guard(code)
+        if placeholder_issue is not None:
+            return placeholder_issue
+
         named_agg_issue = self._named_agg_source_column_guard(code, set(self.runtime._observed_header_set()))
         if named_agg_issue is not None:
             return named_agg_issue
@@ -351,7 +438,11 @@ class ExecutionGenericPreflightAdvisor:
                     helper_block += f"{skill_hint}\n"
                 return helper_block.rstrip()
             manual_reader_patterns = ("read_table_multi(", "find_table_by_headers(", "load_all_tables(")
-            if any(pattern in lower for pattern in manual_reader_patterns) or not uses_registered_helper:
+            # Only complain when the registered helper was NOT used. If the helper IS in
+            # the code, treating any incidental load_all_tables()/read_table_multi() call as a
+            # blocker is a false positive — models commonly use them just to print/inspect
+            # before delegating the real work to the self-loading helper.
+            if any(pattern in lower for pattern in manual_reader_patterns) and not uses_registered_helper:
                 skill_hint = (build_loop_breaker(skill, helper, user_question=user_question) or build_execution_strict_rules(skill, helper) or "").strip()
                 helper_block = (
                     f"PREFLIGHT_SELF_LOADING_HELPER: `{helper_name}(...)` already loads and prepares the source tables for the `{skill.name}` skill.\n"

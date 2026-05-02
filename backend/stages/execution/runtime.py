@@ -49,6 +49,18 @@ def _is_thinking_model(deployment: str) -> bool:
     return (deployment or "").lower().startswith("qwen3")
 
 
+def _assistant_message_to_dict(message: Any) -> Dict[str, str]:
+    if isinstance(message, dict):
+        return {
+            "role": message.get("role", "assistant"),
+            "content": message.get("content", "") or "",
+        }
+    return {
+        "role": "assistant",
+        "content": getattr(message, "content", "") or "",
+    }
+
+
 def _resolve_initial_exec_max_tokens(deployment: str, bounded_exec_max_tokens: int) -> int:
     raw_value = os.getenv("SHEETHERO_INITIAL_EXEC_MAX_TOKENS")
     if raw_value is not None and raw_value.strip():
@@ -877,7 +889,7 @@ class ExecutionRuntime(StageRuntime):
                     max_tokens=max_tokens,
                 )
                 self._llm_error_streak = 0
-                self.conversation_history.append(response_message)
+                self.conversation_history.append(_assistant_message_to_dict(response_message))
 
                 thought, code_action = self.parser.parse(response_message.content)
 
@@ -894,7 +906,7 @@ class ExecutionRuntime(StageRuntime):
                             user_question,
                         )
                         if recovered_code is not None:
-                            self.conversation_history[-1] = recovery_message
+                            self.conversation_history[-1] = _assistant_message_to_dict(recovery_message)
                             code_action = recovered_code
                             self._log_to_file(
                                 f"\n**Plan-to-code recovery (Turn {turn + 1}):** converted thought-only reply into executable code.\n"

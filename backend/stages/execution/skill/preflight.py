@@ -305,7 +305,26 @@ class ExecutionSkillPreflightAdvisor:
         shadows_highlight_rows = re.search(r"^\s*highlight_rows\s*=", code, flags=re.MULTILINE) is not None
         uses_summary_row_numbers = "summary_result['output_row_numbers']" in code or 'summary_result["output_row_numbers"]' in code
 
-        if not shadows_highlight_rows and not uses_manual_enumerate:
+        # Detect raw pandas .index passed to highlight_rows without +2 Excel-row offset.
+        # Pattern: `var = <expr>.index.tolist()` (or `.index`) followed by `highlight_rows(..., var, ...)`,
+        # where the assignment line itself does not add an offset (e.g. `+ 2`).
+        risky_index_pattern = False
+        for match in re.finditer(
+            r"^\s*(\w+)\s*=\s*([^\n]*\.index(?:\.tolist\(\))?[^\n]*)$",
+            code,
+            flags=re.MULTILINE,
+        ):
+            var_name, rhs = match.group(1), match.group(2)
+            if re.search(r"\+\s*\d+", rhs):
+                continue  # already offset on the assignment line
+            if re.search(
+                rf"highlight_rows\s*\([^,]+,\s*{re.escape(var_name)}\b",
+                code,
+            ):
+                risky_index_pattern = True
+                break
+
+        if not (shadows_highlight_rows or uses_manual_enumerate or risky_index_pattern):
             return None
 
         return (
@@ -313,6 +332,8 @@ class ExecutionSkillPreflightAdvisor:
             "- Preferred: use `row_numbers = summary_result['output_row_numbers']` (already correct).\n"
             "- If computing manually: row = DataFrame position (0-based) + 2 (header row).\n"
             "  `row_numbers = [i + 2 for i, v in enumerate(df['col']) if v == max_val]`\n"
+            "- DataFrame `.index` is NOT an Excel row number — passing `df[...].index.tolist()` to "
+            "highlight_rows shifts the highlight up by the header offset.\n"
             "- The df passed to write_dataframe_to_sheet must have a reset (0-based) index.\n"
             "- Do not reassign the name `highlight_rows` to a variable in your code."
         )

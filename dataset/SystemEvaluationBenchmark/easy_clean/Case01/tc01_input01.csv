@@ -1,0 +1,9 @@
+OrderID,Customer,Status,Amount_USD
+O1001,Ava,Paid,120
+O1002,Ben,Pending,85
+O1003,Cara,Paid,64
+O1004,Dylan,Cancelled,43
+O1005,Eva,Paid,210
+O1006,Finn,Pending,99
+O1007,Gia,Paid,150
+O1008,Hugo,Cancelled,70

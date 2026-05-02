@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from openai import RateLimitError
 
+from ...log.llm_input_dump import dump_llm_input
 from ...log.logger_registry import LoggerRegistry
 
 logger = LoggerRegistry.setup_logger(__name__)
@@ -127,6 +128,7 @@ def _call_with_wall_timeout(client: Any, deployment: str, messages: list,
     # Thinking is disabled only in ExecutionLLMClient for code generation speed.
 
     def _do_call():
+        dump_llm_input(deployment, messages, **kwargs)
         return client.chat.completions.create(
             model=deployment,
             messages=messages,
