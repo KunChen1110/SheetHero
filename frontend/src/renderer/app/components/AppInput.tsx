@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
-import { ClarificationControl, ClarificationResponseSchema } from "@/util/interfaces";
+import {
+  ClarificationControl,
+  ClarificationResponseSchema,
+} from "@/util/interfaces";
 
 // Properties needed for the app input
 interface AppInputProperties {
@@ -22,12 +25,14 @@ export function AppInput({
   onOutputModeChange,
   responseSchema,
 }: AppInputProperties) {
-  // The input text shown on the input container
   const [input, setInput] = useState("");
-  const [controlValues, setControlValues] = useState<Record<string, string>>({});
-  const [controlErrors, setControlErrors] = useState<Record<string, string>>({});
+  const [controlValues, setControlValues] = useState<Record<string, string>>(
+    {},
+  );
+  const [controlErrors, setControlErrors] = useState<Record<string, string>>(
+    {},
+  );
 
-  // Passes arguments to a given "onSendMessage" function, then resets the input text
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
 
@@ -37,7 +42,10 @@ export function AppInput({
     }
   }
 
-  function handleControlValueChange(control: ClarificationControl, value: string): void {
+  function handleControlValueChange(
+    control: ClarificationControl,
+    value: string,
+  ): void {
     setControlValues((prev) => ({
       ...prev,
       [control.decision_kind]: value,
@@ -48,7 +56,10 @@ export function AppInput({
     }));
   }
 
-  function validateControlInput(control: ClarificationControl, rawValue: string): string {
+  function validateControlInput(
+    control: ClarificationControl,
+    rawValue: string,
+  ): string {
     const inputSpec = control.input;
     if (!inputSpec) return "";
     if (!rawValue.trim()) return "Please enter a value.";
@@ -59,10 +70,16 @@ export function AppInput({
       return "Please enter a numeric value.";
     }
     if (inputSpec.min !== undefined && numericValue < inputSpec.min) {
-      return inputSpec.validation_message || `Value must be at least ${inputSpec.min}.`;
+      return (
+        inputSpec.validation_message ||
+        `Value must be at least ${inputSpec.min}.`
+      );
     }
     if (inputSpec.max !== undefined && numericValue > inputSpec.max) {
-      return inputSpec.validation_message || `Value must be at most ${inputSpec.max}.`;
+      return (
+        inputSpec.validation_message ||
+        `Value must be at most ${inputSpec.max}.`
+      );
     }
     return "";
   }
@@ -103,11 +120,11 @@ export function AppInput({
     const disabled = !hasApiKey || !hasActiveChat || isTyping;
 
     return (
-      <div className="max-w-4xl mx-auto mb-3 rounded-2xl border border-(--sh-border-grey) bg-(--sh-darker-blue) p-3">
-        <div className="mb-2 text-xs font-medium text-(--sh-grey)">
+      <div className="max-w-4xl mx-auto mb-2 rounded-2xl border border-(--sh-border-grey) bg-(--sh-darker-blue) px-3 py-2">
+        <div className="mb-1.5 text-xs font-medium text-(--sh-grey)">
           Choose how SheetHero should handle this data issue:
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 w-full">
           {responseSchema.controls.map((control) => {
             const inputSpec = control.input;
             const value = controlValues[control.decision_kind] || "";
@@ -116,18 +133,20 @@ export function AppInput({
               return (
                 <div
                   key={control.decision_kind}
-                  className="flex flex-col gap-1 rounded-xl border border-(--sh-border-grey) bg-(--sh-dark-blue) p-2"
+                  className="flex flex-col gap-1 flex-1 rounded-xl border border-(--sh-border-grey) bg-(--sh-dark-blue) px-2 py-1.5"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <input
-                      className="w-40 rounded-lg border border-(--sh-border-grey) bg-(--sh-darker-blue) px-3 py-2 text-sm text-(--sh-white) placeholder-(--sh-grey) focus:outline-none disabled:opacity-50"
+                      className="w-full min-w-0 rounded-lg border border-(--sh-border-grey) bg-(--sh-darker-blue) px-2.5 py-1.5 text-xs text-(--sh-white) placeholder-(--sh-grey) focus:outline-none disabled:opacity-50"
                       type={inputSpec.type === "number" ? "number" : "text"}
                       min={inputSpec.min}
                       max={inputSpec.max}
                       value={value}
                       disabled={disabled}
                       placeholder={inputSpec.placeholder || "Enter value"}
-                      onChange={(event) => handleControlValueChange(control, event.target.value)}
+                      onChange={(event) =>
+                        handleControlValueChange(control, event.target.value)
+                      }
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -139,7 +158,7 @@ export function AppInput({
                       type="button"
                       disabled={disabled || !value.trim()}
                       onClick={() => handleStructuredSubmit(control)}
-                      className="rounded-lg bg-(--sh-green) px-3 py-2 text-sm font-medium text-(--sh-white) hover:bg-(--sh-green-hover) disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg bg-(--sh-green) px-2.5 py-1.5 text-xs font-medium text-(--sh-white) hover:bg-(--sh-green-hover) disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {control.label}
                     </button>
@@ -159,7 +178,7 @@ export function AppInput({
                 type="button"
                 disabled={disabled}
                 onClick={() => handleStructuredSubmit(control)}
-                className="rounded-xl border border-(--sh-border-grey) bg-(--sh-dark-blue) px-3 py-2 text-sm font-medium text-(--sh-white) hover:border-(--sh-green) disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-xl border border-(--sh-border-grey) bg-(--sh-dark-blue) px-2.5 py-1.5 text-xs font-medium text-(--sh-white) hover:border-(--sh-green) disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {control.label}
               </button>
@@ -170,7 +189,6 @@ export function AppInput({
     );
   }
 
-  // HTML for the app input
   return (
     <div className="p-6">
       {renderStructuredControls()}
@@ -190,7 +208,6 @@ export function AppInput({
               }
             }}
             placeholder={
-              // Different hints depending on state
               !hasApiKey
                 ? "Configure API key in settings to start..."
                 : !hasActiveChat
