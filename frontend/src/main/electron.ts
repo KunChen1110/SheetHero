@@ -81,6 +81,7 @@ function createWindow() {
   const win = new BrowserWindow({
     minWidth: 800,
     minHeight: 600,
+    icon: path.join(__dirname, "assets", "SheetHeroLogo.ico"),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

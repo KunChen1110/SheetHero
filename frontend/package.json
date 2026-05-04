@@ -46,7 +46,8 @@
     "appId": "com.sheethero.app",
     "productName": "SheetHero",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "src/main/assets/SheetHeroLogo.ico"
     },
     "linux": {
       "target": "AppImage"
