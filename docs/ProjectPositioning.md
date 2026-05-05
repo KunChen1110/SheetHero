@@ -1,163 +1,144 @@
-## Project Positioning
+# Project Positioning
 
-### 1. Project Goal
-This project aims to reduce the technical barrier for spreadsheet analysis by allowing users to upload spreadsheet files and express tasks in natural language. The system then attempts to understand the task, diagnose data issues, ask clarification questions when necessary, execute the task safely, validate the result, and return either a generated spreadsheet or a concise text answer.
+## 1. Purpose
 
-This framing is also consistent with the original project brief, which expected the tool to:
-- accept multiple spreadsheet files as input
-- accept a natural-language user prompt
-- convert that prompt into executable spreadsheet operations
-- flag issues in the data
-- provide feedback when the prompt is unclear
-- tolerate minor imperfections such as spelling or formatting inconsistencies
-- remain usable even when the input format changes slightly, for example through reshuffled columns
+SheetHero is positioned as a natural-language spreadsheet assistant for structured spreadsheet workflows. The goal is not to build a fully general office automation agent. The project focuses on the narrower but more defensible problem of helping users process one or more spreadsheet files, detect relevant data issues, ask for clarification when needed, and produce a validated spreadsheet output or concise text result.
 
-Based on the original project brief, the primary design target of the system is spreadsheet-oriented analytical and transformation work rather than unrestricted office automation in general. In other words, the project began from a narrower and more realistic engineering goal: taking one or more spreadsheet files plus a natural-language prompt, then helping the user process data, identify issues, and produce a new spreadsheet result. As the implementation matured, the system started to generalize beyond a few fixed benchmark tasks, but its strongest and most defensible capability still lies in structured spreadsheet workflows, especially workflows common in university and administrative settings, such as:
-- tabular aggregation and ranking
-- relational joins between structured tables
-- assignment and scheduling
-- missing-data completion
-- structured reporting
-- regression / correlation style analysis
+This positioning follows from the original project brief:
 
-### 2. Why The Architecture Changed Over Time
-The initial challenge in this project was not only getting an LLM to write code, but making the system reliable enough for repeated use on spreadsheet tasks with noisy schemas and ambiguous user prompts.
+- accept one or more spreadsheet files
+- accept a natural-language user request
+- convert the request into spreadsheet operations
+- identify issues in the data
+- ask the user for clarification when the request or data is ambiguous
+- tolerate small formatting or spelling imperfections
+- remain usable when columns are reordered or schemas vary slightly
 
-A purely prompt-driven or one-shot code generation design was insufficient because:
-- spreadsheet tasks are structurally diverse
-- users often provide incomplete or ambiguous instructions
-- local models are more error-prone in code generation
-- validation based only on natural language is unreliable
+The final system therefore prioritises spreadsheet workflows where the operation can be grounded in table schemas, helper functions, and validation checks.
 
-As a result, the project evolved from a prototype-style LLM workflow into a multi-stage, skill-based spreadsheet system.
+## 2. Why Scope Control Matters
 
-### 3. Stage-Based Evolution Process
+An LLM can attempt many spreadsheet tasks, but attempting every possible task is not the same as building a reliable system. During development, unrestricted prompt-based execution produced several recurring problems:
 
-#### Stage 1: Prototype / Direct Prompting
-At the beginning, the system mainly relied on prompt-driven execution and task-level handling. The focus was on proving that spreadsheet tasks could be attempted from natural language input and file uploads.
+- the model sometimes ignored available helper functions
+- the model invented columns, rows, or intermediate assumptions
+- simple tasks could become slow because the model explored unnecessary code paths
+- local/offline models were more sensitive to long or ambiguous prompts
+- validation was difficult when the expected output structure was not well defined
 
-This stage established:
-- the GUI and CLI interaction flow
-- basic execution via model-generated code
-- dataset-based experimentation
+For this reason, the project deliberately moved away from an open-ended "LLM writes whatever code it wants" design. The current system is instead designed around covered spreadsheet skills, helper functions, structured QA, preflight checks, sandbox execution, and validation.
 
-However, the main limitation of this stage was fragility:
-- high dependence on prompt wording
-- limited protection against invalid code paths
-- poor generalization beyond known task setups
+This is the key product and engineering trade-off:
 
-#### Stage 2: Multi-Stage Agent Pipeline
-The next stage introduced a clearer backend pipeline:
-- understanding
-- diagnose
-- QA clarification
-- cleaning
-- execution
-- validation
-- final response
+> SheetHero should be reliable on important covered spreadsheet workflows rather than superficially flexible on every possible spreadsheet request.
 
-This was the first major architectural improvement because the system stopped treating all requests as a single execution problem. Instead, it began to separate:
-- task understanding
-- data-quality diagnosis
-- result generation
-- result verification
+## 3. Target Task Scope
 
-This stage improved control flow and made the system much easier to explain and debug.
+The system is intended to support spreadsheet tasks that can be described as one or more structured operations over tabular data.
 
-#### Stage 3: Helper-First And Deterministic Control
-The next transition addressed the most important engineering issue: unrestricted code generation was too unstable.
+Primary target workflows include:
 
-To improve reliability, the project introduced:
-- sandboxed execution
-- spreadsheet helper functions
-- forbidden policies
-- bounded repair feedback
-- deterministic validation rules
+- merging or joining related tables
+- aggregating, ranking, and summarising grouped records
+- filling or repairing values using reference tables
+- building dependency or schedule outputs
+- allocating or matching records under simple constraints
+- computing correlation, regression, or descriptive statistical reports
+- creating formatted output workbooks with highlighted rows or summary sheets
 
-At this point, the system no longer treated the LLM as the sole executor. Instead, the LLM increasingly acted as a controller that selected and orchestrated stable spreadsheet helpers.
+These workflows were selected because they are common in spreadsheet use, demonstrate real value beyond a calculator-style demo, and can be supported through reusable skills and helpers rather than one-off task patches.
 
-This stage significantly improved:
-- safety
-- repeatability
-- correctness on structured tasks
-- robustness in offline/local-model settings
+## 4. Target Data Issues
 
-#### Stage 4: Skill-Based Systematization
-The latest stage is the most important architectural shift.
+SheetHero does not attempt to solve every possible data-quality problem. It focuses on issues that are common, explainable to a user, and actionable before spreadsheet execution.
 
-Instead of organizing the system around individual benchmark tasks, the backend now organizes logic around abstract spreadsheet capability families. These families represent reusable task structures rather than individual cases.
+The main supported data issues are:
 
-Examples include:
-- schema-aligned merge summaries
-- reference-guided completion
-- grouped aggregation and ranking
-- temporal aggregation and ranking
-- relational join enrichment
-- composite-key relational joins
-- dependency-constrained scheduling
-- relational assignment schedules
-- capacity-constrained allocation
-- regression analysis
-- correlation matrices
-- visual temporal growth reports
+- missing values in columns required by the requested task
+- implausible numeric values, such as negative durations or impossible quantities
+- duplicate or repeated records when they affect the requested result
+- inconsistent row-level values that can be repaired with a user decision
+- schema variation, such as reordered columns or slightly different header names
+- simple formatting inconsistencies that can be handled during helper-based processing
 
-This transition matters because it changes the system from:
+The QA system is designed for issues where the correct repair is a user or domain decision. For example, if a required spending value is missing, SheetHero should ask whether to fill a value, skip the row, or apply a custom instruction. It should not silently guess a business decision when the input data does not justify one.
 
-`task-specific patches`
+## 5. Non-Goals
 
-to:
-
-`skill-based spreadsheet reasoning`
-
-This is the main reason the current system is more extensible and better aligned with software engineering principles than an ad hoc benchmark solver.
-
-### 4. Current System Positioning
-The current system should be described as a:
-
-**skill-based spreadsheet agent with deterministic execution and validation support**
-
-This is a more accurate and defensible description than claiming that it can already solve arbitrary office tasks end to end. A more balanced way to position it is:
-
-> the system was originally scoped as an LLM-assisted spreadsheet processing tool, and it has now evolved into a skill-based spreadsheet agent that can generalize across multiple structured spreadsheet skills.
-
-In practice, the system is now strongest when a user request falls into a covered spreadsheet family and the input tables are structurally reasonable.
-
-For such tasks, the system can often rely on:
-- family detection
-- helper-first deterministic execution
-- family-aware validation
-- concise final-response formatting
-
-### 5. What The System Can Reasonably Claim
-At the current stage, the project can reasonably claim that it supports:
-- multi-stage spreadsheet task processing
-- family-aware diagnose and QA
-- deterministic helper-first execution for covered skills
-- deterministic validation for covered output structures
-- benchmark-backed diagnose coverage
-- synthetic skill regression beyond the original task dataset
-
-This is a strong engineering result for a course project because the system is no longer only a testcase runner. It has begun to generalize at the skill level.
-
-### 6. What It Should Not Overclaim
 The system should not be presented as:
-- a fully general spreadsheet agent
-- a guaranteed solver for arbitrary user-defined spreadsheet tasks
-- a system that never requires new family support
 
-The more accurate statement is:
+- a guaranteed solver for arbitrary spreadsheet tasks
+- a full data-cleaning platform for every possible data-quality issue
+- a replacement for domain experts in ambiguous business decisions
+- an unrestricted Python automation assistant
+- a system that never requires additional skill or helper support
 
-> The current system generalizes across multiple abstract spreadsheet skills, but it is still skill-based rather than open-world.
+Some problems are intentionally outside the current scope:
 
-That framing is technically honest and aligns with the current implementation.
+- deep semantic entity resolution, such as reliably deciding whether "Smith, John" and "John Smit" are the same person
+- complex fuzzy matching where no reference table or rule is available
+- open-ended chart design or dashboard generation
+- arbitrary multi-step business analysis with unclear output requirements
+- tasks requiring external web data or private domain knowledge not present in the workbook
 
-### 7. Why This Is Still A Valid Final Project Outcome
-From a course-project perspective, the current system demonstrates:
-- iterative architectural improvement
-- a clear transition from prompt-heavy prototype to structured software system
-- separation of concerns across stages
-- practical handling of ambiguity through QA
-- measurable evaluation through dataset tasks, diagnose benchmarks, and synthetic skill regression
-- conscious limitation handling rather than unsupported claims
+These are not impossible future extensions, but they are not the most defensible target for the current project.
 
-That is a stronger project outcome than a system that only appears flexible in demos but is not internally structured or defensible.
+## 6. Design Implications
+
+The current architecture follows directly from the scoped positioning.
+
+### Skill + Helper Execution
+
+Requests are routed to spreadsheet skills such as merge, aggregate, schedule, scan, or statistical analysis. Each skill contributes helper metadata, strategy guidance, runtime planning, and preflight expectations. This reduces the chance that the LLM solves a covered task in an unsupported way.
+
+### Schema-Grounded Runtime Plans
+
+The system inspects workbook headers and table structure before execution. Runtime plans ground generated code in observed schemas rather than allowing the model to rely only on the user's wording.
+
+### Interactive QA
+
+When a data issue is material to the requested task, the system asks a focused clarification question. The answer is converted into a cleaning action before execution continues.
+
+### Sandboxed Execution and Validation
+
+Generated code runs inside a restricted spreadsheet namespace. Preflight checks, output contracts, and validation stages catch unsupported operations, incomplete outputs, and common failure modes before the final response is returned.
+
+## 7. Demonstration and Evaluation Strategy
+
+The project demonstration should focus on tasks that show the system's intended strengths:
+
+- multi-file spreadsheet workflows rather than single-cell arithmetic
+- clear skill routing and helper use
+- visible QA clarification for a real data issue
+- successful generation of an output workbook
+- logs that show stage-by-stage execution and validation
+
+The best demonstrations are not necessarily the largest or most open-ended tasks. They are tasks where the input problem looks realistic, the user interaction is understandable, and the final result can be checked.
+
+This is why the final demo set should favour representative task families such as:
+
+- table merge and enrichment
+- grouped summary and highlighting
+- scheduling or dependency ordering
+- large statistical or correlation-style output
+- QA-assisted repair of a meaningful data issue
+
+## 8. Current Claim
+
+The current system is best described as:
+
+> a skill-guided spreadsheet agent with helper-based execution, interactive QA, sandboxed code generation, and validation.
+
+This claim is stronger and more accurate than saying the system is a general spreadsheet agent. It reflects what the implementation actually optimises for: reliable behaviour on covered spreadsheet workflows, with clear mechanisms for handling ambiguity and data issues.
+
+## 9. Future Extension
+
+Future work should extend the system by adding new skills, helpers, and validation contracts rather than by making prompts more open-ended. Good extension candidates include:
+
+- stronger fuzzy matching with explicit confidence and user confirmation
+- richer chart and dashboard generation
+- more data-cleaning issue types
+- broader statistical modelling helpers
+- improved benchmark coverage for QA decisions
+
+The core principle should remain the same: new capability should be added as structured system support, not as unsupported LLM freedom.
