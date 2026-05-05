@@ -45,17 +45,14 @@ def excel_to_markdown(path: str) -> str:
 
 
 def detect_structure(df: pd.DataFrame) -> str:
-    """
-    Detect table structure type.
-    Returns: 'flat', 'data_with_metrics', or 'multi_section'
-    """
-    str_vals = df.astype(str).values.flatten()
-    has_metric_keyword = any("Metric" in str(v) for v in str_vals)
-    metric_count = sum(1 for v in str_vals if str(v).strip() == "Metric")
+    metric_keywords = {"metric", "kpi", "summary", "total", "average", "subtotal"}
+    str_vals = [str(v).strip().lower() for v in df.astype(str).values.flatten()]
 
-    if metric_count >= 2:
+    keyword_count = sum(1 for v in str_vals if v in metric_keywords)
+
+    if keyword_count >= 2:
         return "multi_section"
-    elif has_metric_keyword:
+    elif keyword_count == 1:
         return "data_with_metrics"
     else:
         return "flat"
@@ -149,6 +146,7 @@ Return JSON:
 }}
 
 - column_mapping: rename output columns to match reference (empty if already matching)
+- Only rename a column if you are confident it maps to a reference column. If there is no clear match, omit it from column_mapping entirely.
 - column_order: correct column order matching reference
 
 Return ONLY the JSON object."""
