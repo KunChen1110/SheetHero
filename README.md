@@ -20,21 +20,23 @@
 
 ## Overview
 
-SheetHero is a desktop application that enables users to perform complex Excel data operations through natural language instructions. The system passes user-defined prompts to a Large Language Model (LLM), which interprets the intent and decomposes it into a sequence of atomic data manipulation commands executed programmatically against the target spreadsheet files.
+SheetHero is a desktop application that enables users to perform complex spreadsheet operations through natural language instructions. The system combines a Large Language Model (LLM) with schema-grounded helpers, QA clarification, preflight checks, and deterministic validation so that spreadsheet tasks can be completed without users writing Python or Excel formulas.
 
-This approach removes the need for users to write scripts or possess domain knowledge of spreadsheet formula syntax, lowering the barrier to structured data analysis and transformation.
+The current pipeline supports multi-file joins, grouped summaries, dependency scheduling, QA-assisted data cleaning, and statistical analysis such as full-dataset Pearson correlation reports.
 
 ---
 
 ## Features
 
-| Feature                 | Description                                                                                           |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| **File Ingestion**      | Upload `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, and `.csv` files via drag-and-drop or file picker          |
-| **Multi-file Merging**  | Consolidate data from multiple spreadsheets, including files with differing schemas                   |
-| **Analytical Querying** | Submit natural language queries across multiple files; receive justified, model-generated conclusions |
-| **Model Configuration** | Customise the underlying LLM deployment, iteration limits, and API endpoint                           |
-| **Execution Logging**   | Auto-generated Markdown logs documenting the agent's reasoning and decision trace per operation       |
+| Feature                    | Description                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **File Ingestion**         | Upload `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, and `.csv` files via the native file picker                                  |
+| **Multi-file Workflows**   | Join, merge, aggregate, schedule, and analyse one or more spreadsheet files using natural language                       |
+| **Interactive QA**         | Detect data issues such as missing values or implausible numeric values and ask the user how to resolve them             |
+| **Helper-first Execution** | Use schema-grounded helper functions and preflight guardrails to reduce LLM drift and incorrect spreadsheet operations   |
+| **Statistical Analysis**   | Compute regression and correlation outputs using full-table reads, pairwise missing-value handling, and encoded features |
+| **Stop Thinking**          | Interrupt an active frontend request and clear the current waiting state from the UI                                    |
+| **Execution Logging**      | Save structured Markdown traces under `artifacts/loggers/` for debugging and auditability                               |
 
 ---
 
@@ -64,7 +66,7 @@ This approach removes the need for users to write scripts or possess domain know
 
 ### Natural Language Prompting
 
-> Users submit a plain-language instruction describing the desired transformation or analysis. SheetHero interprets the request, executes the appropriate operations, and surfaces the output file alongside an optional verbose log.
+> Users submit a plain-language instruction describing the desired transformation or analysis. SheetHero interprets the request, executes the appropriate operations, and surfaces the output file alongside a short result summary.
 
 <p align="center">
   <img src="assets/README/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
@@ -73,9 +75,21 @@ This approach removes the need for users to write scripts or possess domain know
 
 ---
 
+### Interactive QA
+
+> When the input data contains an issue that is material to the task, SheetHero asks a focused clarification question with a context preview and structured controls. The user's answer is converted into a cleaning action before execution continues.
+
+Typical QA examples include:
+
+- missing numeric values in a column used by the requested task
+- implausible numeric values such as a negative task duration
+- row-level repair decisions such as filling a corrected value, skipping a row, or keeping data as-is
+
+---
+
 ### Execution Log
 
-> Upon completion, SheetHero produces a structured `.md` log file capturing the agent's internal reasoning chain, tool calls, and intermediate decisions. This supports auditability and debugging of complex multi-step operations.
+> Each run writes structured Markdown logs to `artifacts/loggers/`. SheetHero logs record workbook context, stage transitions, QA decisions, generated code, preflight feedback, execution output, validation results, and final summaries. Separate LLM input dumps may also be written for prompt debugging.
 
 <p align="center">
   <img src="assets/README/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
@@ -88,8 +102,11 @@ This approach removes the need for users to write scripts or possess domain know
 
 ### Prerequisites
 
-- Python 3.9 or later
+- Python 3.11 or later
+- Node.js 18 or later
+- npm
 - An OpenAI-compatible API key
+- Optional for offline mode: a local OpenAI-compatible server such as Ollama
 
 ### Clone the Repository
 
@@ -98,34 +115,117 @@ git clone --branch main https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29
 cd team29_project
 ```
 
-### Linux / macOS
+### First-time Setup
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+cd frontend
+npm install
+cd ..
+```
+
+On Windows, activate the virtual environment with:
+
+```batch
+venv\Scripts\activate
+```
+
+---
+
+## Running the Application
+
+### Full Desktop Application
+
+From the repository root:
+
+```bash
 python main.py
 ```
 
-### Windows
+This starts:
 
-```batch
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
+- FastAPI backend on port `8000`
+- Vite frontend dev server
+- Electron desktop window
+
+### Frontend Development Mode
+
+For frontend-only debugging, run the frontend from the `frontend/` directory:
+
+```bash
+cd frontend
+npm run dev:frontend
+```
+
+For the full concurrent frontend/backend/Electron development workflow:
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Backend CLI / Benchmark Mode
+
+For command-line debugging and benchmark runs:
+
+```bash
+python -m backend.main
+```
+
+Useful CLI commands include:
+
+```text
+!llm --show
+!llm --switch--offline qwen3:8b
+!dataset --index 6
+!benchmark dev --index 6
+!judge dev --index 6
 ```
 
 ---
 
 ## Configuration Reference
 
-| Parameter          | Required | Description                                                  |
-| ------------------ | -------- | ------------------------------------------------------------ |
-| `API Key`          | Yes      | OpenAI-compatible API key for model access                   |
-| `Base URL`         | No       | Custom API endpoint; defaults to `https://api.openai.com/v1` |
-| `Model Deployment` | Yes      | Target model identifier (e.g. `gpt-4o-mini`)                 |
-| `Max Turns`        | Yes      | Maximum number of agent iterations per request               |
+| Parameter          | Required | Description                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------- |
+| `API Key`          | Yes      | OpenAI-compatible API key for hosted model access                           |
+| `Base URL`         | No       | Leave blank for OpenAI; set to a custom endpoint such as Ollama for offline |
+| `Model Deployment` | Yes      | Target model identifier, e.g. `gpt-4o-mini` or `qwen3:8b`                   |
+| `Max Turns`        | Yes      | Maximum number of execution iterations per request                          |
+| `Output Directory` | Yes      | Directory where generated spreadsheets are written; defaults to Documents   |
+| `Output Mode`      | No       | `file` writes an Excel workbook; `text` returns a chat preview when enabled |
+
+### Online Mode
+
+Leave `Base URL` blank and provide an OpenAI API key.
+
+### Offline Mode
+
+Start a local model server first, then set `Base URL` to the local OpenAI-compatible endpoint:
+
+```bash
+ollama run qwen3:8b
+```
+
+Example base URL:
+
+```text
+http://localhost:11434/v1
+```
+
+---
+
+## Outputs and Logs
+
+| Artifact | Location | Notes |
+| -------- | -------- | ----- |
+| Generated workbook | Configured output directory, usually the user's Documents folder | One output workbook per file-mode run |
+| SheetHero run log | `artifacts/loggers/sheethero_*.md` | Main stage-by-stage trace for the run |
+| LLM prompt dump | `artifacts/loggers/llm_*.md` | Prompt/input debugging trace when enabled |
+| CLI benchmark output | `artifacts/output/` | Used by backend CLI benchmark runs |
 
 ---
 
