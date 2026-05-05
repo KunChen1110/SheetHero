@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Natural Language Processing Interface for Automated Excel Data Manipulation</strong><br/>
+  <strong>Skill-Guided Natural Language Interface for Spreadsheet Automation</strong><br/>
   <em>COMP2002 Group Project — Team 29</em>
 </p>
 
@@ -26,17 +26,28 @@ The current pipeline supports multi-file joins, grouped summaries, dependency sc
 
 ---
 
+## How It Works
+
+SheetHero uses a layered architecture: the React/Electron frontend sends turns to a service layer, which drives the backend agent through a fixed spreadsheet pipeline. The execution stage combines skill detection, helper functions, prompt building, sandboxed code execution, and validation to reduce unsupported LLM behaviour.
+
+<p align="center">
+  <img src="assets/README/system_architecture.png" alt="SheetHero system architecture diagram" width="900"/>
+  <br/><em>System architecture overview</em>
+</p>
+
+---
+
 ## Features
 
-| Feature                    | Description                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **File Ingestion**         | Upload `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, and `.csv` files via the native file picker                                  |
-| **Multi-file Workflows**   | Join, merge, aggregate, schedule, and analyse one or more spreadsheet files using natural language                       |
-| **Interactive QA**         | Detect data issues such as missing values or implausible numeric values and ask the user how to resolve them             |
-| **Helper-first Execution** | Use schema-grounded helper functions and preflight guardrails to reduce LLM drift and incorrect spreadsheet operations   |
-| **Statistical Analysis**   | Compute regression and correlation outputs using full-table reads, pairwise missing-value handling, and encoded features |
-| **Stop Thinking**          | Interrupt an active frontend request and clear the current waiting state from the UI                                    |
-| **Execution Logging**      | Save structured Markdown traces under `artifacts/loggers/` for debugging and auditability                               |
+| Feature                      | Description                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **File Ingestion**           | Upload `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, and `.csv` files via the native file picker                                  |
+| **Multi-file Workflows**     | Join, merge, aggregate, schedule, and analyse one or more spreadsheet files using natural language                       |
+| **Interactive QA**           | Detect data issues such as missing values or implausible numeric values and ask the user how to resolve them             |
+| **Skill + Helper Execution** | Route each request to spreadsheet skills, selected helpers, runtime plans, and preflight guardrails                      |
+| **Statistical Analysis**     | Compute regression and correlation outputs using full-table reads, pairwise missing-value handling, and encoded features |
+| **Stop Thinking**            | Interrupt an active frontend request and clear the current waiting state from the UI                                    |
+| **Execution Logging**        | Save structured Markdown traces under `artifacts/loggers/` for debugging and auditability                               |
 
 ---
 
@@ -85,6 +96,11 @@ Typical QA examples include:
 - implausible numeric values such as a negative task duration
 - row-level repair decisions such as filling a corrected value, skipping a row, or keeping data as-is
 
+<p align="center">
+  <img src="assets/README/preview_qa.png" alt="Interactive QA prompt showing a detected spreadsheet data issue and structured resolution controls" width="800"/>
+  <br/><em>Figure 4 — Interactive QA for resolving detected spreadsheet data issues</em>
+</p>
+
 ---
 
 ### Execution Log
@@ -93,7 +109,7 @@ Typical QA examples include:
 
 <p align="center">
   <img src="assets/README/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
-  <br/><em>Figure 4 — Auto-generated execution log</em>
+  <br/><em>Figure 5 — Auto-generated execution log</em>
 </p>
 
 ---
@@ -229,6 +245,24 @@ http://localhost:11434/v1
 
 ---
 
+## Project Structure
+
+```text
+team29_project/
+├── backend/              # Agent pipeline, service layer, prompts, skills, sandbox, validation
+├── frontend/             # Electron + React user interface
+├── dataset/              # Development, diagnosis, and system evaluation benchmark cases
+├── test/                 # Unit, integration, and benchmark test runners
+├── docs/                 # Changelog, design notes, research notes, and data-cleaning documentation
+├── assets/README/        # Images used by this README
+├── artifacts/loggers/    # Markdown logs generated by SheetHero runs
+├── artifacts/output/     # CLI benchmark and generated output artifacts
+├── main.py               # Root launcher for backend, frontend, and Electron
+└── requirements.txt      # Python dependencies
+```
+
+---
+
 ## Supported File Formats
 
 | Extension | Format                       |
@@ -241,6 +275,10 @@ http://localhost:11434/v1
 
 ---
 
-## Changelog
+## Further Documentation
 
-A full changelog of documented modifications is available in [`docs/Changelog.md`](docs/Changelog.md).
+| Document | Purpose |
+| -------- | ------- |
+| [`docs/Changelog.md`](docs/Changelog.md) | Summary of implemented changes and recent system updates |
+| [`docs/SoftwareDesign.md`](docs/SoftwareDesign.md) | Additional design notes for backend/frontend structure and execution flow |
+| [`docs/DataCleaning.md`](docs/DataCleaning.md) | Notes on data quality detection, QA clarification, and cleaning behavior |
