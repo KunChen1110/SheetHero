@@ -24,7 +24,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 | `v4.1` | 2026-03-26 | `88da932e` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
 | `v4.2` | 2026-03-27 | `6bafc756` | Text-only output mode and execution/validation modular cleanup |
 | `v5.0` | 2026-04-12 | `fb98f631` | Schema-grounded execution planning, full skill system migration, and advisor pipeline formalization |
-| `v5.1` | 2026-05-05 | `v5.1` | Demo-facing reliability polish, QA controls, helper guardrails, and documentation cleanup |
+| `v5.1` | 2026-05-05 | `055634fc` | Demo-facing reliability polish, QA controls, helper guardrails, and documentation cleanup |
 
 ---
 
