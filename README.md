@@ -32,7 +32,7 @@ SheetHero uses a layered architecture: the React/Electron frontend sends turns t
 
 <p align="center">
   <img src="assets/README/system_architecture.png" alt="SheetHero system architecture diagram" width="900"/>
-  <br/><em>System architecture overview</em>
+  <br/><em>Figure 1 — System architecture overview</em>
 </p>
 
 ---
@@ -59,7 +59,7 @@ SheetHero uses a layered architecture: the React/Electron frontend sends turns t
 
 <p align="center">
   <img src="assets/README/preview_file_upload.png" alt="Upload interface, file picker with configurable output directory" width="300"/>
-  <br/><em>Figure 1 — File upload and export directory configuration</em>
+  <br/><em>Figure 2 — File upload and export directory configuration</em>
 </p>
 
 ---
@@ -70,7 +70,7 @@ SheetHero uses a layered architecture: the React/Electron frontend sends turns t
 
 <p align="center">
   <img src="assets/README/preview_settings.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="300"/>
-  <br/><em>Figure 2 — Model configuration panel</em>
+  <br/><em>Figure 3 — Model configuration panel</em>
 </p>
 
 ---
@@ -81,7 +81,7 @@ SheetHero uses a layered architecture: the React/Electron frontend sends turns t
 
 <p align="center">
   <img src="assets/README/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
-  <br/><em>Figure 3 — Prompt submission and agent execution</em>
+  <br/><em>Figure 4 — Prompt submission and agent execution</em>
 </p>
 
 ---
@@ -98,7 +98,7 @@ Typical QA examples include:
 
 <p align="center">
   <img src="assets/README/preview_qa.png" alt="Interactive QA prompt showing a detected spreadsheet data issue and structured resolution controls" width="800"/>
-  <br/><em>Figure 4 — Interactive QA for resolving detected spreadsheet data issues</em>
+  <br/><em>Figure 5 — Interactive QA for resolving detected spreadsheet data issues</em>
 </p>
 
 ---
@@ -109,7 +109,7 @@ Typical QA examples include:
 
 <p align="center">
   <img src="assets/README/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
-  <br/><em>Figure 5 — Auto-generated execution log</em>
+  <br/><em>Figure 6 — Auto-generated execution log</em>
 </p>
 
 ---
