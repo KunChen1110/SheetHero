@@ -10,7 +10,7 @@ The versioning here is not intended to describe every small commit or bug fix. I
 - `v2.x`: data-quality handling and conversational pipeline integration
 - `v3.x`: local/offline LLM support and execution-stage hardening
 - `v4.x`: benchmark-driven diagnose improvement, skill-based generalization, local-model upgrade validation, and output-mode polish
-- `v5.x`: schema-grounded execution planning, full skill system migration, and advisor pipeline formalization
+- `v5.x`: schema-grounded execution planning, full skill system migration, advisor pipeline formalization, and final demo polish
 
 ## Version Summary
 | Version | Date | Tag Commit | Main Theme |
@@ -22,8 +22,9 @@ The versioning here is not intended to describe every small commit or bug fix. I
 | `v3.1` | 2026-03-10 | `3d53f617` | Execution architecture hardening and deterministic short answers |
 | `v4.0` | 2026-03-23 | `485d6da8` | Skill-based spreadsheet pipeline with benchmark-driven validation |
 | `v4.1` | 2026-03-26 | `88da932e` | Local LLM upgraded to `qwen3:8b` with validated CLI regression |
-| `v4.2` | 2026-03-27 | `pending release commit` | Text-only output mode and execution/validation modular cleanup |
-| `v5.0` | 2026-04-12 | `pending release commit` | Schema-grounded execution planning, full skill system migration, and advisor pipeline formalization |
+| `v4.2` | 2026-03-27 | `6bafc756` | Text-only output mode and execution/validation modular cleanup |
+| `v5.0` | 2026-04-12 | `fb98f631` | Schema-grounded execution planning, full skill system migration, and advisor pipeline formalization |
+| `v5.1` | 2026-05-05 | `v5.1` | Demo-facing reliability polish, QA controls, helper guardrails, and documentation cleanup |
 
 ---
 
@@ -234,7 +235,7 @@ This version marks the first validated local-model upgrade after the skill-based
 ## v4.2
 **Date:** 2026-03-27  
 **Tag:** `v4.2`  
-**Commit:** `pending release commit`
+**Commit:** `6bafc756`
 
 ### Stage Position
 This version marks the first output-mode polish release after the local-model upgrade. The main goal of this iteration is to make the backend more usable for frontend integration while continuing the execution/validation modularization work.
@@ -268,7 +269,7 @@ This version marks the first output-mode polish release after the local-model up
 ## v5.0
 **Date:** 2026-04-12  
 **Tag:** `v5.0`  
-**Commit:** `pending release commit`
+**Commit:** `fb98f631`
 
 ### Stage Position
 This version marks a major architectural break from v4: the legacy task-family routing system is completely removed and replaced by a schema-grounded execution planning layer built on top of the skill system.
@@ -298,6 +299,36 @@ This version marks a major architectural break from v4: the legacy task-family r
 
 ---
 
+## v5.1
+**Date:** 2026-05-05  
+**Tag:** `v5.1`  
+**Commit:** see tag `v5.1`
+
+### Stage Position
+This version represents the final demo-facing stabilisation stage. The goal was not to add a new architecture layer, but to make the existing skill + helper pipeline more reliable, explainable, and presentable.
+
+### Main Characteristics
+- Tightened online and offline prompt behaviour so the LLM is guided toward available helpers before attempting unsupported free-form code.
+- Improved helper descriptions, metadata, and output contracts so helper return values and row-number semantics are clearer to the model.
+- Strengthened execution preflight feedback for common failure modes such as invented columns, placeholder helper imports, incomplete outputs, and unsupported partial solutions.
+- Improved QA-facing behaviour so material data issues can be surfaced with structured controls and context previews.
+- Added a frontend stop-thinking interruption path so users can cancel an active request from the interface.
+- Updated demo benchmark data and selected demo tasks to better match the system's intended strengths: multi-file workflows, visible QA, scheduling, aggregation, and statistical output.
+- Updated README assets and documentation to describe the current layered architecture, project structure, logs, and skill + helper positioning.
+
+### Engineering Improvements Achieved
+- The system's final demo path is more aligned with the actual design principle: use skills, helpers, and guardrails first, and only fall back to open-ended generation when necessary.
+- QA is easier to demonstrate because the frontend now exposes clearer data-issue prompts and structured user actions.
+- Documentation now distinguishes between the project scope, the software architecture, version history, and detailed changelog.
+- The project is positioned more honestly as a skill-guided spreadsheet agent rather than a fully general spreadsheet automation system.
+
+### Main Engineering Focus At This Stage
+- Reduce avoidable LLM drift in both online and offline modes.
+- Preserve the existing architecture while improving prompt clarity and helper usage.
+- Prepare the final project presentation and repository documentation.
+
+---
+
 ## Overall Evolution
 Across these versions, the backend evolved through four main stages:
 
@@ -321,5 +352,8 @@ Across these versions, the backend evolved through four main stages:
 
 7. **Complete skill-based migration with runtime plans**  
    The legacy task-family routing was fully replaced by a composable skill system with keyword detectors, rich helper metadata, and schema-grounded runtime execution plans. Prompt templates were simplified, the advisor pipeline was formalized, and structured cleaning policy plans were introduced.
+
+8. **Demo-facing reliability polish**  
+   The final stage focused on stabilising the current system rather than expanding scope. Prompt guidance, helper contracts, QA controls, stop-thinking behaviour, demo datasets, and repository documentation were refined to make the system easier to demonstrate and defend.
 
 This progression is the main engineering story of the backend and reflects how the system changed from an early task-solving prototype into a more systematic spreadsheet-processing platform.

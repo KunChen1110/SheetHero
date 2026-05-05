@@ -538,6 +538,11 @@
 
 ## 05/05/2026
 ### --- Added ---
+- Added v5.1 release documentation
+  - Updated `docs/ProjectPositioning.md` with final project scope, target task types, supported data issues, non-goals, and demo strategy.
+  - Updated `docs/SoftwareDesign.md` from early wireframe notes into the current layered system design overview.
+  - Updated `docs/VersionHistory.md` with the v5.1 demo-facing reliability polish milestone.
+  - Updated `README.md` further-documentation links to prioritise project positioning, software design, version history, and changelog.
 - Added stronger helper contracts for spreadsheet workflow helpers
   - Helper functions now return clearer `output_df`, `detail_data`, metadata, and row-highlighting information.
   - Numeric summary helpers now expose explicit `highlight_rows`, min/max row references, and row-number offsets so LLM code does not guess output row positions.

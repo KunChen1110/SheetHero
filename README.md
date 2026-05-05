@@ -256,6 +256,7 @@ team29_project/
 
 | Document | Purpose |
 | -------- | ------- |
-| [`docs/Changelog.md`](docs/Changelog.md) | Summary of implemented changes and recent system updates |
-| [`docs/SoftwareDesign.md`](docs/SoftwareDesign.md) | Additional design notes for backend/frontend structure and execution flow |
-| [`docs/DataCleaning.md`](docs/DataCleaning.md) | Notes on data quality detection, QA clarification, and cleaning behavior |
+| [`docs/ProjectPositioning.md`](docs/ProjectPositioning.md) | Scope, target task types, supported data issues, and project trade-offs |
+| [`docs/SoftwareDesign.md`](docs/SoftwareDesign.md) | Current layered design, pipeline stages, skill/helper execution, and QA flow |
+| [`docs/VersionHistory.md`](docs/VersionHistory.md) | Major architectural milestones from prototype to skill-guided system |
+| [`docs/Changelog.md`](docs/Changelog.md) | Detailed implementation-level change record |
