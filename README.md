@@ -118,11 +118,10 @@ Typical QA examples include:
 
 ### Prerequisites
 
-- Python 3.11 or later
+- Python 3.9 or later
 - Node.js 18 or later
 - npm
 - An OpenAI-compatible API key
-- Optional for offline mode: a local OpenAI-compatible server such as Ollama
 
 ### Clone the Repository
 
@@ -131,59 +130,37 @@ git clone --branch main https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29
 cd team29_project
 ```
 
-### First-time Setup
+### Linux / macOS
 
 ```bash
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
 cd frontend
 npm install
 cd ..
-```
 
-On Windows, activate the virtual environment with:
-
-```batch
-venv\Scripts\activate
-```
-
----
-
-## Running the Application
-
-### Full Desktop Application
-
-From the repository root:
-
-```bash
 python main.py
 ```
 
-This starts:
+### Windows
 
-- FastAPI backend on port `8000`
-- Vite frontend dev server
-- Electron desktop window
+```batch
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 
-### Frontend Development Mode
-
-For frontend-only debugging, run the frontend from the `frontend/` directory:
-
-```bash
 cd frontend
-npm run dev:frontend
+npm install
+cd ..
+
+python main.py
 ```
 
-For the full concurrent frontend/backend/Electron development workflow:
+`python main.py` starts the FastAPI backend, the Vite frontend server, and the Electron desktop window.
 
-```bash
-cd frontend
-npm run dev
-```
-
-### Backend CLI / Benchmark Mode
+### Backend CLI
 
 For command-line debugging and benchmark runs:
 
