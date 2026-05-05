@@ -1015,6 +1015,10 @@ class QualityAssuranceStage(Stage):
             else:
                 return self._match_structured_reply(problem, structured)
 
+        control_selection = self._parse_control_label_reply(problem, reply)
+        if control_selection is not None:
+            return self._match_structured_reply(problem, control_selection)
+
         if self.client is not None:
             prompt_text = self.prompt_builder.build_qa_match_prompt(
                 self._augment_question_with_problem_context(question, problem),
@@ -1042,6 +1046,30 @@ class QualityAssuranceStage(Stage):
             return heuristic
         return False, "", "Please answer the question directly."
 
+    @classmethod
+    def _parse_control_label_reply(
+        cls,
+        problem: Optional[Dict[str, Any]],
+        reply: str,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_reply = cls._normalize_option_token(reply)
+        if not normalized_reply:
+            return None
+        schema = cls._build_response_schema(problem)
+        for control in schema.get("controls", []):
+            decision_kind = str(control.get("decision_kind") or "").strip()
+            label = str(control.get("label") or "").strip()
+            if normalized_reply in {
+                cls._normalize_option_token(decision_kind),
+                cls._normalize_option_token(label),
+            }:
+                return {
+                    "decision_kind": decision_kind,
+                    "selected_option": label,
+                    "value": "",
+                }
+        return None
+
     @staticmethod
     def _parse_structured_reply(reply: str) -> Optional[Dict[str, Any]]:
         try:
@@ -1065,6 +1093,7 @@ class QualityAssuranceStage(Stage):
         issue_type = str(problem.get("issue_type") or "")
         metadata = problem.get("metadata") or {}
         decision_kind = str(payload.get("decision_kind") or "").strip()
+        decision_token = cls._normalize_option_token(decision_kind)
         value = payload.get("value")
         selected_option = str(payload.get("selected_option") or payload.get("value") or "").strip()
         sheet_key = str(metadata.get("sheet_key") or "current sheet")
@@ -1140,6 +1169,16 @@ class QualityAssuranceStage(Stage):
 
         if decision_kind in {"keep_as_is", "ignore_blank", "split_table", "keep_first", "keep_latest"}:
             return True, "NO_OP", ""
+        if decision_token in {"keepasis", "ignoreblank", "splittable", "keepfirst", "keeplatest"}:
+            return True, "NO_OP", ""
+        if decision_token in {"skiprow", "skipaffectedrow"}:
+            if excel_row is None:
+                return False, "", "Cannot skip the row because the row number is missing."
+            return True, f"Drop Excel row {excel_row} in `{sheet_key}`.", ""
+        if decision_token in {"correctvalue", "manualvalue"}:
+            if value in (None, ""):
+                return False, "", "Please enter a corrected value."
+            return True, f"Set `{column_name}`{row_text} in `{sheet_key}` to {value}.", ""
 
         return False, "", "Please choose a valid option."
 

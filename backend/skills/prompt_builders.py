@@ -75,7 +75,7 @@ def build_compact_skill_workflow(skill: SkillSpec, helper: HelperSpec) -> str:
             f"[{label} WORKFLOW]\n"
             "- Identify the main table and verified group/date/value columns.\n"
             "- For messy period blocks, use shared extraction helpers before aggregating.\n"
-            "- Compute the requested summary/ranking/chart data.\n"
+            "- Use selected aggregate helpers as the primary implementation path.\n"
             "- Then write Output and save."
         ),
         "schedule": (
@@ -83,13 +83,13 @@ def build_compact_skill_workflow(skill: SkillSpec, helper: HelperSpec) -> str:
             "- Load all runtime tables and classify table roles by headers, not filenames.\n"
             "- Dependency tasks: select task/dependency tables, then schedule.\n"
             "- Relational assignment tasks: use `find_table_by_headers(...)` for the assignment/schedule tables.\n"
-            "- Prefer `Assigned Tutor` + entity headers like `Student Name`/`Name`, then join to `Tutor Name` + `Time Slot` + `Room`.\n"
+            "- Match `Assigned Tutor` + entity headers like `Student Name`/`Name`, then join to `Tutor Name` + `Time Slot` + `Room`.\n"
             "- Then write the 5-column Output table and save."
         ),
         "statistical": (
             f"[{label} WORKFLOW]\n"
             "- Verify numeric/target columns from runtime schema.\n"
-            "- Use shared statistical helpers or concise pandas math.\n"
+            "- Use selected statistical helpers as the primary implementation path.\n"
             "- Write the resulting table to Output and save."
         ),
         "proportion": (
@@ -103,12 +103,13 @@ def build_compact_skill_workflow(skill: SkillSpec, helper: HelperSpec) -> str:
         "rank": (
             f"[{label} WORKFLOW]\n"
             "- Verify score columns and weights from runtime schema.\n"
-            "- Compute score, add rank, then write Output and save."
+            "- Use selected score/rank helpers, then write Output and save."
         ),
         "financial": (
             f"[{label} WORKFLOW]\n"
             "- Verify numerator/denominator or year/value columns.\n"
-            "- Compute ratio or YoY change, then write Output and save."
+            "- Use selected financial helpers as the primary path; use pandas only for uncovered fallback calculations.\n"
+            "- Then write Output and save."
         ),
         "scan": (
             f"[{label} WORKFLOW]\n"
@@ -170,7 +171,7 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
     elif helper.name == "concat_tables_with_same_headers":
         lines.extend(
             [
-                "- For same-schema merge + summary tasks, prefer `concat_tables_with_same_headers(tables)` plus `summarize_numeric_column(...)` over hand-written `pd.concat(...)` bookkeeping.",
+                "- For same-schema merge + summary tasks, use `concat_tables_with_same_headers(tables)` plus `summarize_numeric_column(...)` instead of hand-written `pd.concat(...)` bookkeeping.",
                 "- Write the result DataFrame directly with `write_dataframe_to_sheet(df, 'Output', 'A1')`; do not hand-build `data_2d` from headers + values.",
                 "- Add any summary row strictly below the written table, and do not shadow sandbox function names like `highlight_rows`.",
                 "- Do not replace the whole task with a single task-shaped helper shortcut.",
@@ -190,7 +191,7 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
     elif helper.name == "build_region_share_cost_report":
         lines.extend(
             [
-                "- For regional share-and-cost tasks, prefer `build_region_share_cost_report()` over manual multi-file joins and ratio calculations.",
+                "- For regional share-and-cost tasks, use `build_region_share_cost_report()` instead of manual multi-file joins and ratio calculations.",
                 "- This workflow identifies the region population table and the region expenditure table from observed headers.",
                 "- Write `report['detail_data']` or `report['output_df']` directly to `Output`, then save.",
             ]
@@ -198,28 +199,28 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
     elif helper.name == "build_two_dimension_mean_count_summary_report":
         lines.extend(
             [
-                "- For two-dimension mean-and-count summary tasks, prefer `build_two_dimension_mean_count_summary_report()` over hand-written groupby/count code.",
+                "- For two-dimension mean-and-count summary tasks, use `build_two_dimension_mean_count_summary_report()` instead of hand-written groupby/count code.",
                 "- This workflow identifies the grouping columns and the rating/value column from observed headers and returns a ready-to-write summary table.",
             ]
         )
     elif helper.name == "build_multi_source_group_comparison_report":
         lines.extend(
             [
-                "- For joined grouped-comparison tasks, prefer `build_multi_source_group_comparison_report()` over manual multi-table merge logic.",
+                "- For joined grouped-comparison tasks, use `build_multi_source_group_comparison_report()` instead of manual multi-table merge logic.",
                 "- This workflow returns one grouped summary table and one conditional comparison table.",
             ]
         )
     elif helper.name == "build_multi_source_utilisation_summary_report":
         lines.extend(
             [
-                "- For multi-source utilisation tasks, prefer `build_multi_source_utilisation_summary_report()` over manual multi-table ratio calculations.",
+                "- For multi-source utilisation tasks, use `build_multi_source_utilisation_summary_report()` instead of manual multi-table ratio calculations.",
                 "- This workflow returns the output table plus `highlight_rows` for values above threshold when applicable.",
             ]
         )
     elif helper.name == "build_region_growth_analysis":
         lines.extend(
             [
-                "- For messy region/year penetration sheets, prefer `build_region_growth_analysis(...)` over hand-written header-row parsing.",
+                "- For messy region/year penetration sheets, use `build_region_growth_analysis(...)` instead of hand-written header-row parsing.",
                 "- Write `region_growth_result['output_df']` to `Output`, add `region_growth_result['summary']`, and embed the line chart with `save_plot_to_excel(...)`.",
                 "- If the requested start year is unavailable, shrink the helper year window to the available requested years instead of interpolating.",
             ]
@@ -228,7 +229,7 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
         lines.extend(
             [
                 "- For target-vs-feature correlation tasks, infer the target and feature columns from the runtime plan and current runtime schema, not from a benchmark recipe.",
-                "- Prefer `compute_feature_correlations(...)` over a full correlation matrix when the question asks for one target versus several factors.",
+                "- Use `compute_feature_correlations(...)` instead of a full correlation matrix when the question asks for one target versus several factors.",
                 "- Keep preprocessing schema-driven: apply binary coercion or categorical encoding only when the selected feature columns require it.",
                 "- Use pairwise deletion naturally by leaving missing values as NaN; do not drop the whole table because one selected feature has gaps.",
                 "- Write a one-row output table with the selected feature headers, not a `Feature | Correlation` long-form table, unless the user explicitly asks for long form.",
@@ -238,7 +239,7 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
         lines.extend(
             [
                 "- For regression tasks, infer `target_col` and `feature_cols` from the runtime plan and current runtime schema.",
-                "- Prefer `fit_linear_regression_weights(...)` over hand-written least-squares or external ML libraries.",
+                "- Use `fit_linear_regression_weights(...)` instead of hand-written least-squares or external ML libraries.",
                 "- Include all available predictors from the runtime plan unless the user explicitly restricts them.",
                 "- Print the selected predictor list before fitting with `print(\"USED_FEATURES:\", feature_cols)`.",
                 "- Write the returned coefficient table from `regression_result['output_df']` directly to `Output`.",
@@ -247,7 +248,7 @@ def build_execution_strict_rules(skill: SkillSpec, helper: HelperSpec, plan_summ
     elif helper.name == "build_cash_flow_efficiency_report":
         lines.extend(
             [
-                "- For row-label financial statement tasks, prefer `build_cash_flow_efficiency_report()` over manual header parsing.",
+                "- For row-label financial statement tasks, use `build_cash_flow_efficiency_report()` instead of manual header parsing.",
                 "- This workflow reads the statement layout, finds the OCF / net income / capex rows, and returns a year-by-year output table.",
                 "- Write `report['detail_data']` or `report['formatted_df']` to `Output`, then save.",
             ]
@@ -405,8 +406,8 @@ def build_loop_breaker(
             ]
         if needs_highlight:
             lines += [
-                "  `row_numbers = summary_result['output_row_numbers']`",
-                "  `# output_row_numbers are Excel rows relative to summary_df — valid ONLY when summary_df was written above`",
+                "  `row_numbers = summary_result['highlight_rows']['max']  # or ['min'] when the question asks for lowest`",
+                "  `# highlight_rows values are Excel rows relative to summary_df — valid ONLY when summary_df was written above`",
                 "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`",
             ]
         lines += [
@@ -415,9 +416,9 @@ def build_loop_breaker(
             "  `saved_file`",
             "- Write the DataFrame directly; do not hand-build `data_2d`.",
         ]
-        if needs_aggregate:
+        if needs_aggregate and needs_highlight:
             lines.append(
-                "- `output_row_numbers` is only valid for the DataFrame passed to summarize_numeric_column — never mix filtered and unfiltered frames."
+                "- `summary_result['highlight_rows']['max'/'min']` is only valid for the DataFrame passed to summarize_numeric_column — never mix filtered and unfiltered frames."
             )
         return "\n".join(lines) + "\n"
     if helper.name == "build_weighted_share_value_report":
@@ -544,7 +545,7 @@ def build_loop_breaker(
         return (
             f"\n{label} LOOP BREAKER:\n"
             "- Use this grounded workflow shape for one-target feature correlations:\n"
-            "  `tables = load_all_tables()`\n"
+            "  `tables = load_all_tables(range_ref='A1:Z200000', require_primary_key=False, stop_at_note_row=False)`\n"
             "  `df = tables[0]['df'].copy()`\n"
             "  Set `target_col` from the runtime plan summary above.\n"
             "  Set `feature_cols` from the runtime plan summary above.\n"
@@ -629,7 +630,7 @@ def build_loop_breaker(
         "- Use exactly this workflow shape:",
         "  `tables = load_all_tables()`",
         "  `df = tables[0]['df'].copy()  # select by verified headers`",
-        "  `# compose transformation steps with shared helpers / pandas`",
+        "  `# compose transformation steps with selected helpers; use pandas only for glue/fallback`",
     ]
     if needs_aggregate:
         lines += [
@@ -646,7 +647,7 @@ def build_loop_breaker(
         ]
     if needs_highlight:
         lines += [
-            "  `row_numbers = summary_result['output_row_numbers']`",
+            "  `row_numbers = summary_result['highlight_rows']['max']  # or ['min'] when requested`",
             "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`",
         ]
     lines += [

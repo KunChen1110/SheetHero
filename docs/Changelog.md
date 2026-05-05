@@ -535,3 +535,42 @@
 ### --- Removed ---
 - Removed `backend/task_families.py` (superseded by the skills registry introduced in 12/04/2026).
 - Removed stale top-level dataset docs (`DatasetV1.md`, `JM_ReadMe.md`, `JM_Dataset_Task21-Task26.md`).
+
+## 05/05/2026
+### --- Added ---
+- Added stronger helper contracts for spreadsheet workflow helpers
+  - Helper functions now return clearer `output_df`, `detail_data`, metadata, and row-highlighting information.
+  - Numeric summary helpers now expose explicit `highlight_rows`, min/max row references, and row-number offsets so LLM code does not guess output row positions.
+- Added feature-correlation guardrails for full-dataset statistical analysis
+  - Correlation execution now rejects default `load_all_tables()` when a full-table calculation is required.
+  - Feature-correlation preflight blocks target columns inside `feature_cols` and prevents recomputing engineered columns such as `HasCabin` from sparse raw text columns.
+  - `compute_feature_correlations(...)` now ignores the target if it is accidentally included in the feature list.
+- Added frontend stop-thinking control
+  - The send button switches to a stop control while a request is active.
+  - Stopping aborts the active frontend request, clears the waiting state, and discards the current session from the UI.
+- Added demo-stable benchmark updates
+  - Updated Task 2 data to better demonstrate relational assignment without ambiguous fuzzy-name or room-code cases.
+  - Updated Task 4 with an intentional negative duration anomaly so the QA stage can demonstrate semantic anomaly correction before scheduling.
+  - Updated Task 6 with engineered numeric/binary Titanic features (`HasCabin`, `Embarked_C`, `Embarked_Q`, `Embarked_S`) for robust full-dataset Pearson correlation analysis.
+- Added regression tests for helper contracts, QA parsing, diagnose routing, skill prompts, feature-correlation preflight, and Task 4 semantic-anomaly routing.
+
+### --- Changed ---
+- Strengthened online and offline prompt guidance around helper-first execution
+  - Prompts now emphasise selected helpers as the primary implementation path and reserve pandas code for glue/fallback logic.
+  - Runtime plan summaries and loop breakers now provide more concrete, schema-grounded examples for statistical, scheduling, and aggregation tasks.
+- Improved DiagnoseRouter behavior
+  - Clean input wording such as "clean tables" no longer triggers unnecessary diagnose flows.
+  - Statistical tasks now handle missing values in execution through pairwise deletion rather than routing routine missing values through QA.
+  - Scheduling tasks can surface implausible numeric durations as semantic anomalies when they are material to the result.
+- Improved QA reply handling
+  - Frontend choice labels such as "Keep as-is" and "Skip affected row" are parsed directly before falling back to LLM interpretation.
+- Updated DevelopmentBenchmark demo tasks and expected outputs for Task 2, Task 4, and Task 6.
+
+### --- Fixed ---
+- Fixed Task 1 / large clean-table routing issues where "clean tables" wording could incorrectly trigger Diagnose.
+- Fixed cross-schema join helper selection so generic relational join helpers are not forced onto downstream analytical reporting tasks.
+- Fixed Task 4 scheduling failure after QA correction by preserving dependency-schedule helper guidance and semantic anomaly cleanup flow.
+- Fixed Task 6 full-dataset correlation accuracy
+  - Prevented silent first-200-row calculations.
+  - Ensured engineered categorical features are used directly.
+  - Ensured the saved output matches the full 891-row Titanic correlation result.

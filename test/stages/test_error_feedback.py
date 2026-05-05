@@ -72,7 +72,7 @@ def test_string_indices_feedback_explains_dataframe_row_number_fix():
 
     assert feedback is not None
     assert "iterating a DataFrame yields column labels" in feedback
-    assert "summary_result['output_row_numbers']" in feedback
+    assert "summary_result['highlight_rows']['max']" in feedback
     assert ".index.tolist()" in feedback
 
 
@@ -89,5 +89,5 @@ def test_merge_summary_feedback_explains_unsupported_max_result_key():
 
     assert feedback is not None
     assert "does not return a `max` key" in feedback
-    assert "summary_result['output_row_numbers']" in feedback
+    assert "summary_result['highlight_rows']['max']" in feedback
     assert "summary_result['summary']" in feedback

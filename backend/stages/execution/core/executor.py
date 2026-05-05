@@ -38,7 +38,7 @@ _FORBIDDEN_PATTERNS_BOUNDED = [
     (r"save_workbook_to\s*\(\s*['\"]", "Use save_workbook_to(output_path) only. Do not hard-code save paths."),
     (r"\bsave_workbook\s*\(", "save_workbook() is disabled in execution mode. Use save_workbook_to(output_path) only."),
     (r"\bwb\.save\s*\(", "Do not call wb.save(...). Use save_workbook_to(output_path) only."),
-    (r"\bsheet\.cell\s*\(", "Direct worksheet cell writes are prohibited. Use write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")."),
+    (r"\bsheet\.cell\s*\(", "Direct worksheet cell writes are prohibited. Use write_dataframe_to_sheet(df_or_rows, \"Output\", \"A1\")."),
     (r"output_path\s*=\s*save_workbook_to\s*\(", "Do not reassign output_path. Use: saved_file = save_workbook_to(output_path), then return saved_file."),
     (r"['\"]/(?:Users|home|tmp|var|opt)/", "Hard-coded absolute paths are prohibited. Use list_all_workbooks() for inputs and save_workbook_to(output_path) for outputs."),
     (r"\.columns\.contains\s*\(", "pandas Index has no columns.contains(). Use `'col' in df.columns` or `df.columns.str.contains(...)`."),

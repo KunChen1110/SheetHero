@@ -68,7 +68,7 @@ def compose_skill_plan(
     # not the raw tables list — the extraction step is implicit (LLM-driven).
     _last_df_artifact = "df"
     # When aggregate is present, write_save should consume summary_df (the filtered/summarized frame),
-    # not combined_df — they must be the same object for output_row_numbers to be valid.
+    # not combined_df — they must be the same object for helper-provided highlight rows to be valid.
     _write_df_artifact = "df"  # updated as steps are added
 
     for skill in sorted(skills, key=lambda s: _STEP_ORDER.get(s.name, 50)):
@@ -117,11 +117,11 @@ def compose_skill_plan(
                 constraints=(
                     "call write_dataframe_to_sheet before highlight_rows",
                     "row = DataFrame position (0-based) + 2",
-                    "use summary_result['output_row_numbers'] when available",
+                    "use summary_result['highlight_rows']['max'] or ['min'] when available",
                 ),
-                note="row_numbers = summary_result['output_row_numbers']",
+                note="row_numbers = summary_result['highlight_rows']['max']",
                 must_run_after=("compute_summary", "write_output"),
-                input_artifact="summary_result['output_row_numbers']",
+                input_artifact="summary_result['highlight_rows']",
                 output_artifact="",
             ))
         elif skill.name in ("sort_rank", "rank"):
@@ -130,7 +130,7 @@ def compose_skill_plan(
                 step_name="rank_rows",
                 preferred_helpers=(helper_name,) if helper_name else (),
                 constraints=("add rank column before writing",),
-                note="df = add_rank_column(df, sort_col='...')",
+                note="rank_result = add_rank_column(df, sort_col='...'); df = rank_result['output_df']",
                 input_artifact=_last_df_artifact,
                 output_artifact="df",
             ))

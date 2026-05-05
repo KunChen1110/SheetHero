@@ -41,6 +41,9 @@ export default function App() {
   // Ref to keep track of the current session ID for ongoing conversations
   const sessionIdRef = useRef<string | null>(null);
 
+  // Ref to cancel the active backend request from the UI.
+  const activeRequestAbortRef = useRef<AbortController | null>(null);
+
   // Reference used to scroll to the bottom of the chat box
   const scrollReference = useRef<HTMLDivElement>(null);
 
@@ -130,6 +133,7 @@ export default function App() {
 
   // Creates a new chat with a default title and sets it as the active chat
   function createNewChat(): void {
+    stopActiveRequest(false);
     const newChat: Chat = {
       id: Date.now().toString(),
       title: "New Chat",
@@ -143,6 +147,42 @@ export default function App() {
     setActiveChatId(newChat.id);
     updateSessionId(null);
     updateIsWaiting(false);
+  }
+
+  function appendAssistantMessage(content: string): void {
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: Role.ASSISTANT,
+      content,
+    };
+
+    setChats((prevChats) => {
+      const updated = prevChats.map((chat) =>
+        chat.id === activeChatId
+          ? { ...chat, messages: [...chat.messages, assistantMessage] }
+          : chat,
+      );
+      const updatedChat = updated.find((chat) => chat.id === activeChatId);
+      if (updatedChat) saveChatToStorage(updatedChat);
+      return updated;
+    });
+  }
+
+  function stopActiveRequest(addMessage = true): void {
+    activeRequestAbortRef.current?.abort();
+    activeRequestAbortRef.current = null;
+    setIsTyping(false);
+    updateIsWaiting(false);
+
+    const activeSessionId = sessionIdRef.current;
+    if (activeSessionId) {
+      api.delete(`/sheet-hero/session/${activeSessionId}`).catch(console.error);
+      updateSessionId(null);
+    }
+
+    if (addMessage) {
+      appendAssistantMessage("Stopped.");
+    }
   }
 
   // Creates a new message in the active chat and gets a response from the backend
@@ -173,6 +213,8 @@ export default function App() {
     });
 
     setIsTyping(true);
+    const requestAbortController = new AbortController();
+    activeRequestAbortRef.current = requestAbortController;
 
     try {
       let assistantContent: string;
@@ -184,8 +226,14 @@ export default function App() {
         waitingNow && sessionNow ? "sendReply" : "startConversation",
       );
 
-      if (waitingNow && sessionNow) assistantContent = await sendReply(content);
-      else assistantContent = await startConversation(content);
+      if (waitingNow && sessionNow) {
+        assistantContent = await sendReply(content, requestAbortController.signal);
+      } else {
+        assistantContent = await startConversation(
+          content,
+          requestAbortController.signal,
+        );
+      }
 
       let parsedContent = assistantContent;
       let hasOutputFile = false;
@@ -229,6 +277,9 @@ export default function App() {
         return updated;
       });
     } catch (error) {
+      if ((error as { code?: string })?.code === "ERR_CANCELED") {
+        return;
+      }
       console.error(error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -247,12 +298,18 @@ export default function App() {
         return updated;
       });
     } finally {
+      if (activeRequestAbortRef.current === requestAbortController) {
+        activeRequestAbortRef.current = null;
+      }
       setIsTyping(false);
     }
   }
 
   // Creates a new session conversation
-  async function startConversation(userMessage: string): Promise<string> {
+  async function startConversation(
+    userMessage: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const newSessionId = Date.now().toString();
     // updateSessionId keeps the ref in sync immediately so processEvents
     // (called after the await) reads the correct session ID via the ref.
@@ -268,16 +325,23 @@ export default function App() {
       output_mode: outputMode,
       prompt: userMessage,
       excel_paths: excelFiles.map((f) => f.path),
+    }, {
+      signal,
     });
 
     return processEvents(result.data.events);
   }
 
   // Sends a reply to an existing session
-  async function sendReply(userReply: string): Promise<string> {
+  async function sendReply(
+    userReply: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const result = await api.post("/sheet-hero/reply", {
       session_id: sessionIdRef.current,
       user_reply: userReply,
+    }, {
+      signal,
     });
 
     return processEvents(result.data.events);
@@ -458,6 +522,7 @@ export default function App() {
             hasApiKey={hasApiKey}
             hasActiveChat={!!activeChatId}
             isTyping={isTyping}
+            onStopThinking={stopActiveRequest}
             outputMode={outputMode}
             onOutputModeChange={setOutputMode}
             responseSchema={isWaitingRef.current ? activeResponseSchema : undefined}

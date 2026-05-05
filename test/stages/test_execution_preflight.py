@@ -24,11 +24,20 @@ class _InferenceStub:
         return match.group(1) if match else None
 
     @staticmethod
+    def extract_string_list_kwarg(_code, _kwarg):
+        return []
+
+    @staticmethod
     def infer_runtime_plan(_skill_name, _helper_name, _user_question, _observed_headers):
-        return SimpleNamespace(
-            target_col="sales",
-            feature_cols=("price", "ad spend"),
-        )
+        if _helper_name == "compute_feature_correlations":
+            return SimpleNamespace(
+                target_col="Survived",
+                feature_cols=(
+                    "Sex", "Age", "Fare", "Pclass", "SibSp", "Parch",
+                    "HasCabin", "Embarked_C", "Embarked_Q", "Embarked_S",
+                ),
+            )
+        return SimpleNamespace(target_col="sales", feature_cols=("price", "ad spend"))
 
 
 class _RuntimeStub:
@@ -160,6 +169,86 @@ def test_regression_preflight_blocks_target_col_that_conflicts_with_runtime_plan
     assert issue is not None
     assert "PREFLIGHT_REGRESSION: target column conflicts with the runtime plan." in issue
     assert "sales" in issue
+
+
+def test_feature_correlation_preflight_blocks_default_table_window(monkeypatch):
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.detect_skills",
+        lambda _question: [SimpleNamespace(name="statistical")],
+    )
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.select_helper",
+        lambda _skill, _question: SimpleNamespace(name="compute_feature_correlations"),
+    )
+
+    issue = advisor.metadata_routed_preflight_check(
+        code_action=(
+            "tables = load_all_tables()\n"
+            "df = tables[0]['df']\n"
+            "feature_cols = ['Sex', 'Age', 'Fare']\n"
+            "correlation_result = compute_feature_correlations(df, target_col='Survived', feature_cols=feature_cols)\n"
+        ),
+        user_question="Calculate Pearson correlation coefficients for the full Titanic dataset.",
+    )
+
+    assert issue is not None
+    assert issue.startswith("PREFLIGHT_FEATURE_CORRELATION: full-dataset correlation")
+    assert "A1:Z200000" in issue
+
+
+def test_feature_correlation_preflight_blocks_target_in_features(monkeypatch):
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.detect_skills",
+        lambda _question: [SimpleNamespace(name="statistical")],
+    )
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.select_helper",
+        lambda _skill, _question: SimpleNamespace(name="compute_feature_correlations"),
+    )
+
+    issue = advisor.metadata_routed_preflight_check(
+        code_action=(
+            "tables = load_all_tables(range_ref='A1:Z200000', require_primary_key=False, stop_at_note_row=False)\n"
+            "df = tables[0]['df']\n"
+            "feature_cols = ['Survived', 'Sex', 'Age', 'Fare']\n"
+            "correlation_result = compute_feature_correlations(df, target_col='Survived', feature_cols=feature_cols)\n"
+        ),
+        user_question="Calculate Pearson correlation coefficients for the full Titanic dataset.",
+    )
+
+    assert issue is not None
+    assert issue.startswith("PREFLIGHT_FEATURE_CORRELATION: `feature_cols` must exclude the target column.")
+
+
+def test_feature_correlation_preflight_blocks_recomputing_hascabin(monkeypatch):
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.detect_skills",
+        lambda _question: [SimpleNamespace(name="statistical")],
+    )
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.select_helper",
+        lambda _skill, _question: SimpleNamespace(name="compute_feature_correlations"),
+    )
+
+    issue = advisor.metadata_routed_preflight_check(
+        code_action=(
+            "tables = load_all_tables(range_ref='A1:Z200000', require_primary_key=False, stop_at_note_row=False)\n"
+            "df = tables[0]['df']\n"
+            "df['HasCabin'] = df['Cabin'].notnull().astype(int)\n"
+            "feature_cols = ['Sex', 'Age', 'Fare', 'Pclass', 'SibSp', 'Parch', 'HasCabin', 'Embarked_C', 'Embarked_Q', 'Embarked_S']\n"
+            "correlation_result = compute_feature_correlations(df, target_col='Survived', feature_cols=feature_cols)\n"
+        ),
+        user_question="Calculate Pearson correlation coefficients using the provided HasCabin column.",
+    )
+
+    assert issue is not None
+    assert issue.startswith("PREFLIGHT_FEATURE_CORRELATION: do not recompute `HasCabin`")
 
 
 def test_self_loading_helper_preflight_rejects_filename_arguments(monkeypatch):
@@ -352,6 +441,62 @@ def test_header_alias_grounding_guard_ignores_aggregation_function_names(monkeyp
             "saved_file\n"
         ),
         user_question="Create a supplier scorecard and buyer summary from procurement tables.",
+    )
+
+    assert issue is None
+
+
+def test_header_alias_grounding_guard_ignores_helper_result_keys():
+    advisor = ExecutionGenericPreflightAdvisor(
+        _ObservedHeaderRuntimeStub({"Task ID", "Task Name", "Duration (hours)", "Priority", "Depends on"})
+    )
+
+    issue = advisor.header_alias_grounding_guard(
+        "schedule_result = build_dependency_schedule(task_df, dep_df)\n"
+        "print('TASK_ID_SET:', sorted(schedule_result['task_id_set']))\n"
+        "print('SCHEDULED_TASK_IDS:', sorted(schedule_result['scheduled_task_ids']))\n"
+        "write_dataframe_to_sheet(schedule_result['detail_data'], 'Output', 'A1')\n"
+    )
+
+    assert issue is None
+
+
+def test_preflight_allows_header_grounded_pipeline_when_no_join_helper_covers_task():
+    advisor = ExecutionGenericPreflightAdvisor(
+        _ObservedHeaderRuntimeStub(
+            {
+                "StoreID", "ProductID", "Month", "UnitsSold", "DiscountPct",
+                "UnitPrice", "UnitCost", "Region", "Category", "RevenueTarget",
+            }
+        )
+    )
+
+    issue = advisor.offline_preflight_check(
+        code_action=(
+            "tables = load_all_tables()\n"
+            "stores_t = find_table_by_headers(tables, required_headers=['StoreID', 'Region'])\n"
+            "products_t = find_table_by_headers(tables, required_headers=['ProductID', 'Category', 'UnitPrice', 'UnitCost'])\n"
+            "sales_t = find_table_by_headers(tables, required_headers=['StoreID', 'ProductID', 'Month', 'UnitsSold', 'DiscountPct'])\n"
+            "targets_t = find_table_by_headers(tables, required_headers=['StoreID', 'Category', 'Month', 'RevenueTarget'])\n"
+            "sales = sales_t['df'].copy()\n"
+            "stores = stores_t['df'].copy()\n"
+            "products = products_t['df'].copy()\n"
+            "targets = targets_t['df'].copy()\n"
+            "h2 = sales[(sales['Month'] >= '2024-07') & (sales['Month'] <= '2024-12')]\n"
+            "h2 = h2.merge(stores, on='StoreID', how='inner').merge(products, on='ProductID', how='inner')\n"
+            "h2['NetRevenue'] = h2['UnitsSold'] * h2['UnitPrice'] * (1 - h2['DiscountPct'] / 100)\n"
+            "region_category = h2.groupby(['Region', 'Category'], as_index=False).agg(NetRevenue=('NetRevenue', 'sum'))\n"
+            "create_output_sheet('Region_Category_H2')\n"
+            "write_dataframe_to_sheet(region_category, 'Region_Category_H2', 'A1')\n"
+            "saved_file = save_workbook_to(output_path)\n"
+            "print(f'SAVED_FILE: {saved_file}')\n"
+            "saved_file\n"
+        ),
+        user_question=(
+            "Join the tables using StoreID and ProductID, keep only the H2 2024 months, compute net revenue, "
+            "aggregate the results by Region and Category, compare each aggregate to the revenue target, "
+            "create a Top 10 store leaderboard, and output three sheets."
+        ),
     )
 
     assert issue is None
@@ -637,8 +782,99 @@ def test_same_schema_merge_summary_preflight_blocks_undocumented_summary_result_
 
     assert issue is not None
     assert "PREFLIGHT_AGGREGATE" in issue
-    assert "output_row_numbers" in issue
+    assert "highlight_rows" in issue
+    assert "output_row_numbers" not in issue
     assert "summary_result['summary']" in issue
+    assert "max_indices" not in issue
+
+
+def test_same_schema_merge_summary_preflight_blocks_summary_write_dataframe_mismatch(monkeypatch):
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.detect_skills",
+        lambda _question: [SimpleNamespace(name="merge")],
+    )
+    monkeypatch.setattr(
+        "backend.stages.execution.skill.preflight.select_helper",
+        lambda _skill, _question: SimpleNamespace(name="concat_tables_with_same_headers"),
+    )
+
+    issue = advisor.metadata_routed_preflight_check(
+        code_action=(
+            "tables = load_all_tables()\n"
+            "concat_result = concat_tables_with_same_headers(tables)\n"
+            "combined_df = concat_result['output_df']\n"
+            "daily_spending = combined_df.groupby('Day')['Amount_GBP'].sum()\n"
+            "summary_data = daily_spending.reset_index()\n"
+            "create_output_sheet('Output')\n"
+            "write_dataframe_to_sheet(summary_data, 'Output', 'A1')\n"
+            "summary_result = summarize_numeric_column(combined_df, value_col='Amount_GBP')\n"
+            "add_summary_row('Output', len(summary_data) + 2, summary_result['summary'])\n"
+            "highlight_rows('Output', summary_result['max_indices'], {'fill_color': 'red'})\n"
+        ),
+        user_question=(
+            "Merge two spending tables, calculate the average and total spending, "
+            "highlight the highest spending rows, and output a new spreadsheet."
+        ),
+    )
+
+    assert issue is not None
+    assert "PREFLIGHT_SUMMARY_OUTPUT_ALIGNMENT" in issue
+    assert "combined_df" in issue
+    assert "summary_data" in issue
+
+
+def test_highlight_preflight_blocks_summary_max_indices_for_excel_rows():
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    issue = advisor.highlight_guard(
+        code_action=(
+            "summary_result = summarize_numeric_column(combined_df, value_col='Amount_GBP')\n"
+            "write_dataframe_to_sheet(combined_df, 'Output', 'A1')\n"
+            "highlight_rows('Output', summary_result['max_indices'], {'fill_color': 'red'})\n"
+        ),
+        user_question="Highlight in red the day on which I spend the most.",
+    )
+
+    assert issue is not None
+    assert "PREFLIGHT_HIGHLIGHT" in issue
+    assert "highlight_rows" in issue
+    assert "max_indices" in issue
+
+
+def test_highlight_preflight_allows_manual_header_offset_enumerate_rows():
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    issue = advisor.highlight_guard(
+        code_action=(
+            "summary_result = summarize_numeric_column(daily_totals, value_col='Amount_GBP')\n"
+            "write_dataframe_to_sheet(daily_totals, 'Output', 'A1')\n"
+            "max_val = daily_totals['Amount_GBP'].max()\n"
+            "row_numbers = [i + 2 for i, v in enumerate(daily_totals['Amount_GBP']) if v == max_val]\n"
+            "highlight_rows('Output', row_numbers, {'fill_color': 'red'})\n"
+        ),
+        user_question="Highlight in red the day on which I spend the most.",
+    )
+
+    assert issue is None
+
+
+def test_highlight_preflight_blocks_inline_index_from_dataframe_not_written():
+    advisor = ExecutionSkillPreflightAdvisor(_RuntimeStub())
+
+    issue = advisor.highlight_guard(
+        code_action=(
+            "write_dataframe_to_sheet(combined_df, 'Output', 'A1')\n"
+            "highlight_rows('Output', [daily_spending[daily_spending['Day'] == max_day].index[0] + 2], {'fill_color': 'red'})\n"
+        ),
+        user_question="Highlight in red the day on which I spend the most.",
+    )
+
+    assert issue is not None
+    assert "PREFLIGHT_HIGHLIGHT" in issue
+    assert "daily_spending" in issue
+    assert "combined_df" in issue
 
 
 def test_generic_syntax_preflight_includes_task_loop_breaker_for_merge_tasks():

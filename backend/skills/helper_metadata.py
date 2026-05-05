@@ -107,6 +107,7 @@ _HELPER_METADATA: dict[str, HelperRuntimeMetadata] = {
     "compute_feature_correlations": HelperRuntimeMetadata(
         runtime_mode="feature_correlation",
         final_response_label="feature correlation report",
+        preflight_guard_names=("feature_correlation_guard",),
         documented_result_keys=("target_col", "feature_cols", "correlations", "output_df", "detail_data"),
     ),
     "build_cycle_detection_report": HelperRuntimeMetadata(

@@ -121,12 +121,15 @@ class ExecutionQuestionInferenceAdvisor:
 
     def headers_mentioned_in_question(self, observed_headers: list[str], user_question: str) -> list[str]:
         q = self.normalize_question_text(user_question)
+        grounded_q = self.normalize_header_name_for_grounding(user_question)
         mentioned: list[tuple[int, str]] = []
         for header in observed_headers:
             normalized = self.normalize_header_name_for_grounding(header)
             if not normalized:
                 continue
             position = q.find(normalized)
+            if position < 0:
+                position = grounded_q.find(normalized)
             if position >= 0:
                 mentioned.append((position, header))
         mentioned.sort(key=lambda item: (item[0], item[1]))
@@ -185,14 +188,29 @@ class ExecutionQuestionInferenceAdvisor:
                 header for header in mentioned
                 if not header_is_non_feature_like(header)
             )
-            target_candidates = [
-                header for header in observed_headers
-                if header not in feature_cols and not header_is_non_feature_like(header)
-            ]
 
             target_col = next((header for header in mentioned if header_is_target_like(header)), None)
             if target_col is None:
                 target_col = next((header for header in observed_headers if header_is_target_like(header)), None)
+            feature_cols = tuple(header for header in feature_cols if header != target_col)
+            observed_by_norm = {
+                self.normalize_header_name_for_grounding(header): header
+                for header in observed_headers
+            }
+            if "hascabin" in observed_by_norm:
+                feature_cols = tuple(
+                    header for header in feature_cols
+                    if self.normalize_header_name_for_grounding(header) != "cabin"
+                )
+            if any(norm.startswith("embarked ") or norm.startswith("embarked") and norm != "embarked" for norm in observed_by_norm):
+                feature_cols = tuple(
+                    header for header in feature_cols
+                    if self.normalize_header_name_for_grounding(header) != "embarked"
+                )
+            target_candidates = [
+                header for header in observed_headers
+                if header not in feature_cols and header != target_col and not header_is_non_feature_like(header)
+            ]
             if target_col is None and (
                 "other factors" in question
                 or "other features" in question

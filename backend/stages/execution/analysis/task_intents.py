@@ -479,7 +479,7 @@ def is_dependency_schedule_request(user_question: str) -> bool:
 def header_is_target_like(header: str) -> bool:
     h = (header or "").strip().lower()
     tokenized = re.sub(r"[_\W]+", " ", h, flags=re.UNICODE).split()
-    target_markers = ("sales", "target", "label", "outcome", "revenue")
+    target_markers = ("sales", "target", "label", "outcome", "revenue", "survived", "survival")
     if any(marker in h for marker in target_markers):
         return True
     return h == "y" or "y" in tokenized

@@ -107,7 +107,7 @@
         "task_id": "Test 4",
         "title": "Task scheduling table",
         "scenario": "Algorithmic scheduling problem",
-        "category": "build task dependency graph; perform topological scheduling; compute total duration",
+        "category": "detect implausible task duration; build task dependency graph; perform topological scheduling; compute total duration",
         "spreadsheets": [
             "Task04/tc04_input01.xlsx",
             "Task04/tc04_input02.xlsx"
@@ -117,23 +117,23 @@
         "expected_output_file": [
             "Task04/tc04_output01.xlsx"
         ],
-        "feedback": "Can I assume that there is no time between switching from one task to another? Also, should I prioritize by the 'Priority' column or strictly by the dependency chain? \n\n\n---",
+        "feedback": "I found an implausible negative duration for Model Training (T6): Duration_hours = -2.5. Should I correct this to 2.5 before building the dependency schedule?\n\n---",
         "conversations": [
             {
                 "role": "user",
-                "content": "Schedule these tasks with dependencies starting at 8:00 am. What is the total duration?"
+                "content": "Schedule the project tasks based on their dependencies and calculate the total duration."
             },
             {
                 "role": "assistant",
-                "content": "Can I assume that there is no transition time between switching from one task to another? And should I prioritize by the 'Priority' column (High/Medium/Low) or strictly follow the dependency chain for ordering?"
+                "content": "I found an implausible negative duration for task T6 Model Training: Duration_hours = -2.5. Should I correct it before scheduling?"
             },
             {
                 "role": "user",
-                "content": "Yes, assume zero transition time between tasks. You can also ignore the Priority column since we just need to know the total duration and a valid sequence."
+                "content": "Yes, correct T6 Duration_hours to 2.5, then build the schedule strictly from the dependency graph."
             },
             {
                 "role": "assistant",
-                "content": "I've scheduled the tasks sequentially based on dependencies. The schedule respects all dependencies: T1 (Data Cleanup) starts at 08:00 and finishes at 11:00, followed by T2 (Feature Extraction) 11:00-13:30 and T3 (Model Training) 13:30-17:30 running in parallel branches, then T4 (Report Generation) 17:30-19:00, T5 (Validation) 19:00-21:00, and T6 (Export Results) 21:00-22:00. Total duration is 14 hours. All tasks appear exactly once in the schedule."
+                "content": "The corrected dependency schedule starts at 08:00 and includes all 10 tasks exactly once. Total duration is 13.5 hours."
             }
         ]
     },
@@ -175,32 +175,32 @@
         "task_id": "Test 6",
         "title": "Titanic survivor dataset analysis",
         "scenario": "Machine learning / exploratory data analysis",
-        "category": "compute correlation coefficients between survival and features; handle missing values; output summary table",
+        "category": "compute Pearson correlations between survival and numeric or binary passenger features; handle missing values with pairwise deletion; output one-row summary table",
         "spreadsheets": [
             "Task06/tc06_input01.csv"
         ],
-        "prompt": "Your task is to calculate the correlation coefficient between survival and other factors (such as sex, age, etc.) using the Titanic dataset.\nPearson correlation coefficient:\nr_xy = cov(X, Y) / (σ_X * σ_Y)\nOutput an Excel file with the following columns:\n| Sex | Age | Fare | Cabin | Embarked | \n|-----|-----|------|--------|-----------|",
-        "answer": "Correlation with Survival - Sex: 0.543 (strong positive, females more likely to survive), Age: -0.070 (weak negative), Fare: 0.257 (moderate positive), Cabin: 0.019 (negligible), Embarked: -0.170 (weak negative).",
+        "prompt": "Your task is to calculate the Pearson correlation coefficient between Survived and selected numeric/binary passenger features using the full Titanic dataset.\nPearson correlation coefficient:\nr_xy = cov(X, Y) / (σ_X * σ_Y)\nUse pairwise deletion for missing numeric values. Encode Sex as Female=1 and Male=0. Use the provided binary feature HasCabin instead of raw Cabin text. Use the provided one-hot Embarked_C, Embarked_Q, and Embarked_S columns instead of raw Embarked text.\nOutput an Excel file with one row and the following columns:\n| Sex | Age | Fare | Pclass | SibSp | Parch | HasCabin | Embarked_C | Embarked_Q | Embarked_S |\n|-----|-----|------|--------|-------|-------|----------|------------|------------|------------|",
+        "answer": "Correlation with Survival using the full Titanic dataset: Sex 0.543, Age -0.077, Fare 0.257, Pclass -0.338, SibSp -0.035, Parch 0.082, HasCabin 0.317, Embarked_C 0.168, Embarked_Q 0.004, Embarked_S -0.156.",
         "expected_output_file": [
-            "Task06/tc6_output01.xlsx"
+            "Task06/tc06_output01.xlsx"
         ],
-        "feedback": "I found missing values — how would you like me to handle them? Can I treat them as NULL? For categorical variables like Sex, should I encode them as binary (0/1)?\n\n---",
+        "feedback": "Use pairwise deletion for missing numeric values; categorical features are already represented as binary columns.\n\n---",
         "conversations": [
             {
                 "role": "user",
-                "content": "Calculate correlation coefficients between survival and other factors in the Titanic dataset."
+                "content": "Calculate Pearson correlations between Survived and the numeric or binary passenger features in the Titanic dataset."
             },
             {
                 "role": "assistant",
-                "content": "I found missing values in the dataset — approximately 20% of Age values are missing, 77% of Cabin values are missing, and 2 Embarked values are missing. How would you like me to handle them? Should I use listwise deletion (remove rows with any missing values), mean imputation for Age, or treat them as NULL? Also, for categorical variables like Sex, I'll need to encode them numerically (0=male, 1=female) to calculate Pearson correlation. Is this approach correct?"
+                "content": "I will use the full dataset, encode Sex as Female=1 and Male=0, use the provided HasCabin and Embarked one-hot columns, and use pairwise deletion for missing numeric pairs."
             },
             {
                 "role": "user",
-                "content": "Use pairwise deletion (exclude only the specific missing value pairs, not entire rows). Encode Sex as binary (0=male, 1=female). For Cabin, extract just the deck letter (A, B, C, etc.) and encode categorically, or exclude if too sparse."
+                "content": "Yes. Output one row with columns Sex, Age, Fare, Pclass, SibSp, Parch, HasCabin, Embarked_C, Embarked_Q, and Embarked_S."
             },
             {
                 "role": "assistant",
-                "content": "I've calculated the correlations using pairwise deletion. Results show: Sex has the strongest correlation with survival (0.543), indicating females were significantly more likely to survive than males. Fare shows moderate positive correlation (0.257) - higher ticket fares associated with survival. Age shows weak negative correlation (-0.070) - slight tendency for younger passengers to survive. Embarked shows weak negative correlation (-0.170). Cabin shows negligible correlation (0.019) after extracting deck letters and encoding. All missing values were handled via pairwise deletion."
+                "content": "Correlation with Survival using the full Titanic dataset: Sex 0.543, Age -0.077, Fare 0.257, Pclass -0.338, SibSp -0.035, Parch 0.082, HasCabin 0.317, Embarked_C 0.168, Embarked_Q 0.004, Embarked_S -0.156."
             }
         ]
     },

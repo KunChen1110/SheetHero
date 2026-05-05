@@ -79,7 +79,7 @@ _EXECUTION_SYSTEM_INTRO_OFFLINE = textwrap.dedent("""\
 You are an OFFLINE STRICT execution agent for spreadsheet analysis.
 /no_think
 Return one compact Python block that uses ONLY approved spreadsheet helpers.
-Prefer shortest correct grounded solution.
+Prefer the shortest helper-first grounded solution.
 """)
 
 _EXECUTION_RESPONSE_FORMAT_OFFLINE = textwrap.dedent("""\
@@ -94,13 +94,19 @@ _EXECUTION_RESPONSE_FORMAT_OFFLINE = textwrap.dedent("""\
 """)
 
 _OFFLINE_EXECUTION_RULES = textwrap.dedent("""\
+**HELPER-FIRST EXECUTION POLICY:**
+- If a selected runtime helper exists for a detected skill step, you MUST call it.
+- Do not replace selected helpers with equivalent pandas logic.
+- Pandas is glue code only: select/filter rows before helper calls, inspect columns, or lightly format helper outputs.
+- Use custom pandas algorithms only when no selected helper covers that operation, or after a helper raises/clearly cannot cover the requested task.
+
 **EXECUTION RULES:**
 - Start with `tables = load_all_tables()` and print file names, sheet names, and headers.
 - `load_all_tables()` returns a LIST: use `tables[i]["df"]`, never `tables["name"]`.
 - Sheet selection: use `tables[i]["sheet"]` to identify each sheet by name. Never assume the first table is the target — a workbook may have metadata sheets before the actual data sheet.
 - For multi-file tasks, classify tables by verified headers, not filenames or file order.
 - Use `find_table_by_headers(...)` or `read_table_multi(...)` when needed.
-- Verify columns before select / merge; standard pandas (`pd.merge`, `pd.concat`, filters) is allowed.
+- Verify columns before select / merge. Pandas may prepare helper inputs, but selected runtime helpers are the primary implementation path.
 - If expected columns are missing, write a diagnostic Output sheet and still save.
 - `write_dataframe_to_sheet(df_or_rows, "Output", "A1")` writes the header row automatically for DataFrames.
 - Highlight rows with flat 1-based ints only.
@@ -119,9 +125,9 @@ _EXECUTION_HELPER_SECTIONS_PART1_OFFLINE: str = (
 
 _EXECUTION_HELPER_SECTIONS_PART2_OFFLINE = textwrap.dedent("""\
 **MERGE GUIDANCE:**
-- Same schema -> `pd.concat`
-- Shared verified key -> `pd.merge`
-- Assignment schedules -> prefer `build_grouped_assignment_join(...)`
+- Same schema -> `concat_tables_with_same_headers(tables)`
+- Shared verified key -> use the selected join helper or header-grounded join guidance; do not use pandas as a first-choice replacement for a selected helper.
+- Assignment schedules -> use `build_grouped_assignment_join(...)` when selected by the skill guidance.
 - Print both column lists before merge
 """)
 
@@ -174,9 +180,9 @@ Rules:
 - If final answer is file path, execution must include save evidence.
 - For merge/detail/highlight tasks, writing only `Metric | Value` is not acceptable.
 - Prioritize correctness and reproducibility over style.
-- Standard pandas operations (`pd.merge`, `pd.concat`, `groupby`, `fillna`, etc.) are ALLOWED and expected.
+- Do not fail validation solely because pandas was used as glue code or fallback.
 - Only file I/O is forbidden: `pd.read_excel`, `pd.read_csv`, `to_excel`, `openpyxl` direct.
-- Do NOT flag `pd.merge()` or any standard DataFrame operation as a violation.
+- Do NOT flag `pd.merge()` or a standard DataFrame operation as a violation unless it bypasses a selected helper or breaks the requested output.
 """)
 
 
@@ -297,6 +303,7 @@ Use YES when:
 - Missing values / format inconsistency may block correctness.
 
 Use NO when:
+- The user says the inputs are clean tables/files and only asks to join, transform, aggregate, or create an output workbook.
 - Task is direct analysis and no clarification is needed.
 - Uncertain.
 

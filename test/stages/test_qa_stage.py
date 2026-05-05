@@ -159,6 +159,69 @@ def test_structured_missing_value_rejects_non_numeric_fill_value():
     assert feedback == "Please enter a numeric value."
 
 
+def test_structured_generic_skip_affected_row_is_accepted():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "description": "tc01_input01.csv | tc01_input01 | StoreID | Row 1 has a missing StoreID.",
+        "metadata": {
+            "sheet_key": "tc01_input01.csv::tc01_input01",
+            "column": "StoreID",
+            "excel_row": 1,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        '{"decision_kind":"skip_row","selected_option":"Skip affected row"}',
+    )
+
+    assert matched is True
+    assert action == "Drop Excel row 1 in `tc01_input01.csv::tc01_input01`."
+    assert feedback == ""
+
+
+def test_plain_generic_skip_affected_row_label_is_accepted_before_llm():
+    stage = QualityAssuranceStage(client=object(), deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "description": "tc01_input01.csv | tc01_input01 | StoreID | Row 1 has a missing StoreID.",
+        "metadata": {
+            "sheet_key": "tc01_input01.csv::tc01_input01",
+            "column": "StoreID",
+            "excel_row": 1,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(problem, "Skip affected row")
+
+    assert matched is True
+    assert action == "Drop Excel row 1 in `tc01_input01.csv::tc01_input01`."
+    assert feedback == ""
+
+
+def test_structured_generic_keep_as_is_is_accepted():
+    stage = QualityAssuranceStage(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    problem = {
+        "id": 1,
+        "description": "tc01_input04.csv | tc01_input04 | StoreID | Row 1 has a StoreID mismatch.",
+        "metadata": {
+            "sheet_key": "tc01_input04.csv::tc01_input04",
+            "column": "StoreID",
+            "excel_row": 1,
+        },
+    }
+
+    matched, action, feedback = stage._match_reply(
+        problem,
+        '{"decision_kind":"keep_as_is","selected_option":"Keep as-is"}',
+    )
+
+    assert matched is True
+    assert action == "NO_OP"
+    assert feedback == ""
+
+
 def test_structured_custom_reply_routes_to_llm_semantic_parser(monkeypatch):
     from backend.stages.qa import stage as qa_stage_module
 

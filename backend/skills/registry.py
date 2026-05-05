@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 from typing import Optional, Sequence
 
 from .models import HelperSpec, SkillSpec
@@ -245,6 +246,27 @@ def _select_helper_with_reason(skill: SkillSpec, user_question: str) -> tuple[Op
     def _find_helper(name: str) -> Optional[HelperSpec]:
         return next((helper for helper in skill.helpers if helper.name == name), None)
 
+    def _is_downstream_analytic_join_report(question: str) -> bool:
+        q = (question or "").lower()
+        if not any(marker in q for marker in ("join", "merge", "using storeid", "using productid", "using id", "using the")):
+            return False
+        if re.search(r"\b(single|one|combined|merged)\s+(file|table|spreadsheet)\b", q):
+            return False
+        if not any(marker in q for marker in ("target", "multiple sheets", "three sheets", "two sheets", "sheets:", "category summary")):
+            return False
+        downstream_groups = 0
+        if any(marker in q for marker in ("compute", "calculate", "derive", "net revenue", "gross profit", "ratio", "share")):
+            downstream_groups += 1
+        if any(marker in q for marker in ("aggregate", "group by", "grouped by", " by region", " by category", "for each")):
+            downstream_groups += 1
+        if any(marker in q for marker in ("compare", "target", "variance", "against")):
+            downstream_groups += 1
+        if any(marker in q for marker in ("leaderboard", "top ", "rank", "ranking")):
+            downstream_groups += 1
+        if any(marker in q for marker in ("summary", "multiple sheets", "three sheets", "two sheets", "sheets:")):
+            downstream_groups += 1
+        return downstream_groups >= 2
+
     def _merge_default_helper(question: str) -> Optional[HelperSpec]:
         q = (question or "").lower()
         same_schema_markers = (
@@ -254,6 +276,8 @@ def _select_helper_with_reason(skill: SkillSpec, user_question: str) -> tuple[Op
             "stack",
             "stacking",
             "union",
+            "combine all",
+            "combine the monthly",
             "same headers",
             "same schema",
             "first half",
@@ -293,10 +317,14 @@ def _select_helper_with_reason(skill: SkillSpec, user_question: str) -> tuple[Op
     for helper in skill.helpers:
         if helper.sub_detector is not None:
             if helper.sub_detector(user_question):
+                if helper.name == "build_relational_join_enrichment_report" and _is_downstream_analytic_join_report(user_question):
+                    continue
                 return helper, True
         elif fallback is None:
             fallback = helper
     if skill.name == "merge":
+        if _is_downstream_analytic_join_report(user_question):
+            return None, False
         return _merge_default_helper(user_question)
     return fallback, False
 
