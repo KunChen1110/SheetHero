@@ -43,7 +43,7 @@ def extract_output_from_logger(logger_path: str) -> dict:
             value = stripped.split(":", 1)[1].strip()
             if value.lower().endswith(".xlsx") or value.lower().endswith(".xls"):
                 output_excel = value
-            elif not output_text and not os.path.splitext(value)[1]:
+            elif not output_text and not value.lower().endswith((".xlsx", ".xls", ".csv", ".pdf")):
                 # Old format fallback: use as text if it is not a file path
                 output_text = value
 
@@ -84,6 +84,8 @@ def find_latest_logger(task_id: str) -> str:
             if fname.endswith(".md") and (not prefix or prefix in fname.lower()):
                 candidates.append(os.path.join(d, fname))
 
+    if not prefix:
+        raise ValueError(f"Could not extract a task number from task_id '{task_id}'")
     if not candidates:
         raise FileNotFoundError(
             f"No logger file found for task '{task_id}' "
