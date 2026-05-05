@@ -1,9 +1,10 @@
 import { ExcelFile, Chat, FILE_EXTENSIONS } from "@/util/interfaces";
 import { SidebarFileDisplay } from "@/renderer/app/components/SidebarFileDisplay";
-import { SidebarChatDisplay } from "./SidebarChatDisplay";
-import { SidebarHeader } from "./SidebarHeader";
-import { FileSpreadsheet, Settings, Upload } from "lucide-react";
-import { SidebarWidget } from "./SidebarWidget";
+import { SidebarChatDisplay } from "@/renderer/app/components/SidebarChatDisplay";
+import { SidebarHeader } from "@/renderer/app/components/SidebarHeader";
+import { Settings, Upload } from "lucide-react";
+import { SidebarWidget } from "@/renderer/app/components/SidebarWidget";
+import logo from "@/renderer/app/assets/SheetHeroLogo.png";
 
 // Properties needed for the sidebar
 interface SidebarProperties {
@@ -97,8 +98,8 @@ export function Sidebar({
       <div className="p-3 border-b border-(--sh-border-grey)">
         {/* Logo and title */}
         <div className="flex items-center p-3 gap-3">
-          <div className="w-10 h-10 rounded-lg bg-(--sh-green-highlight) flex items-center justify-center">
-            <FileSpreadsheet size={26} className="text-(--sh-white)" />
+          <div className="w-12 h-12 rounded-lg bg-(--sh-green-highlight) flex items-center justify-center">
+            <img src={logo} alt="Logo" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-base font-semibold text-(--sh-white)">

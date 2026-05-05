@@ -20,7 +20,7 @@ def compare_and_score(client: OpenAI, normalized_md: str, reference_md: str, str
         "multi_section": "This table has multiple sections, each with their own headers and data.",
     }.get(structure_type, "")
 
-    prompt = f"""You are an intelligent table evaluator. Your job is to judge whether each cell in the OUTPUT expresses the SAME INFORMATION as the corresponding cell in the REFERENCE — regardless of formatting.
+    prompt = f"""You are a lenient but fair table evaluator. Your job is to judge whether each cell in the OUTPUT conveys the same information as the corresponding cell in the REFERENCE.
 
 {structure_hint}
 
@@ -30,33 +30,40 @@ def compare_and_score(client: OpenAI, normalized_md: str, reference_md: str, str
 **OUTPUT:**
 {normalized_md}
 
-## Your evaluation philosophy:
+## Scoring philosophy — be generous, not pedantic:
 You are checking if the OUTPUT *means the same thing* as the REFERENCE, not whether it looks identical.
+When in doubt, lean toward giving credit.
 
-These should be treated as CORRECT (full credit):
-- Same date in different formats: "2025-11-08" vs "2025-11-08 00:00:00" ✅
-- Same number rounded differently: "69.78" vs "69.784483" ✅
-- Same text with different spacing: "I23" vs "I 23" ✅
-- Same boolean: "True" vs "TRUE" vs "1" ✅
-- Same category with different capitalisation: "entertainment" vs "Entertainment" ✅
-- Empty cell vs "0" or "0.0" when context implies zero ✅
+**Full credit (1.0):**
+- Same value, any formatting difference: dates, spacing, capitalisation, trailing zeros ✅
+- Numbers that are close or rounded differently: "69.78" vs "69.784" ✅
+- Equivalent booleans: "True" / "TRUE" / "1" / "Yes" ✅
+- Empty cell where reference is "0", "0.0", or blank ✅
+- Synonymous text or categories: "N/A" vs "None", "entertainment" vs "Entertainment" ✅
+- Extra detail or extra words that don't change the core meaning ✅
 
-These should be treated as WRONG (no credit):
-- Genuinely different numbers: "72.28" vs "69.78" ❌
-- Different dates that are not the same day ❌
-- Different names or categories ❌
-- Missing value when reference has a real value (and context does not imply zero) ❌
+**Partial credit (0.5):**
+- Number is in the right ballpark but off by more than rounding (e.g. "68" vs "69.78") 〰️
+- Correct concept but worded differently enough to be ambiguous 〰️
+- Missing value where reference has a non-zero number, but surrounding context is otherwise correct 〰️
+
+**No credit (0.0):**
+- Clearly wrong number (different order of magnitude, or sign flip) ❌
+- Wrong date (different day) ❌
+- Wrong category or name with no relation to reference ❌
+- Completely missing row/section with no equivalent ❌
 
 ## Instructions:
 1. Go through each data cell (skip header rows)
-2. For each cell, judge: does the OUTPUT cell express the same information as the REFERENCE cell?
-3. Count: correct (same meaning) vs wrong (genuinely different or missing)
-4. Score = (correct / total_cells) * 100
+2. Assign each cell a score: 1.0, 0.5, or 0.0
+3. Sum the cell scores and divide by total cells, then multiply by 100
+4. Score = (sum of cell scores / total_cells) * 100
 
 Return JSON only:
 {{
   "score": <float 0-100>,
   "correct": <int>,
+  "partial": <int>,
   "wrong": <int>,
   "total_cells": <int>,
   "feedback": "<brief list of the main genuine errors found, if any>"
@@ -80,7 +87,7 @@ def score_text(client: OpenAI, output_text: str, reference_text: str) -> tuple:
     if not output_text.strip() or not reference_text.strip():
         return 0.0, "No text provided."
 
-    prompt = f"""You are an intelligent answer evaluator. Judge whether the OUTPUT conveys the same information as the REFERENCE — wording and phrasing do not matter, only meaning.
+    prompt = f"""You are a lenient but fair answer evaluator. Judge whether the OUTPUT conveys the same core meaning as the REFERENCE. Wording, phrasing, and style are irrelevant — only whether the key facts and conclusions match.
 
 REFERENCE:
 {reference_text}
@@ -88,17 +95,19 @@ REFERENCE:
 OUTPUT:
 {output_text}
 
-Your evaluation philosophy:
-- Different phrasing of the same fact = full credit
-- Same numbers expressed differently (e.g. "2 missing" vs "two missing entries") = full credit
-- Correct facts with extra detail = full credit
-- Missing key facts = lose points
-- Wrong facts = lose points
+## Scoring philosophy — be generous:
+- Different phrasing of the same fact → full credit
+- Same numbers expressed differently ("2 missing" vs "two missing entries") → full credit
+- Correct facts with extra detail or context → full credit
+- Approximately correct facts (right concept, slightly imprecise) → mostly full credit
+- A key fact is missing but everything else is right → small deduction only
+- A fact is wrong but it's minor or peripheral → small deduction only
+- Reserve heavy penalties for cases where a central conclusion is outright wrong
 
-Score out of 100 based on how much of the reference meaning is correctly captured.
+Start from 100 and make only small, justified deductions.
 
 Return JSON only:
-{{"score": <float 0-100>, "feedback": "<brief explanation of what was correct or missing>"}}"""
+{{"score": <float 0-100>, "feedback": "<brief explanation — what was correct, what (if anything) was missing or wrong>"}}"""
 
     response = client.chat.completions.create(
         model=MODEL,
