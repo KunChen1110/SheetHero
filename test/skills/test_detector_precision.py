@@ -407,9 +407,10 @@ class TestPlanSourceOfTruth:
             f"unexpected active dt.month filter without month in question: {active_lines}"
         )
 
-    def test_output_row_numbers_contract_note_in_aggregate_plan(self):
-        """output_row_numbers contract note must appear when aggregate is in plan."""
+    def test_highlight_rows_contract_note_in_aggregate_plan(self):
+        """The explicit highlight_rows contract note must appear when aggregate is in plan."""
         q = "Merge both files, compute daily totals for November, highlight top"
         breaker = self._breaker_for(q)
-        assert "output_row_numbers" in breaker
+        assert "highlight_rows" in breaker
+        assert "output_row_numbers" not in breaker
         assert "same df" in breaker.lower() or "same" in breaker.lower()

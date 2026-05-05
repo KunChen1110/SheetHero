@@ -83,6 +83,30 @@ def test_qwen3_execution_runtime_uses_context_safe_initial_and_recovery_budgets(
     assert runtime._llm_recovery_max_tokens == 768
 
 
+def test_offline_initial_and_recovery_prompts_frontload_helper_first_policy():
+    runtime = ExecutionRuntime(
+        client=SimpleNamespace(),
+        deployment="qwen3:8b",
+        sandbox=_SandboxStub(),
+        excel_context_execution="",
+        prompt_profile="offline_strict",
+    )
+    question = (
+        "First merge the two tables into a single table, then calculate the average daily spending "
+        "and total spending. Highlight the day with the highest spending."
+    )
+
+    initial = runtime._create_initial_user_prompt("", question)["content"]
+    recovery = runtime._create_llm_recovery_prompt(question)["content"]
+
+    for prompt in (initial, recovery):
+        assert "OFFLINE HELPER-FIRST START" in prompt
+        assert "Do not choose a pandas fallback before selected helper calls" in prompt
+        assert "Pandas may only prepare helper inputs or format helper outputs" in prompt
+    assert "HELPER-FIRST POLICY FOR THIS PLAN" in initial
+    assert "Do not compute final summary/highlight rows with sum(), mean(), max(), idxmax(), argmax(), or DataFrame.index" in initial
+
+
 def test_execution_llm_client_uses_tighter_wall_timeout_by_default(monkeypatch):
     monkeypatch.delenv("SHEETHERO_LLM_TIMEOUT_SECONDS", raising=False)
 
@@ -410,3 +434,46 @@ def test_offline_understanding_prompt_stays_compact_for_real_multi_file_task():
     assert "- Preview rows" not in context
     assert len(context) <= 1600
     assert len(prompt) <= 3200
+
+
+def test_default_spreadsheet_context_includes_small_preview_for_few_workbooks():
+    dataset_root = Path(__file__).resolve().parents[2] / "dataset" / "DevelopmentBenchmark"
+    input_paths = [str((dataset_root / "Task01" / "tc01_input01.xlsx").resolve())]
+
+    config = Config()
+    sandbox = Sandbox(
+        excel_paths=input_paths,
+        output_preferences={"mode": "file"},
+        output_path=str(Path("artifacts/output/test_context_preview.xlsx").resolve()),
+        enabled_namespaces=["spreadsheet"],
+        load_excel=True,
+    )
+
+    context = ExcelContextBuilder(input_paths, sandbox.workbooks).build(config.total_token_budget)
+
+    assert "- Preview rows (5 shown," in context
+    assert "  - r1:" in context
+    assert "  - r5:" in context
+    assert "  - r6:" not in context
+
+
+def test_default_spreadsheet_context_stays_header_only_for_many_workbooks():
+    dataset_root = Path(__file__).resolve().parents[2] / "dataset" / "DevelopmentBenchmark"
+    input_paths = [
+        str((dataset_root / "Task02" / f"tc02_input0{index}.csv").resolve())
+        for index in range(1, 6)
+    ]
+
+    config = Config()
+    sandbox = Sandbox(
+        excel_paths=input_paths,
+        output_preferences={"mode": "file"},
+        output_path=str(Path("artifacts/output/test_context_header_only.xlsx").resolve()),
+        enabled_namespaces=["spreadsheet"],
+        load_excel=True,
+    )
+
+    context = ExcelContextBuilder(input_paths, sandbox.workbooks).build(config.total_token_budget)
+
+    assert "- Candidate headers:" in context
+    assert "- Preview rows" not in context

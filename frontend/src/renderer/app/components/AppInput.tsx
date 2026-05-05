@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send, Square } from "lucide-react";
 import {
   ClarificationControl,
   ClarificationResponseSchema,
@@ -11,6 +11,7 @@ interface AppInputProperties {
   hasApiKey?: boolean;
   hasActiveChat?: boolean;
   isTyping?: boolean;
+  onStopThinking: () => void;
   outputMode: "file" | "text";
   onOutputModeChange: (mode: "file" | "text") => void;
   responseSchema?: ClarificationResponseSchema;
@@ -21,6 +22,7 @@ export function AppInput({
   hasApiKey,
   hasActiveChat,
   isTyping,
+  onStopThinking,
   outputMode,
   onOutputModeChange,
   responseSchema,
@@ -253,14 +255,25 @@ export function AppInput({
             </button>
           </div>
 
-          {/* Send input button */}
-          <button
-            className="mr-2 p-2 rounded-lg bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            type="submit"
-            disabled={!input.trim() || isTyping || !hasApiKey || !hasActiveChat}
-          >
-            <Send size={22} />
-          </button>
+          {isTyping ? (
+            <button
+              className="mr-2 p-2 rounded-lg border border-red-300/40 bg-red-500/20 text-red-100 hover:bg-red-500/30 transition-all"
+              type="button"
+              title="Stop thinking"
+              aria-label="Stop thinking"
+              onClick={onStopThinking}
+            >
+              <Square size={20} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              className="mr-2 p-2 rounded-lg bg-(--sh-green) text-(--sh-white) hover:bg-(--sh-green-hover) disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              type="submit"
+              disabled={!input.trim() || !hasApiKey || !hasActiveChat}
+            >
+              <Send size={22} />
+            </button>
+          )}
         </div>
       </form>
     </div>

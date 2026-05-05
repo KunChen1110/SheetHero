@@ -446,6 +446,15 @@ class ExecutionRuntime(StageRuntime):
         )
 
     @staticmethod
+    def _offline_helper_first_start_text() -> str:
+        return (
+            "OFFLINE HELPER-FIRST START:\n"
+            "- If the skill guidance below names selected helpers, those helper calls must appear in the first code block.\n"
+            "- Do not choose a pandas fallback before selected helper calls.\n"
+            "- Pandas may only prepare helper inputs or format helper outputs.\n"
+        )
+
+    @staticmethod
     def _compact_text_for_prompt(text: str, max_chars: int = 1200) -> str:
         """Keep repair prompts within small local-model context windows."""
         cleaned = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL | re.IGNORECASE)
@@ -572,12 +581,13 @@ class ExecutionRuntime(StageRuntime):
             user_content = (
                 "OFFLINE_EXECUTION_START:\n"
                 f"{self._offline_no_think_prefix()}"
+                f"{self._offline_helper_first_start_text()}"
                 "Return ONE short complete ```python ... ``` block only.\n"
                 "Skip the Thought section unless it is one short line and the code block follows immediately.\n"
                 "Keep code under 60 lines.\n"
                 "Start from runtime inputs only: `tables = load_all_tables()`.\n"
                 "For multi-file tasks, select tables by verified headers, not filenames or file order.\n"
-                "If uncertain, print columns first and branch from observed headers.\n"
+                "If uncertain, print columns first, then still call selected helpers using observed headers.\n"
                 "Save with `save_workbook_to(output_path)`.\n\n"
                 f"User Question:\n{user_question}\n\n"
             )
@@ -595,6 +605,7 @@ class ExecutionRuntime(StageRuntime):
         user_content = (
             "LLM_CONNECTION_RECOVERY: the previous response could not be generated.\n"
             f"{self._offline_no_think_prefix()}"
+            f"{self._offline_helper_first_start_text()}"
             "Return ONE short complete ```python ... ``` block only.\n"
             "Do not spend tokens on a standalone Thought section.\n"
             "Keep code under 60 lines.\n"
@@ -756,12 +767,12 @@ class ExecutionRuntime(StageRuntime):
                 "  `write_dataframe_to_sheet(summary_df, 'Output', 'A1')`\n"
                 "  `summary_row = len(summary_df) + 2`\n"
                 "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
-                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "  `row_numbers = summary_result['highlight_rows']['max']`\n"
                 "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`\n"
                 "  `saved_file = save_workbook_to(output_path)`\n"
                 "  `print(f'SAVED_FILE: {saved_file}')`\n"
                 "  `saved_file`\n"
-                "- Do NOT use `summary_result['row']`, `summary_result['total']`, or `summary_result['average']`.\n"
+                "- Do NOT use `summary_result['row']`, `summary_result['total']`, or `summary_result['average']` as highlight rows.\n"
                 "- Return one complete code block matching this contract."
             )
         return (
@@ -997,6 +1008,13 @@ class ExecutionRuntime(StageRuntime):
                             self._build_preflight_loop_breaker_feedback(preflight_issue)
                             + "\n\n"
                             + preflight_feedback
+                        )
+                    blocked_code_preview = (code_action or "").strip()
+                    if blocked_code_preview:
+                        blocked_code_preview = blocked_code_preview[:4000]
+                        self._log_to_file(
+                            f"\n**Preflight blocked code (Turn {turn + 1}):**\n"
+                            f"```python\n{blocked_code_preview}\n```\n"
                         )
                     self._log_to_file(
                         f"\n**Preflight blocked (Turn {turn + 1}):**\n{preflight_issue}\n"

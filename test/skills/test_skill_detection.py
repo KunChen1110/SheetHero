@@ -70,6 +70,18 @@ def test_helper_selection_generic_multi_file_merge_defaults_to_relational_join()
     assert helper.name == "build_relational_join_enrichment_report"
 
 
+def test_helper_selection_skips_generic_join_helper_for_downstream_analytic_report():
+    question = (
+        "Join the tables using StoreID and ProductID, keep only the H2 2024 months, "
+        "compute net revenue, aggregate the results by Region and Category, compare each aggregate "
+        "to the revenue target, create a Top 10 store leaderboard, and output three sheets."
+    )
+    skill = detect_skill(question)
+    assert skill is not None
+    helper = select_helper(skill, question)
+    assert helper is None
+
+
 def test_helper_selection_multi_key_join_from_explicit_two_key_phrase():
     skill = detect_skill("join the spreadsheet tables by the shared student id and semester keys")
     assert skill is not None

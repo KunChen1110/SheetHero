@@ -67,6 +67,34 @@ def test_infer_target_feature_plan_does_not_invent_missing_columns():
     assert "Embarked" not in plan.feature_cols
 
 
+def test_infer_target_feature_plan_prefers_engineered_titanic_features():
+    advisor = ExecutionQuestionInferenceAdvisor(_DummyRuntime())
+
+    plan = advisor.infer_runtime_plan(
+        skill_name="statistical",
+        helper_name="compute_feature_correlations",
+        user_question=(
+            "Calculate the Pearson correlation coefficient between Survived and selected numeric/binary passenger features. "
+            "Use the provided binary feature HasCabin instead of raw Cabin text. "
+            "Use Embarked_C, Embarked_Q, and Embarked_S instead of raw Embarked text. "
+            "Output columns Sex, Age, Fare, Pclass, SibSp, Parch, HasCabin, Embarked_C, Embarked_Q, Embarked_S."
+        ),
+        observed_headers=[
+            "PassengerId", "Survived", "Pclass", "Name", "Sex", "Age",
+            "SibSp", "Parch", "Ticket", "Fare", "Cabin", "Embarked",
+            "HasCabin", "Embarked_C", "Embarked_Q", "Embarked_S",
+        ],
+    )
+
+    assert plan.target_col == "Survived"
+    assert plan.feature_cols == (
+        "HasCabin", "Embarked_C", "Embarked_Q", "Embarked_S",
+        "Sex", "Age", "Fare", "Pclass", "SibSp", "Parch",
+    )
+    assert "Cabin" not in plan.feature_cols
+    assert "Embarked" not in plan.feature_cols
+
+
 def test_plan_prompt_summary_uses_runtime_values_not_recipe_text():
     plan = RuntimeExecutionPlan(
         skill_name="statistical",

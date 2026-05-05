@@ -75,6 +75,28 @@ def test_multi_header_matrix_task_does_not_trigger_missing_value_qa():
     assert "missing_value" not in issue_types
 
 
+def test_correlation_task_handles_missing_values_in_execution_not_qa():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Titanic"
+    sheet.append(["Survived", "Sex", "Age", "Fare", "HasCabin"])
+    sheet.append([1, "female", 38, 71.2833, 1])
+    sheet.append([0, "male", None, 8.05, 0])
+    sheet.append([1, "female", 26, 7.925, 0])
+
+    router = DiagnoseRouter(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    question = (
+        "Calculate the Pearson correlation coefficient between Survived and "
+        "Sex, Age, Fare, and HasCabin. Use pairwise deletion for missing numeric values."
+    )
+
+    decision = router.decide(question, "", {"titanic.csv": workbook})
+
+    issue_types = [issue.get("issue_type") for issue in decision.issues]
+    assert "missing_value" not in issue_types
+    assert decision.should_diagnose is False
+
+
 def test_clean_schedule_task_skips_diagnose_without_data_evidence():
     workbook = Workbook()
     task_sheet = workbook.active
@@ -97,6 +119,37 @@ def test_clean_schedule_task_skips_diagnose_without_data_evidence():
 
     assert decision.should_diagnose is False
     assert decision.issues == []
+
+
+def test_schedule_task_negative_duration_triggers_semantic_anomaly_qa():
+    workbook = Workbook()
+    task_sheet = workbook.active
+    task_sheet.title = "tasks"
+    task_sheet.append(["Task ID", "Task Name", "Duration (hours)", "Priority"])
+    task_sheet.append(["T1", "Setup", 1, "High"])
+    task_sheet.append(["T2", "Data Ingestion", 1.5, "High"])
+    task_sheet.append(["T3", "Data Cleaning", 1, "Medium"])
+    task_sheet.append(["T4", "Feature Engineering", 2, "High"])
+    task_sheet.append(["T5", "Model Training", -2.5, "High"])
+    dep_sheet = workbook.create_sheet("dependencies")
+    dep_sheet.append(["Task ID", "Depends on"])
+    dep_sheet.append(["T2", "T1"])
+    dep_sheet.append(["T3", "T1"])
+    dep_sheet.append(["T4", "T2"])
+    dep_sheet.append(["T5", "T4"])
+
+    router = DiagnoseRouter(client=None, deployment="offline-test", prompt_profile="offline_strict")
+    question = (
+        "Here is a table containing tasks, their durations, and priorities, and another table describing "
+        "task dependencies. Schedule the tasks based on these dependencies and compute total duration."
+    )
+
+    decision = router.decide(question, "", {"schedule.xlsx": workbook})
+
+    assert decision.should_diagnose is True
+    assert [issue.get("issue_type") for issue in decision.issues] == ["semantic_anomaly"]
+    assert "Duration (hours)" in decision.issues[0]["description"]
+    assert "-2.5" in decision.issues[0]["question"]
 
 
 def test_clean_market_share_task_skips_diagnose_without_data_evidence():
@@ -216,3 +269,13 @@ def test_large_clean_revenue_case_does_not_trigger_missing_period_endpoint():
     issue_types = [issue.get("issue_type") for issue in decision.issues]
     assert "missing_period_endpoint" not in issue_types
     assert decision.should_diagnose is False
+
+
+def test_clean_tables_wording_does_not_invite_llm_diagnose():
+    question = (
+        "You have four clean tables: stores, products, monthly sales, and monthly targets. "
+        "Join the tables using StoreID and ProductID, keep only the H2 2024 months, "
+        "and output everything into a new Excel workbook."
+    )
+
+    assert DiagnoseRouter._question_invites_diagnose(question) is False

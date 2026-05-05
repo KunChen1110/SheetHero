@@ -85,7 +85,7 @@ class ExcelContextBuilder:
 
     @staticmethod
     def _preview_limits(workbook_count: int, total_token_budget: int) -> tuple[int, int]:
-        if workbook_count >= 5 or total_token_budget <= 6000:
+        if workbook_count >= 5:
             return 0, 6
         if workbook_count >= 3:
             return 4, 10
@@ -93,7 +93,7 @@ class ExcelContextBuilder:
 
     @staticmethod
     def _use_header_only_mode(workbook_count: int, total_token_budget: int) -> bool:
-        return workbook_count >= 5 or total_token_budget <= 6000
+        return workbook_count >= 5
 
     def _get_sheet_preview(self, sheet, max_rows: int = 4, max_cols: int = 10) -> Dict[str, Any]:
         """Return compact preview rows, preserving raw top-of-sheet structure."""

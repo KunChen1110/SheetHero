@@ -90,6 +90,24 @@ class ExecutionSkillPreflightAdvisor:
             return []
         return [item.strip() for item in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))]
 
+    @staticmethod
+    def _extract_first_call_arg(code_action: str, function_name: str) -> Optional[str]:
+        match = re.search(
+            rf"\b{re.escape(function_name)}\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)",
+            code_action or "",
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return match.group(1)
+
+    @staticmethod
+    def _question_needs_highlight(user_question: str) -> bool:
+        lower_q = (user_question or "").lower()
+        return any(w in lower_q for w in (
+            "highlight", "highlighted", "red", "color", "colour", "mark in red",
+        ))
+
     def metadata_routed_preflight_check(self, code_action: str, user_question: str) -> Optional[str]:
         helper_name = self._selected_helper_name(user_question)
         if not helper_name:
@@ -249,30 +267,56 @@ class ExecutionSkillPreflightAdvisor:
         if uses_summary_helper:
             documented_summary_keys = {
                 "summary",
+                "stats",
+                "highlight_rows",
                 "output_row_numbers",
+                "max_output_row_numbers",
+                "min_output_row_numbers",
                 "total",
                 "average",
+                "min_value",
                 "max_value",
                 "value_col",
+                "row_number_offset",
                 "max_indices",
+                "min_indices",
             }
             for key in re.findall(r"summary_result\s*\[\s*['\"]([^'\"]+)['\"]\s*\]", code):
                 if key not in documented_summary_keys:
                     undocumented_summary_key = key
                     break
 
+        summary_df_arg = self._extract_first_call_arg(code, "summarize_numeric_column")
+        written_df_arg = self._extract_first_call_arg(code, "write_dataframe_to_sheet")
+        summary_write_mismatch = (
+            uses_summary_helper
+            and self._question_needs_highlight(user_question)
+            and summary_df_arg is not None
+            and written_df_arg is not None
+            and summary_df_arg != written_df_arg
+        )
+
         if uses_summary_helper and not shadows_highlight_rows and undocumented_summary_key is None:
-            return None
+            if not summary_write_mismatch:
+                return None
 
         return (
             "PREFLIGHT_AGGREGATE: use summarize_numeric_column for numeric summary tasks.\n"
             "  `summary_result = summarize_numeric_column(df, value_col='...')`\n"
             "  `add_summary_row('Output', len(df) + 2, summary_result['summary'])`\n"
-            "- summary_result keys: 'summary', 'output_row_numbers', 'total', 'average', 'max_value', 'value_col', 'max_indices'.\n"
+            "- Recommended summary_result keys for generated code: 'summary', 'stats', 'highlight_rows', 'total', 'average', 'min_value', 'max_value', 'value_col'.\n"
+            "- For highlights, use `summary_result['highlight_rows']['max']` or `summary_result['highlight_rows']['min']`; do not derive sheet row numbers from DataFrame indices.\n"
             + (
                 f"- Does not return key '{undocumented_summary_key}'. "
-                "Use 'total'/'average' for scalar values, 'summary' for add_summary_row(...), and 'output_row_numbers' for highlighting.\n"
+                "Use 'total'/'average' for scalar values, 'summary' for add_summary_row(...), and 'highlight_rows' for highlighting.\n"
                 if undocumented_summary_key else ""
+            )
+            + (
+                "PREFLIGHT_SUMMARY_OUTPUT_ALIGNMENT: summarize_numeric_column and write_dataframe_to_sheet use different DataFrames.\n"
+                f"- summarize_numeric_column uses `{summary_df_arg}` but write_dataframe_to_sheet writes `{written_df_arg}`.\n"
+                "- For highlightable summary tasks, pass the SAME DataFrame to both helpers so output row numbers match the saved sheet.\n"
+                "- If you create an aggregated output table, call summarize_numeric_column on that output table before highlighting.\n"
+                if summary_write_mismatch else ""
             )
             + "- Do not reassign the name `highlight_rows` to a variable."
         )
@@ -299,16 +343,52 @@ class ExecutionSkillPreflightAdvisor:
         lower = code.lower()
         if "highlight_rows(" not in lower:
             return None
+        uses_summary_max_indices = (
+            "summary_result['max_indices']" in code
+            or 'summary_result["max_indices"]' in code
+        )
 
-        # Detect manual enumerate-based row numbers (risky pattern)
-        uses_manual_enumerate = bool(re.search(r"enumerate\s*\(", code))
+        # Detect enumerate-based row numbers only when the computed rows are
+        # passed to highlight_rows without the required +2 header/1-based offset.
+        risky_manual_enumerate = False
+        for match in re.finditer(
+            r"^\s*(\w+)\s*=\s*([^\n]*enumerate\s*\([^\n]*)$",
+            code,
+            flags=re.MULTILINE,
+        ):
+            var_name, rhs = match.group(1), match.group(2)
+            if re.search(r"\+\s*2\b", rhs):
+                continue
+            if re.search(
+                rf"highlight_rows\s*\([^,]+,\s*{re.escape(var_name)}\b",
+                code,
+            ):
+                risky_manual_enumerate = True
+                break
+        if not risky_manual_enumerate:
+            for match in re.finditer(
+                r"highlight_rows\s*\([^,]+,\s*(\[[^\]]*enumerate\s*\([^\]]*\])",
+                code,
+                flags=re.DOTALL,
+            ):
+                arg = match.group(1)
+                if not re.search(r"\+\s*2\b", arg):
+                    risky_manual_enumerate = True
+                    break
         shadows_highlight_rows = re.search(r"^\s*highlight_rows\s*=", code, flags=re.MULTILINE) is not None
-        uses_summary_row_numbers = "summary_result['output_row_numbers']" in code or 'summary_result["output_row_numbers"]' in code
+        uses_summary_row_numbers = (
+            "summary_result['highlight_rows']" in code
+            or 'summary_result["highlight_rows"]' in code
+            or "summary_result['output_row_numbers']" in code
+            or 'summary_result["output_row_numbers"]' in code
+        )
 
         # Detect raw pandas .index passed to highlight_rows without +2 Excel-row offset.
         # Pattern: `var = <expr>.index.tolist()` (or `.index`) followed by `highlight_rows(..., var, ...)`,
         # where the assignment line itself does not add an offset (e.g. `+ 2`).
         risky_index_pattern = False
+        foreign_index_source: Optional[tuple[str, str]] = None
+        written_df_arg = self._extract_first_call_arg(code, "write_dataframe_to_sheet")
         for match in re.finditer(
             r"^\s*(\w+)\s*=\s*([^\n]*\.index(?:\.tolist\(\))?[^\n]*)$",
             code,
@@ -323,18 +403,37 @@ class ExecutionSkillPreflightAdvisor:
             ):
                 risky_index_pattern = True
                 break
+        if written_df_arg:
+            for call_match in re.finditer(r"highlight_rows\s*\([^\n]*", code):
+                call_text = call_match.group(0)
+                for match in re.finditer(
+                    r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\[.*?\]\.index\b",
+                    call_text,
+                ):
+                    index_source = match.group(1)
+                    if index_source != written_df_arg:
+                        foreign_index_source = (index_source, written_df_arg)
+                        risky_index_pattern = True
+                        break
+                if foreign_index_source:
+                    break
 
-        if not (shadows_highlight_rows or uses_manual_enumerate or risky_index_pattern):
+        if not (shadows_highlight_rows or risky_manual_enumerate or risky_index_pattern or uses_summary_max_indices):
             return None
 
         return (
             "PREFLIGHT_HIGHLIGHT: row numbers passed to highlight_rows must be 1-based and header-offset.\n"
-            "- Preferred: use `row_numbers = summary_result['output_row_numbers']` (already correct).\n"
+            "- Preferred: use `row_numbers = summary_result['highlight_rows']['max']` or `['min']` (already correct).\n"
+            "- Do not pass `summary_result['max_indices']` to highlight_rows; those are DataFrame indices, not saved-sheet row numbers.\n"
             "- If computing manually: row = DataFrame position (0-based) + 2 (header row).\n"
             "  `row_numbers = [i + 2 for i, v in enumerate(df['col']) if v == max_val]`\n"
             "- DataFrame `.index` is NOT an Excel row number — passing `df[...].index.tolist()` to "
             "highlight_rows shifts the highlight up by the header offset.\n"
-            "- The df passed to write_dataframe_to_sheet must have a reset (0-based) index.\n"
+            + (
+                f"- The highlight row expression uses `{foreign_index_source[0]}.index`, but the sheet writes `{foreign_index_source[1]}`; compute row numbers from the written DataFrame only.\n"
+                if foreign_index_source else ""
+            )
+            + "- The df passed to write_dataframe_to_sheet must have a reset (0-based) index.\n"
             "- Do not reassign the name `highlight_rows` to a variable in your code."
         )
 
@@ -409,7 +508,7 @@ class ExecutionSkillPreflightAdvisor:
             "  `combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')`\n"
             "  `summary_df = combined_df[combined_df['Date'].dt.month == <N>]  # e.g. 11 for November`\n"
             "- Pass `summary_df` (not `combined_df`) to both summarize_numeric_column AND write_dataframe_to_sheet.\n"
-            "- `output_row_numbers` is only valid for the DataFrame that was written — using a different frame gives wrong highlight rows."
+            "- `summary_result['highlight_rows']['max'/'min']` is only valid for the DataFrame that was written — using a different frame gives wrong highlight rows."
         )
 
     # keep old name as alias so existing caller sites continue to work
@@ -546,6 +645,93 @@ class ExecutionSkillPreflightAdvisor:
                 "PREFLIGHT_REGRESSION: add explicit feature audit print.\n"
                 "- Add: print(\"USED_FEATURES:\", feature_cols)"
             )
+        return None
+
+    def feature_correlation_guard(
+        self,
+        code_action: str,
+        user_question: str,
+        helper_name: Optional[str] = None,
+    ) -> Optional[str]:
+        helper_name = helper_name or self._selected_helper_name(user_question)
+        if helper_name != "compute_feature_correlations":
+            return None
+        code = code_action or ""
+        lower = code.lower()
+        observed_headers = sorted(getattr(self.runtime, "_observed_header_set", lambda: set())())
+        try:
+            plan = self.runtime.question_inference.infer_runtime_plan(
+                "statistical",
+                "compute_feature_correlations",
+                user_question,
+                observed_headers,
+            )
+        except Exception:
+            plan = None
+        expected_target = getattr(plan, "target_col", None) if plan is not None else None
+        expected_features = list(getattr(plan, "feature_cols", ()) or [])
+
+        if re.search(r"\bload_all_tables\s*\(\s*\)", code):
+            return (
+                "PREFLIGHT_FEATURE_CORRELATION: full-dataset correlation must not use default `load_all_tables()`.\n"
+                "- Use `tables = load_all_tables(range_ref='A1:Z200000', require_primary_key=False, stop_at_note_row=False)`.\n"
+                "- This avoids silently calculating correlations on only the default first 200 rows."
+            )
+
+        literal_target = (
+            self._extract_assigned_string_var(code, "target_col")
+            or self.runtime.question_inference.extract_single_string_kwarg(code, "target_col")
+        )
+        if expected_target and literal_target and literal_target.strip().lower() != expected_target.strip().lower():
+            return (
+                "PREFLIGHT_FEATURE_CORRELATION: target column conflicts with the runtime plan.\n"
+                f"- Runtime plan target: {expected_target}\n"
+                f"- Current code target: {literal_target}\n"
+                "- Use the target column inferred from the current question and schema."
+            )
+
+        extract_string_list_kwarg = getattr(
+            self.runtime.question_inference,
+            "extract_string_list_kwarg",
+            lambda _code, _kwarg: [],
+        )
+        used = (
+            self._extract_assigned_string_list_var(code, "feature_cols")
+            or self.runtime.question_inference.extract_feature_cols_literal(code)
+            or extract_string_list_kwarg(code, "feature_cols")
+        )
+        if literal_target and any(value.strip().lower() == literal_target.strip().lower() for value in used):
+            return (
+                "PREFLIGHT_FEATURE_CORRELATION: `feature_cols` must exclude the target column.\n"
+                f"- Target column: {literal_target}\n"
+                "- Use only predictor/factor columns in `feature_cols`."
+            )
+        if expected_features and used:
+            used_set = {value.strip().lower() for value in used}
+            missing = [header for header in expected_features if header.strip().lower() not in used_set]
+            raw_text_features = [
+                value for value in used
+                if value.strip().lower() in {"cabin", "embarked"}
+            ]
+            if missing or raw_text_features:
+                details: list[str] = []
+                if missing:
+                    details.append(f"- Missing feature(s): {', '.join(missing[:8])}")
+                if raw_text_features:
+                    details.append("- Do not use raw text `Cabin` or `Embarked` when engineered columns are present.")
+                return (
+                    "PREFLIGHT_FEATURE_CORRELATION: feature coverage does not match the runtime plan.\n"
+                    + "\n".join(details)
+                    + "\n- Use the existing engineered columns from the workbook, such as `HasCabin`, `Embarked_C`, `Embarked_Q`, and `Embarked_S`."
+                )
+
+        if re.search(r"\[\s*['\"]hascabin['\"]\s*\]\s*=", lower) and re.search(r"\[\s*['\"]cabin['\"]\s*\].*\.(notnull|notna)\s*\(", lower):
+            return (
+                "PREFLIGHT_FEATURE_CORRELATION: do not recompute `HasCabin` from raw `Cabin` text when the workbook already provides `HasCabin`.\n"
+                "- Empty Cabin cells may be loaded as empty strings, so `.notnull()` can produce wrong values.\n"
+                "- Use the existing `HasCabin` column directly."
+            )
+
         return None
 
     def scheduling_dependency_guard(

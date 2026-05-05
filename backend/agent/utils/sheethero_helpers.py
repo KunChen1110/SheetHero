@@ -47,13 +47,12 @@ def build_output_instruction(output_preferences: Dict[str, Any], output_path: st
     mode = output_preferences.get("mode", "text")
     if mode == "file":
         return (
-            "**OUTPUT REQUIREMENTS:**\n"
             "1. Save final results using the runtime-provided variable `output_path`.\n"
             "   - Never hard-code literal file paths.\n"
             "2. Use the UNIFIED OUTPUT WORKFLOW:\n"
-            "   - Convert DataFrame to 2D list: `[df.columns.tolist()] + df.values.tolist()`\n"
             "   - Create output sheet: `create_output_sheet(\"Output\")`\n"
-            "   - Write data: `write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")`\n"
+            "   - Write DataFrames directly: `write_dataframe_to_sheet(df, \"Output\", \"A1\")`\n"
+            "   - Do not manually convert DataFrames to header/value lists unless the data is not a DataFrame.\n"
             "   - Add summary if needed: `add_summary_row(\"Output\", row_num, {\"Total\": val, \"Average\": avg})`\n"
             "   - Highlight important rows: `highlight_rows(\"Output\", [row_nums], {\"fill_color\": \"red\"})`\n"
             "   - Save: `save_workbook_to(output_path)`\n"

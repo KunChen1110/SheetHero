@@ -284,6 +284,22 @@ def _resolve_column_name(columns: Iterable[Any], requested_name: str, *fallback_
     raise ValueError(f"Column `{requested_name}` not found in {list(columns)}")
 
 
+def _detail_data_from_df(df: pd.DataFrame) -> list[list[Any]]:
+    return [df.columns.tolist()] + df.fillna("").values.tolist()
+
+
+def _tabular_result(output_df: pd.DataFrame, metadata: Dict[str, Any] | None = None, **extra: Any) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "output_df": output_df,
+        "detail_data": _detail_data_from_df(output_df),
+        "row_count": int(len(output_df)),
+        "column_count": int(len(output_df.columns)),
+        "metadata": metadata or {},
+    }
+    result.update(extra)
+    return result
+
+
 def _coerce_binary_series(series: pd.Series) -> pd.Series:
     mapping = {
         "yes": 1.0,
@@ -1818,17 +1834,28 @@ def compute_ratio_column(
     numerator_col: str,
     denominator_col: str,
     output_col: str = "ratio",
-) -> pd.DataFrame:
+) -> Dict[str, Any]:
     """Add a ratio column: output_col = numerator_col / denominator_col.
 
     Both source columns are coerced to numeric. Division-by-zero rows become NaN.
     Does not load data, write output, or format — pure DataFrame transformation.
     """
-    df = df.copy()
-    num = pd.to_numeric(df[numerator_col], errors="coerce")
-    den = pd.to_numeric(df[denominator_col], errors="coerce").replace(0, np.nan)
-    df[output_col] = (num / den).round(4)
-    return df
+    actual_num = _resolve_column_name(df.columns, numerator_col)
+    actual_den = _resolve_column_name(df.columns, denominator_col)
+    output_df = df.copy()
+    num = pd.to_numeric(output_df[actual_num], errors="coerce")
+    den = pd.to_numeric(output_df[actual_den], errors="coerce").replace(0, np.nan)
+    output_df[output_col] = (num / den).round(4)
+    return _tabular_result(
+        output_df,
+        metadata={
+            "helper": "compute_ratio_column",
+            "numerator_col": actual_num,
+            "denominator_col": actual_den,
+            "output_col": output_col,
+            "formula": f"{actual_num} / {actual_den}",
+        },
+    )
 
 
 def compute_weighted_score(
@@ -1836,23 +1863,32 @@ def compute_weighted_score(
     score_cols: List[str],
     weights: List[float] | None = None,
     output_col: str = "score",
-) -> pd.DataFrame:
+) -> Dict[str, Any]:
     """Add a weighted composite score column.
 
     Weights are normalized to sum to 1. Missing values are treated as 0.
     Does not load data, write output, or format — pure DataFrame transformation.
     """
-    df = df.copy()
+    output_df = df.copy()
+    actual_score_cols = [_resolve_column_name(output_df.columns, col) for col in score_cols]
     if not weights:
-        weights = [1.0 / len(score_cols)] * len(score_cols)
+        weights = [1.0 / len(actual_score_cols)] * len(actual_score_cols)
     total = sum(weights) or 1.0
     norm = [w / total for w in weights]
     score = sum(
-        pd.to_numeric(df[col], errors="coerce").fillna(0.0) * w
-        for col, w in zip(score_cols, norm)
+        pd.to_numeric(output_df[col], errors="coerce").fillna(0.0) * w
+        for col, w in zip(actual_score_cols, norm)
     )
-    df[output_col] = score.round(4)
-    return df
+    output_df[output_col] = score.round(4)
+    return _tabular_result(
+        output_df,
+        metadata={
+            "helper": "compute_weighted_score",
+            "score_cols": actual_score_cols,
+            "weights": norm,
+            "output_col": output_col,
+        },
+    )
 
 
 def compute_percentage_share(
@@ -1860,20 +1896,30 @@ def compute_percentage_share(
     value_col: str,
     output_col: str = "share_pct",
     group_col: str | None = None,
-) -> pd.DataFrame:
+) -> Dict[str, Any]:
     """Add a percentage share column (value / total * 100).
 
     If group_col is given, share is computed within each group.
     Does not load data, write output, or format — pure DataFrame transformation.
     """
-    df = df.copy()
-    values = pd.to_numeric(df[value_col], errors="coerce").fillna(0.0)
-    if group_col:
-        totals = values.groupby(df[group_col]).transform("sum").replace(0, np.nan)
+    output_df = df.copy()
+    actual_value_col = _resolve_column_name(output_df.columns, value_col)
+    actual_group_col = _resolve_column_name(output_df.columns, group_col) if group_col else None
+    values = pd.to_numeric(output_df[actual_value_col], errors="coerce").fillna(0.0)
+    if actual_group_col:
+        totals = values.groupby(output_df[actual_group_col]).transform("sum").replace(0, np.nan)
     else:
         totals = values.sum() or np.nan
-    df[output_col] = (values / totals * 100).round(2)
-    return df
+    output_df[output_col] = (values / totals * 100).round(2)
+    return _tabular_result(
+        output_df,
+        metadata={
+            "helper": "compute_percentage_share",
+            "value_col": actual_value_col,
+            "group_col": actual_group_col,
+            "output_col": output_col,
+        },
+    )
 
 
 def add_rank_column(
@@ -1881,17 +1927,31 @@ def add_rank_column(
     sort_col: str,
     ascending: bool = False,
     rank_col: str = "rank",
-) -> pd.DataFrame:
+) -> Dict[str, Any]:
     """Add a 1-based integer rank column and sort the DataFrame by sort_col.
 
     Does not load data, write output, or format — pure DataFrame transformation.
     """
-    df = df.copy()
-    numeric_vals = pd.to_numeric(df[sort_col], errors="coerce")
-    df[rank_col] = numeric_vals.rank(
+    actual_sort_col = _resolve_column_name(df.columns, sort_col)
+    output_df = df.copy()
+    numeric_vals = pd.to_numeric(output_df[actual_sort_col], errors="coerce")
+    output_df[rank_col] = numeric_vals.rank(
         method="min", ascending=ascending, na_option="bottom"
     ).astype("Int64")
-    return df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
+    output_df = output_df.sort_values(actual_sort_col, ascending=ascending).reset_index(drop=True)
+    row_numbers = [idx + 2 for idx in range(len(output_df))]
+    return _tabular_result(
+        output_df,
+        metadata={
+            "helper": "add_rank_column",
+            "sort_col": actual_sort_col,
+            "ascending": ascending,
+            "rank_col": rank_col,
+            "row_number_offset": 2,
+            "row_number_contract": "Excel row numbers assume output_df is written at A1 with a header row.",
+        },
+        output_row_numbers=row_numbers,
+    )
 
 
 def summarize_numeric_column(
@@ -1900,7 +1960,7 @@ def summarize_numeric_column(
     round_digits: int = 2,
     summary_labels: Dict[str, str] | None = None,
 ) -> Dict[str, Any]:
-    """Summarize a numeric column and compute Output row numbers for max-value highlights."""
+    """Summarize a numeric column and compute explicit Output row numbers for extrema highlights."""
     def _infer_value_col() -> str:
         candidate_scores: list[tuple[int, str]] = []
         for candidate in df.columns:
@@ -1932,14 +1992,20 @@ def summarize_numeric_column(
     total_value = round(float(numeric_series.sum()), round_digits)
     average_value = round(float(numeric_series.mean()), round_digits)
     max_raw = float(numeric_series.max())
+    min_raw = float(numeric_series.min())
     max_value = round(max_raw, round_digits)
+    min_value = round(min_raw, round_digits)
     max_indices = numeric_series[numeric_series == max_raw].index.tolist()
-    output_row_numbers = [int(idx) + 2 for idx in max_indices]
+    min_indices = numeric_series[numeric_series == min_raw].index.tolist()
+    row_number_offset = 2
+    max_output_row_numbers = [int(idx) + row_number_offset for idx in max_indices]
+    min_output_row_numbers = [int(idx) + row_number_offset for idx in min_indices]
 
     labels = {
         "total": "Total",
         "average": "Average",
         "max": "Max",
+        "min": "Min",
     }
     if summary_labels:
         labels.update(summary_labels)
@@ -1950,12 +2016,35 @@ def summarize_numeric_column(
         labels["max"]: max_value,
     }
     return {
+        "output_df": df,
+        "detail_data": _detail_data_from_df(df),
         "value_col": actual_value_col,
         "total": total_value,
         "average": average_value,
+        "min_value": min_value,
         "max_value": max_value,
         "max_indices": max_indices,
-        "output_row_numbers": output_row_numbers,
+        "min_indices": min_indices,
+        "output_row_numbers": max_output_row_numbers,
+        "max_output_row_numbers": max_output_row_numbers,
+        "min_output_row_numbers": min_output_row_numbers,
+        "row_number_offset": row_number_offset,
+        "stats": {
+            "total": total_value,
+            "average": average_value,
+            "min": min_value,
+            "max": max_value,
+        },
+        "highlight_rows": {
+            "max": max_output_row_numbers,
+            "min": min_output_row_numbers,
+        },
+        "metadata": {
+            "helper": "summarize_numeric_column",
+            "value_col": actual_value_col,
+            "row_number_offset": row_number_offset,
+            "row_number_contract": "Excel row numbers assume output_df is written at A1 with a header row.",
+        },
         "summary": summary,
     }
 
@@ -2076,7 +2165,7 @@ def build_region_growth_analysis(
 def build_group_summary(
     df: pd.DataFrame,
     group_cols: Sequence[str],
-    aggregations: Dict[str, tuple[str, str]],
+    aggregations: Dict[str, tuple[str, str] | str],
     dropna_subset: Sequence[str] | None = None,
     sort_by: Sequence[str] | None = None,
     ascending: bool | Sequence[bool] = True,
@@ -2094,9 +2183,29 @@ def build_group_summary(
     if dropna_actual:
         working = working.dropna(subset=dropna_actual)
 
+    aggregate_label_prefixes = {
+        "mean": "Average",
+        "average": "Average",
+        "avg": "Average",
+        "sum": "Total",
+        "total": "Total",
+        "count": "Count of",
+        "median": "Median",
+        "min": "Minimum",
+        "minimum": "Minimum",
+        "max": "Maximum",
+        "maximum": "Maximum",
+    }
     named_aggs: Dict[str, tuple[str, str]] = {}
-    for output_name, (source_col, agg_name) in aggregations.items():
-        named_aggs[output_name] = (_resolve_column_name(df.columns, source_col), agg_name)
+    for output_name, spec in aggregations.items():
+        if isinstance(spec, str):
+            source_col = str(output_name)
+            agg_name = spec
+            prefix = aggregate_label_prefixes.get(agg_name.strip().lower(), agg_name.title())
+            output_name = f"{prefix} {source_col}"
+        else:
+            source_col, agg_name = spec
+        named_aggs[str(output_name)] = (_resolve_column_name(df.columns, source_col), agg_name)
 
     grouped = (
         working.groupby(actual_group_cols, dropna=False)
@@ -2118,6 +2227,11 @@ def build_group_summary(
         "detail_data": detail_data,
         "row_count": int(len(grouped)),
         "column_count": int(len(grouped.columns)),
+        "metadata": {
+            "group_cols": actual_group_cols,
+            "aggregations": named_aggs,
+            "sort_by": sort_by or [],
+        },
     }
 
 
@@ -4133,10 +4247,23 @@ def compute_feature_correlations(
     """Compute pairwise Pearson correlations between a target and feature columns."""
     if not feature_cols:
         raise ValueError("feature_cols must not be empty.")
+    resolved_target = _resolve_column_name(df.columns, target_col)
+    filtered_feature_cols: list[str] = []
+    seen_features: set[str] = set()
+    for feature_col in feature_cols:
+        resolved_feature = _resolve_column_name(df.columns, feature_col)
+        if resolved_feature == resolved_target:
+            continue
+        if resolved_feature in seen_features:
+            continue
+        seen_features.add(resolved_feature)
+        filtered_feature_cols.append(resolved_feature)
+    if not filtered_feature_cols:
+        raise ValueError("feature_cols must include at least one non-target feature column.")
     working, actual_target_col, actual_feature_cols = _prepare_numeric_feature_frame(
         df,
-        feature_cols,
-        target_col=target_col,
+        filtered_feature_cols,
+        target_col=resolved_target,
     )
     assert actual_target_col is not None
 
@@ -4188,17 +4315,22 @@ def build_correlation_matrix_table(
         target_col=None,
     )
     matrix_df = working[actual_numeric_cols].dropna(how="all").corr().round(round_digits)
-    detail_data = [[""] + actual_numeric_cols]
+    output_df = matrix_df.reset_index().rename(columns={"index": "Variable"})
+    detail_data = [["Variable"] + actual_numeric_cols]
     for column in actual_numeric_cols:
         row_values = matrix_df.loc[column].tolist() if column in matrix_df.index else [np.nan] * len(actual_numeric_cols)
         detail_data.append([column] + row_values)
     return {
         "matrix_df": matrix_df,
-        "output_df": matrix_df,
+        "output_df": output_df,
         "detail_data": detail_data,
-        "row_count": int(len(matrix_df)),
-        "column_count": int(len(matrix_df.columns)),
+        "row_count": int(len(output_df)),
+        "column_count": int(len(output_df.columns)),
         "numeric_columns": actual_numeric_cols,
+        "metadata": {
+            "helper": "build_correlation_matrix_table",
+            "numeric_columns": actual_numeric_cols,
+        },
     }
 
 

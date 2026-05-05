@@ -141,6 +141,9 @@ class ExcelOutputWriter:
         if data is None:
             return []
 
+        if isinstance(data, dict) and "output_df" in data:
+            data = data["output_df"]
+
         if hasattr(data, "columns") and hasattr(data, "values"):
             header = [list(data.columns)] if include_header else []
             try:

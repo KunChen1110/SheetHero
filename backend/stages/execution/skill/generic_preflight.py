@@ -20,6 +20,33 @@ if TYPE_CHECKING:
 class ExecutionGenericPreflightAdvisor:
     """Own generic bounded-mode preflight checks and header grounding."""
 
+    _HELPER_RESULT_KEYS = {
+        "answer",
+        "avg_by_type_df",
+        "chart_df",
+        "column_count",
+        "detail_data",
+        "entity_count",
+        "holiday_df",
+        "highlight_rows",
+        "max_indices",
+        "max_output_row_numbers",
+        "metadata",
+        "min_indices",
+        "min_output_row_numbers",
+        "output_df",
+        "output_row_numbers",
+        "resource_count",
+        "row_count",
+        "scheduled_task_ids",
+        "sheet_names",
+        "summary",
+        "summary_rows",
+        "task_id_set",
+        "total_duration",
+        "total_duration_hours",
+    }
+
     _COLUMN_ARG_KEYWORDS = {
         "on",
         "left_on",
@@ -582,6 +609,8 @@ class ExecutionGenericPreflightAdvisor:
 
         suggestions: list[tuple[str, str]] = []
         for literal in sorted(candidate_literals):
+            if literal in self._HELPER_RESULT_KEYS:
+                continue
             normalized_literal = infer.normalize_header_name_for_grounding(literal)
             if not normalized_literal or normalized_literal in observed_keys:
                 continue

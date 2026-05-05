@@ -235,7 +235,7 @@ class ExecutionErrorFeedbackBuilder:
                 "MINIMAL FIX REQUIRED: iterating a DataFrame yields column labels, not row dicts.\n"
                 "- Wrong: `for i, row in enumerate(df)` then `row['col']`\n"
                 "- If you wrote the same filtered frame that you summarized, reuse:\n"
-                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "  `row_numbers = summary_result['highlight_rows']['max']`\n"
                 "- Otherwise compute row numbers from a boolean mask:\n"
                 "  `idx_list = df[df['Daily Spending (£)'] == max_value].index.tolist()`\n"
                 "  `row_numbers = [i + 2 for i in idx_list]`\n"
@@ -383,11 +383,12 @@ class ExecutionErrorFeedbackBuilder:
                 "MINIMAL FIX REQUIRED: `summarize_numeric_column(...)` does not return a `max` key.\n"
                 "- Use `summary_result['total']`, `summary_result['average']`, and `summary_result['max_value']` for scalar values.\n"
                 "- Use `summary_result['summary']` for the total/average text that goes into `add_summary_row(...)`.\n"
-                "- Use `summary_result['output_row_numbers']` to highlight the highest-spending rows when you wrote the same `summary_df`.\n"
+                "- Use `summary_result['highlight_rows']['max']` to highlight the highest-spending rows when you wrote the same `summary_df`.\n"
+                "- Use `summary_result['highlight_rows']['min']` when the question asks for the lowest/minimum rows.\n"
                 "- Safe repair shape:\n"
                 "  `summary_result = summarize_numeric_column(summary_df, value_col='...')`\n"
                 "  `add_summary_row('Output', summary_row, summary_result['summary'])`\n"
-                "  `row_numbers = summary_result['output_row_numbers']`\n"
+                "  `row_numbers = summary_result['highlight_rows']['max']`\n"
                 "  `highlight_rows('Output', row_numbers, {'fill_color': 'red'})`"
             )
 
@@ -538,8 +539,7 @@ class ExecutionErrorFeedbackBuilder:
                     "MINIMAL FIX REQUIRED: do not use raw worksheet object `sheet` for manual cell writes.\n"
                     "- Replace sheet.cell loops with helper flow only:\n"
                     "  create_output_sheet(\"Output\")\n"
-                    "  data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                    "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")"
+                    "  write_dataframe_to_sheet(df, \"Output\", \"A1\")"
                 )
             return (
                 "MINIMAL FIX REQUIRED: undefined variable/function.\n"
@@ -564,14 +564,14 @@ class ExecutionErrorFeedbackBuilder:
                 "MINIMAL FIX REQUIRED: create_output_workbook() is not available in this runtime.\n"
                 "- Use existing helpers only:\n"
                 "  create_output_sheet(\"Output\")\n"
-                "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
+                "  write_dataframe_to_sheet(df_or_rows, \"Output\", \"A1\")\n"
                 "  saved_file = save_workbook_to(output_path)"
             )
 
         if "write_dataframe_to_sheet() got an unexpected keyword argument" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: wrong write_dataframe_to_sheet signature.\n"
-                "- Correct call: write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")\n"
+                "- Correct call: write_dataframe_to_sheet(df_or_rows, \"Output\", \"A1\")\n"
                 "- Do not use pandas-style kwargs like startrow/startcol."
             )
 
@@ -591,22 +591,21 @@ class ExecutionErrorFeedbackBuilder:
                 "- Add this before any write/add_summary_row call:\n"
                 "  create_output_sheet(\"Output\")\n"
                 "- Then write table with:\n"
-                "  data_2d = [df.columns.tolist()] + df.values.tolist()\n"
-                "  write_dataframe_to_sheet(data_2d, \"Output\", \"A1\")"
+                "  write_dataframe_to_sheet(df_or_rows, \"Output\", \"A1\")"
             )
 
         if "Cannot convert" in execution_result and "to Excel" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: write_dataframe_to_sheet got nested row structure.\n"
-                "- Do NOT wrap data_2d with an extra list.\n"
-                "- Wrong: data_2d = [[df.columns.tolist()] + df.values.tolist()]\n"
-                "- Correct: data_2d = [df.columns.tolist()] + df.values.tolist()"
+                "- Do NOT wrap a DataFrame or 2D row list in an extra list.\n"
+                "- Correct for DataFrames: write_dataframe_to_sheet(df, \"Output\", \"A1\")\n"
+                "- Correct for raw rows: write_dataframe_to_sheet(rows_2d, \"Output\", \"A1\")"
             )
 
         if "expected string or bytes-like object, got 'list'" in execution_result:
             return (
                 "MINIMAL FIX REQUIRED: wrong parameter type passed to helper.\n"
-                "- write_dataframe_to_sheet expects: (data_2d, sheet_name, start_cell)\n"
+                "- write_dataframe_to_sheet expects: (df_or_rows, sheet_name, start_cell)\n"
                 "- Ensure sheet_name is a string like \"Output\", not worksheet/list object."
             )
 

@@ -38,7 +38,7 @@ HIGHLIGHT_STRATEGY = """\
 
 Using row numbers from a summary helper (preferred):
   summary_result = summarize_numeric_column(df, value_col="...")
-  row_numbers = summary_result["output_row_numbers"]   # already 1-based, header-offset included
+  row_numbers = summary_result["highlight_rows"]["max"]  # or ["min"]; already 1-based, header-offset included
   highlight_rows("Output", row_numbers, {"fill_color": "red"})
 
 Computing row numbers manually:
@@ -51,7 +51,7 @@ Rules:
   - Always call write_dataframe_to_sheet before highlight_rows.
   - highlight_rows expects a plain list of 1-based integers.
   - Do not reassign the name `highlight_rows` to a variable in your code.
-  - Prefer summary_result["output_row_numbers"] over manual enumeration when available.
+  - Prefer summary_result["highlight_rows"]["max"] or ["min"] over manual enumeration when available.
   - The DataFrame passed to write_dataframe_to_sheet and to summarize_numeric_column
     must have a reset (0-based) index, or row numbers will be wrong.\
 """
@@ -66,12 +66,12 @@ Numeric column summary (total / average / max on a verified table):
   result = summarize_numeric_column(df, value_col="...")
   total_value = result["total"]
   average_value = result["average"]
-  -> use result["summary"] for add_summary_row(); result["output_row_numbers"] for highlight_rows()
+  -> use result["summary"] for add_summary_row(); result["highlight_rows"]["max"] or ["min"] for highlight_rows()
 
 Grouped summary:
   tables = load_all_tables()
   df = tables[0]["df"]
-  result = build_group_summary(df, group_cols=["..."], aggregations={"col": "sum", ...})
+  result = build_group_summary(df, group_cols=["..."], aggregations={"value_col": "sum"})
   -> write result["detail_data"]
 
 Period-block table with messy headers:
@@ -96,7 +96,7 @@ Rules:
   - Pick one verified table shape, then compose the calculation from shared helpers / pandas.
   - Parse dates with pd.to_datetime(..., errors="coerce"). Never hard-code year values.
   - Prefer period extraction helpers for messy multi-row headers instead of rebuilding schema by guesswork.
-  - Optional finishing step: add_rank_column(df, sort_col="value_col") to append a rank column.\
+  - Optional finishing step: rank_result = add_rank_column(df, sort_col="value_col"); use rank_result["output_df"].\
 """
 
 STATISTICAL_STRATEGY = """\
@@ -183,16 +183,18 @@ Weighted composite score:
   df = concat_tables_with_same_headers(tables)["output_df"]  # multi-file
   # or: df = tables[0]["df"]  # single file
   print(df.columns.tolist())  # verify score column names
-  df = compute_weighted_score(df,
+  score_result = compute_weighted_score(df,
       score_cols=["col_a", "col_b", "col_c"],  # infer from actual headers
       weights=[0.5, 0.3, 0.2],                 # equal weights if unspecified
       output_col="score")
-  df = add_rank_column(df, sort_col="score")
+  rank_result = add_rank_column(score_result["output_df"], sort_col="score")
+  df = rank_result["output_df"]
   -> write df[["name_col", "rank", "score", ...]] to Output
 
 Single-criterion top-N:
   output_df = df.nlargest(N, "sort_col")
-  output_df = add_rank_column(output_df, sort_col="sort_col")
+  rank_result = add_rank_column(output_df, sort_col="sort_col")
+  output_df = rank_result["output_df"]
   -> write output_df to Output
 
 Rules:
@@ -208,10 +210,11 @@ Efficiency ratio per row:
   tables = load_all_tables()
   df = tables[0]["df"]
   print(df.columns.tolist())  # verify numerator/denominator column names
-  df = compute_ratio_column(df,
+  ratio_result = compute_ratio_column(df,
       numerator_col="Operating Cash Flow",   # use real header
       denominator_col="Net Income",
       output_col="OCF/NI Ratio")
+  df = ratio_result["output_df"]
   -> write df to Output
 
 Year-over-year percentage change:
@@ -232,14 +235,16 @@ Share of overall total:
   tables = load_all_tables()
   df = tables[0]["df"]
   print(df.columns.tolist())
-  df = compute_percentage_share(df, value_col="sales", output_col="share_pct")
+  share_result = compute_percentage_share(df, value_col="sales", output_col="share_pct")
+  df = share_result["output_df"]
   -> write df to Output
 
 Share within group:
-  df = compute_percentage_share(df,
+  share_result = compute_percentage_share(df,
       value_col="sales",
       output_col="share_pct",
       group_col="region")        # each row shows % within its group
+  df = share_result["output_df"]
   -> write df to Output
 
 Market-share plus total-shipment composition:

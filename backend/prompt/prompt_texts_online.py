@@ -221,8 +221,9 @@ _DIAGNOSE_ROUTER_PROMPT = textwrap.dedent("""\
 You are a router that decides whether to run a data-diagnose stage.
 
 Decision rules:
-- If the user only asks to analyze, discover, or search, and does NOT require generating a new Excel file or modifying data, answer NO.
-- If the user needs data cleaning, fixing formats, handling missing/duplicates, or expects changes to data or a new Excel output, answer YES.
+- If the user says the inputs are clean tables/files, answer NO unless they explicitly ask to clean, fix, repair, normalize, or resolve data issues.
+- If the user only asks to analyze, transform, join, aggregate, or create a new Excel output from clean/relevant inputs, answer NO.
+- If the user needs data cleaning, fixing formats, handling missing/duplicates, or ambiguity resolution before execution, answer YES.
 - If unsure, answer NO.
 
 Return ONLY one token: YES or NO.
@@ -402,6 +403,12 @@ Begin code below:
 """)
 
 _EXECUTION_HELPER_SECTIONS_PART1 = textwrap.dedent("""\
+HELPER-FIRST EXECUTION POLICY:
+- If a selected runtime helper exists for a detected skill step, you MUST call it.
+- Do not replace selected helpers with equivalent pandas logic.
+- Pandas is glue code only: select/filter rows before helper calls, inspect columns, or lightly format helper outputs.
+- Use custom pandas algorithms only when no selected helper covers that operation, or after a helper raises/clearly cannot cover the requested task.
+
 CORE API (use only these for spreadsheet I/O):
 - `list_all_workbooks()` → [file_paths]
 - `get_workbook(file_path)` → wb; `wb.sheetnames` → list of all sheet names

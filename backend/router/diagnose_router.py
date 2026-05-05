@@ -98,6 +98,15 @@ class DiagnoseRouter:
     @classmethod
     def _question_invites_diagnose(cls, user_question: str) -> bool:
         q = (user_question or "").lower()
+        clean_input_markers = (
+            r"\bclean\s+tables?\b",
+            r"\bclean\s+files?\b",
+            r"\bclean\s+csvs?\b",
+            r"\bclean\s+workbooks?\b",
+            r"\bclean\s+spreadsheets?\b",
+        )
+        if any(re.search(pattern, q) for pattern in clean_input_markers):
+            return False
         investigation_markers = (
             "clean",
             "fix",
@@ -479,6 +488,18 @@ class DiagnoseRouter:
             "screening",
         )
         return any(marker in q for marker in markers)
+
+    @classmethod
+    def _question_uses_statistical_missing_policy(cls, user_question: str) -> bool:
+        q = (user_question or "").lower()
+        statistical_markers = (
+            "correlation",
+            "pearson",
+            "regression",
+            "coefficient",
+            "covariance",
+        )
+        return any(marker in q for marker in statistical_markers)
 
     @classmethod
     def _is_unique_key_like_header(cls, column_name: str) -> bool:
@@ -1924,7 +1945,7 @@ class DiagnoseRouter:
                 if len(issues) >= 4:
                     return issues[:4]
 
-        detectors = (
+        detectors = [
             (cls._detect_missing_value_issues, True),
             (cls._detect_semantic_anomaly_issues, True),
             (cls._detect_unit_or_time_format_issues, True),
@@ -1933,7 +1954,13 @@ class DiagnoseRouter:
             (cls._detect_internal_blank_row_issues, True),
             (cls._detect_duplicate_header_issues, False),
             (cls._detect_conflicting_key_mapping_issues, False),
-        )
+        ]
+        if cls._question_uses_statistical_missing_policy(user_question):
+            detectors = [
+                detector_entry
+                for detector_entry in detectors
+                if getattr(detector_entry[0], "__name__", "") != "_detect_missing_value_issues"
+            ]
         for sheet_key, df in coerced.items():
             if sheet_key in row_alignment_sheets or sheet_key in low_confidence_sheets:
                 continue

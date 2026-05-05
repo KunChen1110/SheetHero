@@ -1,38 +1,28 @@
 import pandas as pd
-from scipy.stats import pearsonr
 
 # Load Titanic dataset
-df = pd.read_csv("tc06_input01".csv)
+df = pd.read_csv("tc06_input01.csv")
 
-# Check missing values
-if df.isnull().values.any():
-    print("Feedback: I found missing values — how would you like me to handle them? Can I treat them as NULL?")
+# Use explicit numeric/binary features for Pearson correlation.
+df["Sex"] = df["Sex"].map({"male": 0, "female": 1})
+features = [
+    "Sex",
+    "Age",
+    "Fare",
+    "Pclass",
+    "SibSp",
+    "Parch",
+    "HasCabin",
+    "Embarked_C",
+    "Embarked_Q",
+    "Embarked_S",
+]
 
-# Encode categorical variables
-df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
-df['Embarked'] = df['Embarked'].map({'S': 0, 'C': 1, 'Q': 2})
-df['Cabin'] = df['Cabin'].notnull().astype(int)  # 1 if cabin info exists, else 0
-
-# Columns to correlate with 'Survived'
-factors = ['Sex', 'Age', 'Fare', 'Cabin', 'Embarked']
-
-# Compute Pearson correlation
 results = {}
-for col in factors:
-    valid = df[['Survived', col]].dropna()
-    if valid[col].nunique() > 1:  # to avoid constant variable errors
-        corr, _ = pearsonr(valid['Survived'], valid[col])
-        results[col] = corr
-    else:
-        results[col] = None
+for col in features:
+    valid = df[["Survived", col]].apply(pd.to_numeric, errors="coerce").dropna()
+    results[col] = round(valid[col].corr(valid["Survived"]), 3)
 
-# Create output DataFrame
 output_df = pd.DataFrame([results])
-
-# Save to Excel
-output_df.to_excel("output6.xlsx", index=False)
-
-print("### Answer")
+output_df.to_excel("tc06_output01.xlsx", index=False)
 print(output_df)
-print("\n### Output")
-print("Saved as titanic_correlation.xlsx")

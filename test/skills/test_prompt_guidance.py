@@ -10,6 +10,8 @@ from backend.skills import (
     detect_skill,
     select_helper,
 )
+from backend.agent.utils.sheethero_helpers import build_output_instruction
+from backend.prompt.prompt_builder import PromptBuilder
 from backend.stages.execution.skill.prompt import ExecutionSkillPromptAdvisor
 
 
@@ -52,6 +54,68 @@ def test_execution_strict_rules_do_not_force_direct_task_helper_call():
     assert "RESULT_SUMMARY" in guidance
 
 
+def test_file_output_instruction_prefers_dataframe_direct_write_without_nested_heading():
+    instruction = build_output_instruction(
+        {"mode": "file"},
+        "/tmp/output.xlsx",
+    )
+
+    assert "**OUTPUT REQUIREMENTS:**" not in instruction
+    assert "data_2d" not in instruction
+    assert "write_dataframe_to_sheet(df, \"Output\", \"A1\")" in instruction
+    assert "Do not manually convert DataFrames to header/value lists" in instruction
+
+
+def test_execution_system_prompt_has_single_output_requirements_heading():
+    instruction = build_output_instruction(
+        {"mode": "file"},
+        "/tmp/output.xlsx",
+    )
+
+    prompt = PromptBuilder(profile="online_rich").build_execution_system_prompt(instruction)
+
+    assert prompt.count("**OUTPUT REQUIREMENTS:**") == 1
+    assert "data_2d" not in prompt
+
+
+def test_online_execution_system_prompt_declares_helper_first_policy():
+    prompt = PromptBuilder(profile="online_rich").build_execution_system_prompt("")
+
+    assert "HELPER-FIRST EXECUTION POLICY" in prompt
+    assert "selected runtime helper exists" in prompt
+    assert "Pandas is glue code only" in prompt
+    assert "Do not replace selected helpers with equivalent pandas logic" in prompt
+
+
+def test_offline_execution_system_prompt_does_not_unconditionally_authorize_pandas_algorithms():
+    prompt = PromptBuilder(profile="offline_strict").build_execution_system_prompt("")
+
+    assert "HELPER-FIRST EXECUTION POLICY" in prompt
+    assert "Standard pandas operations" not in prompt
+    assert "ALLOWED and expected" not in prompt
+    assert "Pandas is glue code only" in prompt
+    assert "Shared verified key -> `pd.merge`" not in prompt
+    assert "prefer `build_grouped_assignment_join" not in prompt.lower()
+
+
+def test_offline_execution_prompt_does_not_prefer_pd_concat_for_same_schema_merge():
+    prompt = PromptBuilder(profile="offline_strict").build_execution_system_prompt("")
+
+    assert "Same schema -> `pd.concat`" not in prompt
+    assert "Same schema -> `concat_tables_with_same_headers(tables)`" in prompt
+    assert "standard pandas (`pd.merge`, `pd.concat`" not in prompt.lower()
+
+
+def test_online_execution_system_prompt_stays_helper_first_without_legacy_pandas_escape_hatches():
+    prompt = PromptBuilder(profile="online_rich").build_execution_system_prompt("")
+
+    assert "HELPER-FIRST EXECUTION POLICY" in prompt
+    assert "Standard pandas operations" not in prompt
+    assert "ALLOWED and expected" not in prompt
+    assert "shared helpers / pandas" not in prompt
+    assert "concise pandas math" not in prompt
+
+
 def test_execution_prompt_uses_primary_skill_only_without_secondary_guidance():
     advisor = ExecutionSkillPromptAdvisor(_RuntimeStub())
 
@@ -79,6 +143,32 @@ def test_merge_prompt_guidance_prefers_helper_pipeline_for_same_schema_summary_t
     assert "concat_tables_with_same_headers" in prompt
     assert "summarize_numeric_column" in prompt
     assert "do not hand-build `data_2d`" in prompt.lower()
+    assert "prefer `concat_tables_with_same_headers" not in prompt
+
+
+def test_multi_skill_prompt_contains_mandatory_first_attempt_contract():
+    advisor = ExecutionSkillPromptAdvisor(_RuntimeStub())
+    question = (
+        "Here are two tables showing my weekly grocery spending for two consecutive weeks. "
+        "First merge the two tables into a single table, then calculate the average daily spending "
+        "and the total spending across both weeks. Also highlight in red the day on which I spend the most."
+    )
+
+    prompt = advisor.augment_initial_prompt("Base prompt", question)
+
+    assert "FIRST ATTEMPT PLAN CONTRACT (MANDATORY)" in prompt
+    assert "do not substitute equivalent hand-written logic" in prompt
+    assert "load_tables -> load_concat -> compute_summary -> mark_rows -> write_save" in prompt
+    assert "`concat_tables_with_same_headers(...)`" in prompt
+    assert "`summarize_numeric_column(...)`" in prompt
+    assert "`highlight_rows(...)`" in prompt
+    assert "summary_result['highlight_rows']['max']" in prompt
+    assert "summary_result['output_row_numbers']" not in prompt
+    assert "summary_result['max_indices']" not in prompt
+    assert "HELPER-FIRST POLICY FOR THIS PLAN" in prompt
+    assert "Do not replace selected helpers with equivalent pandas logic" in prompt
+    assert "Do not compute final summary/highlight rows with sum(), mean(), max(), idxmax(), argmax(), or DataFrame.index" in prompt
+    assert "Do not stack selected same-schema tables with pd.concat" in prompt
 
 
 def test_schedule_guidance_allows_header_grounded_assignment_helper_path():
@@ -204,6 +294,7 @@ def test_target_feature_correlation_guidance_prefers_one_row_feature_output():
     assert "['Sex', 'Age', 'Fare', 'Cabin', 'Embarked']" not in loop_breaker
     assert "target_col=Survived" in guidance
     assert "feature_cols=Sex, Age, Fare, Cabin, Embarked" in guidance
+    assert "load_all_tables(range_ref='A1:Z200000', require_primary_key=False, stop_at_note_row=False)" in loop_breaker
     assert "target_col=target_col" in loop_breaker
     assert "feature_cols=feature_cols" in loop_breaker
 

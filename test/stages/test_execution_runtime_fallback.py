@@ -701,7 +701,7 @@ def test_offline_runtime_escalates_after_repeated_same_preflight(monkeypatch):
                     "write_dataframe_to_sheet(summary_df, 'Output', 'A1')",
                     "summary_row = len(summary_df) + 2",
                     "add_summary_row('Output', summary_row, summary_result['summary'])",
-                    "row_numbers = summary_result['output_row_numbers']",
+                    "row_numbers = summary_result['highlight_rows']['max']",
                     "highlight_rows('Output', row_numbers, {'fill_color': 'red'})",
                     "saved_file = save_workbook_to(output_path)",
                     "print('SAVED_FILE:', saved_file)",
@@ -730,7 +730,7 @@ def test_offline_runtime_escalates_after_repeated_same_preflight(monkeypatch):
     )
     repeated_issue = (
         "PREFLIGHT_SCHEMA_MERGE_SUMMARY: same-schema merge + summary + highlight tasks should use the shared concat/summary helpers.\n"
-        "- Use `summary_result['summary']` for totals/averages and `summary_result['output_row_numbers']` for highlighting."
+        "- Use `summary_result['summary']` for totals/averages and `summary_result['highlight_rows']['max']` for highlighting."
     )
     runtime.generic_preflight = SimpleNamespace(
         offline_preflight_check=lambda code_action, _question: (
@@ -751,4 +751,4 @@ def test_offline_runtime_escalates_after_repeated_same_preflight(monkeypatch):
     assert calls["count"] == 3
     assert "REPEATED_PREFLIGHT_LOOP_BREAKER" in calls["last_user"][2]
     assert "summary_result['summary']" in calls["last_user"][2]
-    assert "summary_result['output_row_numbers']" in calls["last_user"][2]
+    assert "summary_result['highlight_rows']['max']" in calls["last_user"][2]
