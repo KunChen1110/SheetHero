@@ -1,0 +1,11 @@
+ProductID,ProductCode,ProductName,Category,Price_USD
+P001,A-101,Widget Alpha,Electronics,29.99
+P002,a101,Widget Beta,Electronics,32.50
+P003,A 101,Widget Gamma,Electronics,27.75
+P004,B-202,Gadget Pro,Tools,45.00
+P005,B202,Gadget Lite,Tools,38.99
+P006,c-303,Tool Basic,Hardware,15.50
+P007,C-303,Tool Standard,Hardware,19.75
+P008,D-404,Module X,Software,89.99
+P009,d-404,Module Y,Software,79.99
+P010,D404,Module Z,Software,69.99

@@ -1,0 +1,7 @@
+{
+  "issue_type": "semantic_anomaly",
+  "table": "table3.csv",
+  "location": "row=8,column=Avg_Temp_C",
+  "description": "Monthly average temperature for London in July is 224.0°C, which is physically impossible (London July average: 18–23°C; water boils at 100°C). The correct value is 22.4°C — a decimal point was dropped during data entry.",
+  "business_context": "National meteorological archive. An erroneous monthly average would corrupt long-term climate trend models and trigger false heat-alert thresholds."
+}

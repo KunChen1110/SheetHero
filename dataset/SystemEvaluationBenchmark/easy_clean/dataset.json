@@ -1,0 +1,252 @@
+[
+    {
+        "task_id": "Easy Clean Test 1",
+        "title": "Paid Orders Filter",
+        "scenario": "Retail / order tracking",
+        "category": "filter rows where Status equals Paid",
+        "spreadsheets": [
+            "Case01/tc01_input01.csv"
+        ],
+        "prompt": "Filter the table to keep only rows where Status is Paid. Output the result as a new spreadsheet.",
+        "answer": "Kept 4 paid orders: O1001, O1003, O1005, and O1007.",
+        "expected_output_file": [
+            "Case01/tc01_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Filter the table to keep only rows where Status is Paid. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Kept 4 paid orders: O1001, O1003, O1005, and O1007."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 2",
+        "title": "Product Sales Sort",
+        "scenario": "Office supplies / sales ranking",
+        "category": "sort rows by UnitsSold descending",
+        "spreadsheets": [
+            "Case02/tc02_input01.csv"
+        ],
+        "prompt": "Sort the table by UnitsSold from highest to lowest. Output the sorted table as a new spreadsheet.",
+        "answer": "Sorted 7 products by UnitsSold descending; Pen is first with 135 units.",
+        "expected_output_file": [
+            "Case02/tc02_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Sort the table by UnitsSold from highest to lowest. Output the sorted table as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Sorted 7 products by UnitsSold descending; Pen is first with 135 units."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 3",
+        "title": "Invoice Line Totals",
+        "scenario": "Purchasing / invoice calculation",
+        "category": "add calculated column LineTotal_USD = Quantity * UnitPrice_USD",
+        "spreadsheets": [
+            "Case03/tc03_input01.csv"
+        ],
+        "prompt": "Add a LineTotal_USD column equal to Quantity multiplied by UnitPrice_USD. Output the result as a new spreadsheet.",
+        "answer": "Added LineTotal_USD for 6 invoice items.",
+        "expected_output_file": [
+            "Case03/tc03_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Add a LineTotal_USD column equal to Quantity multiplied by UnitPrice_USD. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Added LineTotal_USD for 6 invoice items."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 4",
+        "title": "Revenue By Region",
+        "scenario": "Sales / regional summary",
+        "category": "group by Region and sum Revenue_USD",
+        "spreadsheets": [
+            "Case04/tc04_input01.csv"
+        ],
+        "prompt": "Group the table by Region and calculate the total Revenue_USD for each region. Output the summary as a new spreadsheet.",
+        "answer": "Calculated total revenue for 4 regions; North has the highest total at 2400.",
+        "expected_output_file": [
+            "Case04/tc04_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Group the table by Region and calculate the total Revenue_USD for each region. Output the summary as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Calculated total revenue for 4 regions; North has the highest total at 2400."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 5",
+        "title": "Class Average Score",
+        "scenario": "Education / score summary",
+        "category": "calculate the average of Score",
+        "spreadsheets": [
+            "Case05/tc05_input01.csv"
+        ],
+        "prompt": "Calculate the average Score for the table. Output the result as a new spreadsheet.",
+        "answer": "Average Score is 80.75.",
+        "expected_output_file": [
+            "Case05/tc05_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Calculate the average Score for the table. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Average Score is 80.75."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 6",
+        "title": "Unique Signup Rows",
+        "scenario": "Marketing / signup list cleanup",
+        "category": "remove exact duplicate rows",
+        "spreadsheets": [
+            "Case06/tc06_input01.csv"
+        ],
+        "prompt": "Remove exact duplicate rows from the table. Output the unique rows as a new spreadsheet.",
+        "answer": "Removed 2 duplicate rows and kept 5 unique signup rows.",
+        "expected_output_file": [
+            "Case06/tc06_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Remove exact duplicate rows from the table. Output the unique rows as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Removed 2 duplicate rows and kept 5 unique signup rows."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 7",
+        "title": "Ticket Count By Priority",
+        "scenario": "Customer support / ticket summary",
+        "category": "count rows by Priority",
+        "spreadsheets": [
+            "Case07/tc07_input01.csv"
+        ],
+        "prompt": "Count how many tickets there are for each Priority. Output the counts as a new spreadsheet.",
+        "answer": "Counted 3 High, 3 Medium, and 3 Low priority tickets.",
+        "expected_output_file": [
+            "Case07/tc07_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Count how many tickets there are for each Priority. Output the counts as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Counted 3 High, 3 Medium, and 3 Low priority tickets."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 8",
+        "title": "Employee Column Selection",
+        "scenario": "HR / employee table",
+        "category": "select Name and Department columns",
+        "spreadsheets": [
+            "Case08/tc08_input01.csv"
+        ],
+        "prompt": "Keep only the Name and Department columns. Output the result as a new spreadsheet.",
+        "answer": "Kept the Name and Department columns for 6 employees.",
+        "expected_output_file": [
+            "Case08/tc08_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Keep only the Name and Department columns. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Kept the Name and Department columns for 6 employees."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 9",
+        "title": "Website Day Names",
+        "scenario": "Web analytics / daily traffic",
+        "category": "add DayName derived from Date",
+        "spreadsheets": [
+            "Case09/tc09_input01.csv"
+        ],
+        "prompt": "Add a DayName column derived from the Date column. Output the result as a new spreadsheet.",
+        "answer": "Added DayName for 7 daily visitor rows.",
+        "expected_output_file": [
+            "Case09/tc09_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Add a DayName column derived from the Date column. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Added DayName for 7 daily visitor rows."
+            }
+        ]
+    },
+    {
+        "task_id": "Easy Clean Test 10",
+        "title": "Simple Payroll Calculation",
+        "scenario": "Payroll / wages",
+        "category": "add calculated column Pay_USD = HoursWorked * HourlyRate_USD",
+        "spreadsheets": [
+            "Case10/tc10_input01.csv"
+        ],
+        "prompt": "Add a Pay_USD column equal to HoursWorked multiplied by HourlyRate_USD. Output the result as a new spreadsheet.",
+        "answer": "Added Pay_USD for 6 employees.",
+        "expected_output_file": [
+            "Case10/tc10_output01.xlsx"
+        ],
+        "feedback": "",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Add a Pay_USD column equal to HoursWorked multiplied by HourlyRate_USD. Output the result as a new spreadsheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Added Pay_USD for 6 employees."
+            }
+        ]
+    }
+]

@@ -1,0 +1,7 @@
+{
+  "issue_type": "missing",
+  "table": "table2.csv",
+  "location": "row=9,column=Operating_Expenses_USD",
+  "description": "Operating_Expenses_USD is missing for BusinessUnit='Professional Services', Year=2021, Q1. Based on adjacent quarters for this unit, the expected value is approximately $3.2M–$4.8M.",
+  "business_context": "Corporate quarterly P&L reporting. Missing OPEX prevents EBITDA cross-validation and violates finance audit completeness requirements."
+}

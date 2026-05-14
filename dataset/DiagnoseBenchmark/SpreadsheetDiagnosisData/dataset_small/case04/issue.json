@@ -1,0 +1,24 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "missing",
+    "locations": [
+      "row=2,column=Closing_Price",
+      "row=4,column=Closing_Price",
+      "row=6,column=Closing_Price"
+    ],
+    "description": "Closing_Price missing for MSFT, AMZN, and TSLA on 2024-01-15. Expected: MSFT≈$378.20, AMZN≈$155.90, TSLA≈$218.40 (estimated from opening price and sector trend).",
+    "business_context": "Portfolio tracker. Missing closing prices prevent daily P&L calculation and end-of-day NAV reporting."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "inconsistency",
+    "locations": [
+      "row=1,column=Sector",
+      "row=3,column=Sector",
+      "row=5,column=Sector"
+    ],
+    "description": "Sector for AAPL→'technology' (all lower), GOOGL→'TECHNOLOGY' (all upper), META→'technology' (all lower). Standard is Title Case 'Technology'. Sector-level aggregation will split the same group into 3 buckets.",
+    "business_context": "Portfolio sector allocation dashboard. Inconsistent sector labels corrupt sector weight calculations and benchmark comparisons."
+  }
+]

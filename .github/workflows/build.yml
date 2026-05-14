@@ -1,0 +1,59 @@
+name: Build SheetHero
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install frontend deps
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Install backend deps
+        run: pip install pyinstaller
+
+      - name: Build backend (Windows/Linux/macOS)
+        shell: bash
+        run: |
+          cd backend
+          pyinstaller --onefile --noconsole --name sheet-hero-backend main.py
+          mkdir -p ../frontend/python-dist
+          cp dist/sheet-hero-backend* ../frontend/python-dist/
+
+      - name: Build Electron app
+        working-directory: ./frontend
+        run: npm run build:electron
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheet-hero-${{ matrix.os }}
+          path: |
+            frontend/dist/**
+            frontend/release/**

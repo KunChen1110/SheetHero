@@ -1,0 +1,22 @@
+Country,Continent,Solar_2005_GWh,Solar_2010_GWh,Solar_2015_GWh,Solar_2020_GWh
+China,Asia,1200,31000,175000,780000
+India,Asia,800,5400,28000,130000
+Japan,Asia,1500,18000,52000,85000
+South Korea,Asia,200,2400,9800,22000
+Indonesia,Asia,50,200,1200,8500
+Germany,Europe,1200,26000,45000,60000
+France,Europe,200,3800,10200,18000
+Spain,Europe,400,5200,18500,42000
+Italy,Europe,100,4200,14800,32000
+United Kingdom,Europe,100,2500,8200,14800
+United States,Americas,2500,22000,120000,550000
+Brazil,Americas,50,800,8500,42000
+Canada,Americas,150,2200,6800,18000
+Mexico,Americas,100,1200,5200,14000
+Chile,Americas,20,400,3800,12500
+South Africa,Africa,200,1800,5200,22000
+Egypt,Africa,30,500,3200,12000
+Morocco,Africa,20,400,4800,14000
+Nigeria,Africa,10,100,800,3500
+Australia,Oceania,200,3200,14000,42000
+New Zealand,Oceania,180,1200,3800,10000

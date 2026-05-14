@@ -34,21 +34,21 @@
 ## 11/11/2025
 ### --- Added ---
 - Added 12 test cases for evaluating LLM performance on spreadsheet
-- Documented test results in [DatasetV1.md](/dataset/DatasetV1.md)
+- Documented test results in the dataset notes.
 
 ## 12/11/2025
 ### --- Added ---
 - Added **Titanic correlation analysis script (Test 6)**
   - Calculates Pearson correlation between survival and key factors (Sex, Age, Fare, Cabin, Embarked).
-  - Saved results to [output6.xlsx](/dataset/Task6/output6.xlsx).
+  - Saved results to the dataset task output file.
 
 - Added **Cycle detection script (Test 10)**
   - Detects cycles in 5 directed graph datasets using DFS.
-  - Saved results to [output10.xlsx](/dataset/Task10/output10.xlsx)
+  - Saved results to the dataset task output file.
 
 - Added **Ice-cream sales regression script (Test 7)**
   - Performs multiple linear regression to analyze effects of temperature, price, tourists, and rain on ice cream sales.
-  - Saved results to [output7.xlsx](/dataset/Task7/output7.xlsx)
+  - Saved results to the dataset task output file.
 
 - Added 5 new user cases to the dataset (Tests 16–20) (See [dataset](/dataset))
 
@@ -112,3 +112,470 @@
   - Removed verbose comments from `core/__init__.py`
   - Removed `build_output_preferences` and `output_mode` exports from `core/__init__.py` (internal use only)
 
+## 6/2/2026
+### --- Added ---
+- Added local LLM integration layer
+  - Implemented interface to call local LLM backends
+  - Extended runtime pipeline to support local inference execution
+
+## 12/2/2026
+### --- Added ---
+- Introduced dedicated prompt modules for online and offline modes
+  - `prompt_texts_online.py` now contains all default/online prompt templates.
+  - `prompt_texts_offline.py` defines stricter offline prompts with verification-heavy guardrails.
+- Added offline-specific execution guardrails and merge playbook
+  - Enforced 6-step offline execution checklist (inventory, schema resolution, type checks, coverage proof, and output writing).
+  - Added explicit column alias resolution, missing-value policy, and date coverage checks.
+  - Added an offline merge/concat playbook to reduce hallucinations around multi-file joins.
+
+### --- Changed ---
+- Updated execution response formats for both online and offline modes
+  - Online execution is now code-only and must always write an Output sheet and save the workbook via `save_workbook_to(output_path)`, returning the saved file path.
+  - Offline execution is now strictly code-only as well, disallowing free-form natural language "Final Answer" responses.
+- Refactored `prompt_data.py` to import shared building blocks from `prompt_texts_online.py` and offline-only pieces from `prompt_texts_offline.py`.
+
+## 21/2/2026
+### --- Added ---
+- Added bounded error routing for offline execution in `stages/execution/runtime.py`
+  - Detects common failure patterns and sends targeted minimal-fix feedback (e.g., wrong `inspector_multi` signature, undefined names, invalid helper imports).
+  - Added consecutive-forbidden handling with a hard-reset code template to break repeated forbidden loops.
+- Added explicit bounded forbidden rules in `stages/execution/executor.py`
+  - Blocks `common_functions` imports and invalid `inspector_multi` call styles (keyword `range_ref`, missing required range argument).
+
+### --- Changed ---
+- Reworked offline bounded strategy from strict sentinel/format gating to bounded-lite guardrails
+  - Kept function-level safety checks and runtime feedback loops.
+  - Removed brittle sentinel-driven blocking that caused format oscillation.
+- Simplified and refocused `prompt_texts_offline.py`
+  - Kept concise high-value rules and helper signatures.
+  - Added concrete correct-call examples for `inspector_multi`.
+- Updated `prompt/prompt_builder.py` so offline mode uses offline-specific execution helper sections only (without online heavy sections).
+- Updated parser behavior in `stages/execution/parser.py`
+  - Prioritizes Python code-block extraction before `Final Answer` text detection.
+- Updated output instruction text in `agent/core/SheetHero.py`
+  - Aligns offline output behavior with `SAVED_FILE`/saved-path execution flow.
+
+### --- Fixed ---
+- Fixed runtime success/error accounting in `stages/execution/runtime.py`
+  - Execution results containing traceback are now handled as failures and fed back into bounded repair flow instead of being treated as successful turns.
+- Fixed repeated local-model dead loops caused by over-strict path blocking
+  - Relaxed hard-blocking on absolute path literals to avoid immediate re-block when local models copy context paths.
+- Added environment override for bounded mode in `agent/core/SheetHero.py`
+  - `SHEETHERO_BOUNDED_MODE=0/1` can force disable/enable bounded behavior for quick A/B debugging.
+
+## 22/2/2026
+### --- Added ---
+- Added strict prompt profile routing for execution environments
+  - Introduced profile-based prompt packs (`offline_strict`, `online_rich`) and centralized selection in prompt builder.
+  - Local/custom endpoint runs now route to `offline_strict`; hosted OpenAI runs keep `online_rich`.
+- Added offline `Output Contract` in understanding prompt
+  - Understanding stage now emits machine-readable intent flags:
+    - `requires_detailed_table`
+    - `requires_highlight`
+    - `requires_summary_metrics`
+  - Contract is used by runtime for output-shape validation instead of keyword guessing.
+- Added stronger bounded forbidden checks in execution
+  - Blocks invalid partial-patch placeholders like `... (previous code remains unchanged)`.
+  - Added explicit guards for common drift patterns (`get_workbook(None)`, `wb.save`, `sheet.cell`, invalid `inspector_multi` kwargs).
+
+### --- Changed ---
+- Fully decoupled offline prompt texts from online prompt texts
+  - `prompt_texts_offline.py` is now self-contained and no longer composed from online blocks.
+  - Reorganized offline instructions around one stable helper-only pipeline.
+- Reworked offline output-intent enforcement
+  - Runtime now validates saved output against understanding `Output Contract`.
+  - For merge/highlight/table-transform tasks, metric-only mini outputs are rejected and forced to repair.
+- Updated output requirement wording in `SheetHero`
+  - Clarified intent-priority: merge/highlight/table tasks require detailed table + highlight + summary.
+
+### --- Fixed ---
+- Fixed false-positive validation passes in offline mode
+  - Fast-pass now respects intent contract and no longer passes metric-only outputs for merge/highlight tasks.
+- Fixed unstable table construction from wide range reads (`A1:Z200`)
+  - Offline prompt now enforces shape-safe header/row extraction to remove empty headers and blank rows before DataFrame creation.
+- Fixed repeated malformed code continuation behavior
+  - Runtime now rejects non-executable "patch-style" continuation responses and requires full executable blocks each turn.
+
+## 23/2/2026
+### --- Added --- 
+- Updated offline prompts for `understanding`, `execution`, and `validation` in `src/backend/prompt/prompt_texts_offline.py`.
+- Tightened `understanding` output constraints: plain-text only, no code blocks, no forbidden API mentions.
+- Added stricter `execution` guidance for date handling and highlight row indexing (flat 1-based integer rows).
+- Added local-model config visibility: `!llm --show`.
+- Added one-step offline switch command: `!llm --switch--offline <model_full_name>`.
+- `--switch--offline` now automatically sets:
+  - `base_url = http://localhost:11434/v1`
+  - clears configured `api_key`
+  - `deployment = <model_full_name>`
+- Kept existing dataset debug workflow unchanged (`!dataset --index N`, `run`).
+
+
+## 23/2/2026
+### --- Changeed --- 
+- Refactored the execution prompt, execution module in `src/backend/prompt` and `src/backend/stages/execution`.
+
+## 4/3/2026
+### ---Changed---
+- Refactored execution runtime into modular components for maintainability and clearer control flow.
+- Added dedicated forbidden policy module with signature-based memory to reduce repeated violations.
+- Added error feedback module for repeated-failure loop breaking and targeted minimal-fix guidance.
+- Added workbook grounding module to enforce runtime-visible files/schemas and reduce hallucinated references.
+- Added output contract checker to validate task-intent completion and block false-success saves.
+- Kept offline bounded behavior while reducing runtime complexity and improving debuggability.
+
+
+## 10/3/2026
+### --- Added ---
+- Added deterministic final response stage in `src/backend/stages/final_response/stage.py`
+  - System now returns a short user-facing answer in addition to the original final result.
+  - Scalar tasks can now answer directly with the computed value.
+  - Spreadsheet-generation tasks now return a short content-aware summary instead of only a saved file path.
+- Added frontend-facing config schema helpers in `src/backend/config`
+  - Centralized editable UI fields, defaults, and deployment choices in `ConfigFactory`.
+  - Reduced duplicated frontend hardcoded configuration values.
+- Added clearer package exports and package-level documentation
+  - Expanded `__init__.py` files across backend packages to clarify stable entrypoints vs internal implementation files.
+
+### --- Changed ---
+- Major execution-stage refactor in `src/backend/stages/execution`
+  - Reorganized execution internals into subpackages:
+    - `core/` for executor, parser, LLM client, history, and summary
+    - `analysis/` for task-intent detection, workbook grounding, and helper-source analysis
+    - `guards/` for forbidden policy, repair feedback, loop breakers, and output-contract checks
+  - Kept `runtime.py` and `stage.py` as the stable outer execution entrypoints.
+  - Reduced `runtime.py` size by moving large pure-function sections into dedicated files.
+- Updated frontend/backend integration path
+  - Frontend now uses `SheetHeroService` as the stable backend entrypoint instead of bypassing the full backend pipeline.
+  - Frontend config pages now read defaults and editable fields from backend config schema.
+- Reworked final output behavior for both online and offline modes
+  - Final short answers now prefer deterministic generation instead of always making one more LLM call.
+  - Reduced end-of-run delay after successful execution and validation.
+
+### --- Removed ---
+- Removed unused legacy output formatting code
+  - Deleted deprecated `OutputFormatter` in `src/backend/agent/io/formatter.py`.
+- Removed stale execution helper definitions from the main execution runtime after modular extraction
+  - Old intent-detector and loop-breaker blocks are no longer kept inline in `runtime.py`.
+
+
+## 15/3/2026
+### --- Added ---
+- Added shared sheet-table extraction helper in `src/backend/environment/spreadsheet/tools/cross_workbook.py`
+  - Introduced `extract_sheet_table(...)` so diagnose and execution can use the same header detection, column trimming, note-row stopping, and text normalization logic.
+  - Added row-to-Excel mapping metadata (`excel_rows`, `header_excel_row`) for more accurate QA previews.
+  - Added overflow-row metadata for malformed CSV detection.
+
+### --- Changed ---
+- Improved diagnose and QA behavior in `src/backend/router/diagnose_router.py`
+  - Diagnose now reuses shared table extraction instead of rebuilding DataFrames from raw workbook first rows.
+  - QA previews now preserve original column order and use real Excel row numbers.
+  - For first-row issues, previews now include a comparison row automatically.
+  - Missing dependency questions are now more concrete, e.g. asking whether a blank `Depends on` means a root task.
+  - Added stronger relevance scoring for dependency-related columns in scheduling tasks.
+  - Reworked CSV row-shift detection to identify rows whose raw values overflow the visible header structure.
+
+- Improved QA answer handling in `src/backend/stages/qa/stage.py`
+  - Reply matching now prioritizes the exact user-facing clarification question instead of the internal abstract description.
+  - Interpretation-style answers such as “this is the root task” are now preserved as explicit policies instead of being silently dropped.
+
+- Updated session/execution context flow
+  - Added QA interpretation policy storage to `SheetHeroSession`.
+  - `SheetHero` now forwards interpretation policies into execution context before code generation.
+
+- Updated execution preflight coverage in `src/backend/stages/execution/runtime.py`
+  - Added helper-first allowlisting for `build_ecommerce_merge_report(...)` so ecommerce merge tasks are not incorrectly blocked by generic linear I/O preflight checks.
+
+- Updated final logging output in `src/backend/agent/utils/sheethero_helpers.py`
+  - Final logger summaries now include both `Final Answer` and `Short Answer`.
+
+### --- Fixed ---
+- Fixed repeated QA mismatch loops for valid direct answers
+  - Responses like “this is the root task” are now accepted correctly for dependency clarification.
+- Fixed incorrect preview labeling
+  - `comparison row` and `issue row` are now shown correctly in QA previews.
+- Fixed diagnose/execution schema drift
+  - Diagnose no longer uses a separate raw-workbook interpretation path that could disagree with execution-time table extraction.
+- Fixed vague CSV clarification issues in merge-like tasks
+  - `Task02`-style malformed CSV rows are now surfaced as row-alignment problems instead of unrelated abstract conflicts.
+
+## 23/3/2026
+### --- Added ---
+- Added a centralized family registry in `src/backend/task_families.py`
+  - Introduced abstract spreadsheet capability families instead of relying on scattered task-specific branching.
+  - Centralized family-level policy for:
+    - helper selection
+    - diagnose skip behavior
+    - output mode
+    - output contract expectations
+    - execution strict rules
+    - loop breakers
+    - final-response labels
+
+- Added deterministic execution families for high-frequency spreadsheet workflows
+  - Added or formalized deterministic family paths for:
+    - `schema_aligned_merge_summary`
+    - `reference_guided_completion`
+    - `grouped_aggregation_ranking`
+    - `temporal_aggregation_ranking`
+    - `relational_join_enrichment`
+    - `composite_key_relational_join`
+    - `dependency_constrained_schedule`
+    - `relational_assignment_schedule`
+    - `capacity_constrained_allocation`
+    - `tabular_regression_analysis`
+    - `pairwise_correlation_matrix`
+    - `temporal_growth_visual_report`
+    - text-only scan/report families
+    - dashboard / ranking / summary helper families
+
+- Added generalized helper workflows for new abstract families
+  - `build_time_series_aggregation_report(...)`
+  - `build_grouped_aggregation_ranking_report(...)`
+  - `build_relational_join_enrichment_report(...)`
+  - `build_multi_key_relational_join_report(...)`
+  - `build_capacity_constrained_allocation_report(...)`
+
+- Added synthetic skill regression coverage
+  - Added `test/utils/run_skill_synthetic_regression.py` to validate abstract family routing and deterministic runtime behavior without depending only on dataset tasks.
+  - Added CLI support for one-command execution via `!SkillSyntheticTest`.
+
+### --- Changed ---
+- Reworked the backend from task-oriented patches to family-oriented architecture
+  - Understanding, diagnose, execution, validation, and final response now share the same family abstraction.
+  - The system now reasons in terms of spreadsheet capability families rather than individual benchmark task IDs.
+
+- Strengthened deterministic execution and reduced LLM dependence
+  - For covered families, execution now prefers deterministic helper-first fast paths before invoking model-generated code.
+  - Reduced runtime latency and improved reliability for covered spreadsheet skills.
+
+- Strengthened family-aware validation
+  - Added skill-specific deterministic workbook inspectors for:
+    - grouped aggregation
+    - temporal aggregation
+    - relational join
+    - allocation
+    - assignment schedule
+    - dependency schedule
+    - regression
+    - correlation
+    - comparative multi-sheet summaries
+    - temporal growth visual reports
+
+- Improved detector generalization
+  - Expanded natural-language family detection for:
+    - grouped analysis
+    - temporal analysis
+    - regression and correlation
+    - assignment/scheduling
+    - capacity-constrained allocation
+    - multi-key joins
+  - Detection is now less dependent on testcase wording and better aligned with generic spreadsheet task phrasing.
+
+### --- Fixed ---
+- Fixed validation mismatches for deterministic allocation outputs
+  - Allocation outputs are no longer incorrectly rejected for missing a generic summary-metrics block when a skill-specific summary row is already valid.
+
+- Fixed large-task architectural drift
+  - Moved additional execution/validation family routing logic into centralized registry mappings to reduce duplicated branching and future regression risk.
+
+- Fixed synthetic regression coverage gaps
+  - Added end-to-end synthetic validation for newly introduced abstract families, including multi-key joins, temporal growth reporting, and capacity-constrained allocation.
+
+## 26/3/2026
+### --- Changed ---
+- Upgraded the recommended local LLM path to `qwen3:8b`
+  - Added `qwen3:8b` to backend frontend-editable deployment choices in `src/backend/config/frontend_schema.py`.
+  - Updated CLI offline switch prompt text in `src/backend/main.py` so the default local-model example now points to `qwen3:8b`.
+
+### --- Added ---
+- Added `v4.1` version documentation in `docs/VersionHistory.md`
+  - Documented the local-model upgrade as a validated runtime iteration after the skill-based architecture introduced in `v4.0`.
+  - Recorded benchmark- and CLI-based regression validation as part of the version narrative.
+
+### --- Fixed ---
+- Extended natural-language detector coverage for `reference_guided_completion`
+  - Prompts such as “Fill any missing data ... using information from file ...” now correctly route into the deterministic completion family instead of falling back to free-form model handling.
+
+## 27/3/2026
+### --- Added ---
+- Added explicit backend output-mode metadata for frontend integration
+  - Final responses now expose:
+    - `result_kind`
+    - `has_output_file`
+    - `file_created`
+    - `output_path`
+    - `output_dir`
+    - `truncated`
+    - `preview_rows`
+    - `total_rows`
+  - This allows the frontend to distinguish file outputs from text-only outputs without parsing message strings heuristically.
+
+- Added frontend-editable text/file output mode support in backend config
+  - `output_mode` is now an explicit frontend schema field with `file` and `text` choices.
+  - Added CLI support for output-mode switching:
+    - `!output --show`
+    - `!output file`
+    - `!output text`
+
+### --- Changed ---
+- Implemented real text-only output behavior for covered deterministic families
+  - `file` mode remains the default.
+  - `text` mode now returns text previews or scalar answers directly.
+  - Large structured outputs are truncated into preview form instead of forcing full spreadsheet text dumps.
+  - Covered deterministic text-mode paths no longer save workbooks to disk before rendering the response.
+
+- Reorganized execution-stage internals into clearer submodules
+  - Grouped skill-specific execution logic under `src/backend/stages/execution/skill/`.
+  - Split large runtime responsibilities into:
+    - skill fast paths
+    - skill preflight
+    - skill prompt augmentation
+    - generic preflight
+    - question-to-helper argument inference
+  - Reduced `src/backend/stages/execution/runtime.py` to orchestration-focused responsibilities.
+
+- Reorganized validation-stage internals into clearer submodules
+  - Added `src/backend/stages/validation/core/` for validation LLM/history/parser logic.
+  - Added `src/backend/stages/validation/checks/` for deterministic validation and rule-based checks.
+  - Added `src/backend/stages/validation/inspectors/` for workbook, text-preview, and execution-signal inspection.
+  - Reduced `src/backend/stages/validation/runtime.py` to orchestration-focused responsibilities.
+
+### --- Removed ---
+- Removed obsolete validation facade and transitional wrappers after the new validation structure was introduced.
+- Removed several leftover execution helper-policy layers that were no longer needed once family modules were grouped explicitly.
+
+### --- Fixed ---
+- Fixed text-mode backend semantics
+  - `text` mode no longer reports file output for covered deterministic paths.
+  - Verified that representative CLI text-mode tasks do not leave generated workbooks behind.
+
+- Fixed validation import/runtime issues caused by the new module split
+  - Updated moved validation core modules to use the correct import paths after relocation into `validation/core/`.
+
+## 2/4/2026
+### --- Changed ---
+- Unified LLM retry logic across all pipeline stages
+  - Introduced shared `call_llm()` helper in `src/backend/stages/base/llm_utils.py` with exponential-backoff retry for rate limits and transient errors.
+  - Removed duplicated retry implementations from `UnderstandingStage` and `InteractStage`.
+  - Updated `DiagnoseStage`, `QualityAssuranceStage`, `DataCleaningStage`, `FinalResponseStage`, and `DiagnoseRouter` to use the shared helper.
+- All eight pipeline stages now inherit from the `Stage` base class
+  - Added `Stage` inheritance to `DiagnoseStage`, `DataCleaningStage`, `QualityAssuranceStage`, and `FinalResponseStage`.
+
+### --- Removed ---
+- Removed legacy direct execution path
+  - Deleted `AgentRunner` (`src/backend/agent/core/runner.py`) and `RunReportBuilder` (`src/backend/agent/io/report.py`).
+  - Removed `SheetHero.run()` and the corresponding import; `SheetHero.step()` via `SheetHeroService` is now the sole execution path.
+  - Deleted unused `calculate_token_cost_line()` utility (`src/backend/agent/utils/token_cost.py`).
+- Rewrote `test/core/run_test.py` to use `SheetHeroService` instead of the deleted `SheetHero.run()`.
+
+### --- Fixed ---
+- Updated `docs/SoftwareManualPlan.md` to reflect the unified architecture: single execution path, consistent stage inheritance, and `call_llm()` shared utility.
+
+## 11/04/2026
+### --- Added ---
+- Added runtime execution plan inference for skill prompts and repair guidance.
+- Added structured QA issue grouping and cleaning policy plans for repeated missing-value decisions.
+
+### --- Changed ---
+- Statistical correlation guidance now uses runtime-inferred target and feature columns instead of testcase-shaped prompt recipes.
+- Cleaning now consumes structured policy plans before any LLM-generated cleaning code.
+
+
+## 12/04/2026
+### --- Added ---
+- Added `skills/` package: `SkillSpec`, `HelperSpec`, keyword-based detectors, skill registry, strategy docs, and helper metadata (grounding requirements, expected result keys, bounded error signatures, preflight guard names).
+- Added `RuntimeExecutionPlan` — schema-grounded execution plan inferred from observed workbook headers and detected skill; injected into LLM prompts to prevent hallucinated column references.
+- Added `WorkflowStep` and `compose_skill_plan()` for deterministic step ordering (load → merge → aggregate → sort/rank → highlight → output).
+- Added `ExecutionSkillPreflightAdvisor`, `ExecutionGenericPreflightAdvisor` under `stages/execution/skill/` (migrated and extended from `execution/family/`).
+- Added `stages/execution/skill/__init__.py` and `ExecutionQuestionInferenceAdvisor.infer_runtime_plan()` for schema-grounded column inference.
+- Added structured cleaning policy plans: QA decisions now produce deterministic actions and LLM-driven policy rules consumed by `DataCleaningStage`.
+- Added comprehensive test suites: `test_detector_precision.py`, `test_skill_composition.py`, `test_execution_preflight.py`, `test_execution_runtime_fallback.py`, `test_execution_prompt_compaction.py`, `test_error_feedback.py`, `test_validation_deterministic.py`, `test_validation_rule_checks.py`, `test_validation_runtime.py`, `test_final_response_stage.py`, `test_execution_error_capture.py`, `test_workflows.py`, `test_diagnose_router.py`, `test_runner_config.py`.
+- Added `run_skill_synthetic_regression.py` replacing the family-based regression runner.
+
+### --- Changed ---
+- Migrated all execution advisor logic from `stages/execution/family/` to `stages/execution/skill/`; `ExecutionSkillPromptAdvisor` now composes prompts dynamically from skill metadata instead of hardcoded family fragments.
+- Simplified `prompt_texts_offline.py` and `prompt_texts_online.py` by removing hardcoded family-specific prompt fragments; skill guidance is now injected dynamically via `build_skill_hint()` / `build_compact_skill_workflow()`.
+- `UnderstandingStage` now detects skill + helper and injects skill workflow hint before calling the LLM.
+- `ExecutionRuntime` turn loop now runs the full advisor pipeline: prompt augmentation → forbidden check → generic preflight → skill preflight → sandbox → output contract → error feedback.
+- `DiagnoseRouter` simplified to evidence-based + optional LLM confirmation; removed hardcoded task-type branches.
+- `QualityAssuranceStage` now finalises decisions as structured policy plans instead of free-form notes.
+- Updated `docs/VersionHistory.md` with v5.0 entry.
+- Updated `docs/FineTuningTaskCoverage.md` and `docs/ProjectPositioning.md` to reflect skill-based architecture.
+
+### --- Removed ---
+- Deleted `src/backend/task_skills.py` (legacy family registry, ~457 lines).
+- Deleted `stages/execution/family/` module entirely: `fast_path.py` (~524 lines), `preflight.py` (~608 lines), `generic_preflight.py` (~244 lines), `question_inference.py` (~422 lines), `prompt.py`, `__init__.py`.
+- Deleted `test/utils/run_family_synthetic_regression.py` (~1146 lines).
+
+## 18/04/2026
+### --- Fixed ---
+- Fixed broken import paths after `src/backend/` → `backend/` restructure
+  - Updated `PROJECT_ROOT` (`parents[2]` → `parents[1]`) in `backend/main.py` and `backend/diagnose_benchmark.py`.
+  - Updated all `from src.backend.*` imports to `from backend.*` across 30 test files.
+  - Updated `mock.patch()` and `importlib.import_module()` string targets in test files.
+
+### --- Removed ---
+- Removed obsolete `!SkillSyntheticTest` CLI command and `test/utils/run_skill_synthetic_regression.py` (depended on deleted deterministic fast-path).
+
+## 26/04/2026
+### --- Added ---
+- Wired LLM judger into the backend CLI via `!judge dev|evaluation ... --index N`
+  - Calls `evaluate_task` directly from the REPL without spawning a separate process.
+  - Final evaluation benchmark runs (`!benchmark evaluation ...`) now always invoke the judger automatically.
+- Added `evaluate_text_only()` to `Judger/evaluator.py` for tasks whose expected result is plain text rather than a workbook.
+- Added helper timeout fallback codegen in `ExecutionRuntime` — stalled skill runs now recover with a sensible default script instead of timing out silently.
+- Added `sample_rows` to `FinalResponseStage` output summary (up to 3 representative data rows for richer CLI feedback).
+
+### --- Changed ---
+- Fixed Judger imports to work both as a standalone script and as a backend package; hardcoded API key replaced with env/config lookup (`OPENAI_API_KEY` → `Config.api_key`).
+- `DiagnoseRouter` now short-circuits to `should_diagnose=False` before any LLM call when the user question contains no investigation-type keywords, reducing unnecessary inference.
+- Extended skill detectors and workflow helpers with new report builders: weighted share, region share, multi-source comparison, utilisation summary, and two-dimension mean/count.
+- Reorganised benchmark dataset layout: original Task01–Task27 suite moved into `dataset/DevelopmentBenchmark/`; evaluation suite renamed to `dataset/SystemEvaluationBenchmark/`.
+
+### --- Removed ---
+- Removed `backend/task_families.py` (superseded by the skills registry introduced in 12/04/2026).
+- Removed stale top-level dataset docs (`DatasetV1.md`, `JM_ReadMe.md`, `JM_Dataset_Task21-Task26.md`).
+
+## 05/05/2026
+### --- Added ---
+- Added v5.1 release documentation
+  - Updated `docs/ProjectPositioning.md` with final project scope, target task types, supported data issues, non-goals, and demo strategy.
+  - Updated `docs/SoftwareDesign.md` from early wireframe notes into the current layered system design overview.
+  - Updated `docs/VersionHistory.md` with the v5.1 demo-facing reliability polish milestone.
+  - Updated `README.md` further-documentation links to prioritise project positioning, software design, version history, and changelog.
+- Added stronger helper contracts for spreadsheet workflow helpers
+  - Helper functions now return clearer `output_df`, `detail_data`, metadata, and row-highlighting information.
+  - Numeric summary helpers now expose explicit `highlight_rows`, min/max row references, and row-number offsets so LLM code does not guess output row positions.
+- Added feature-correlation guardrails for full-dataset statistical analysis
+  - Correlation execution now rejects default `load_all_tables()` when a full-table calculation is required.
+  - Feature-correlation preflight blocks target columns inside `feature_cols` and prevents recomputing engineered columns such as `HasCabin` from sparse raw text columns.
+  - `compute_feature_correlations(...)` now ignores the target if it is accidentally included in the feature list.
+- Added frontend stop-thinking control
+  - The send button switches to a stop control while a request is active.
+  - Stopping aborts the active frontend request, clears the waiting state, and discards the current session from the UI.
+- Added demo-stable benchmark updates
+  - Updated Task 2 data to better demonstrate relational assignment without ambiguous fuzzy-name or room-code cases.
+  - Updated Task 4 with an intentional negative duration anomaly so the QA stage can demonstrate semantic anomaly correction before scheduling.
+  - Updated Task 6 with engineered numeric/binary Titanic features (`HasCabin`, `Embarked_C`, `Embarked_Q`, `Embarked_S`) for robust full-dataset Pearson correlation analysis.
+- Added regression tests for helper contracts, QA parsing, diagnose routing, skill prompts, feature-correlation preflight, and Task 4 semantic-anomaly routing.
+
+### --- Changed ---
+- Strengthened online and offline prompt guidance around helper-first execution
+  - Prompts now emphasise selected helpers as the primary implementation path and reserve pandas code for glue/fallback logic.
+  - Runtime plan summaries and loop breakers now provide more concrete, schema-grounded examples for statistical, scheduling, and aggregation tasks.
+- Improved DiagnoseRouter behavior
+  - Clean input wording such as "clean tables" no longer triggers unnecessary diagnose flows.
+  - Statistical tasks now handle missing values in execution through pairwise deletion rather than routing routine missing values through QA.
+  - Scheduling tasks can surface implausible numeric durations as semantic anomalies when they are material to the result.
+- Improved QA reply handling
+  - Frontend choice labels such as "Keep as-is" and "Skip affected row" are parsed directly before falling back to LLM interpretation.
+- Updated DevelopmentBenchmark demo tasks and expected outputs for Task 2, Task 4, and Task 6.
+
+### --- Fixed ---
+- Fixed Task 1 / large clean-table routing issues where "clean tables" wording could incorrectly trigger Diagnose.
+- Fixed cross-schema join helper selection so generic relational join helpers are not forced onto downstream analytical reporting tasks.
+- Fixed Task 4 scheduling failure after QA correction by preserving dependency-schedule helper guidance and semantic anomaly cleanup flow.
+- Fixed Task 6 full-dataset correlation accuracy
+  - Prevented silent first-200-row calculations.
+  - Ensured engineered categorical features are used directly.
+  - Ensured the saved output matches the full 891-row Titanic correlation result.

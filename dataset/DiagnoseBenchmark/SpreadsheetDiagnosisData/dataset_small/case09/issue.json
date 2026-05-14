@@ -1,0 +1,22 @@
+[
+  {
+    "table": "table1.csv",
+    "issue_type": "semantic_anomaly",
+    "locations": [
+      "row=3,column=Yield_tonnes_per_ha",
+      "row=5,column=Yield_tonnes_per_ha"
+    ],
+    "description": "Yield_tonnes_per_ha is negative: F03 (Valley Farm Wheat) = -3.4 t/ha, F05 (Lakewood Farm Maize) = -6.1 t/ha. Yield cannot be negative; correct values are likely 3.4 and 6.1 (minus sign entered in error).",
+    "business_context": "Agricultural performance monitoring. Negative yield values corrupt farm subsidy calculations and regional food security forecasts."
+  },
+  {
+    "table": "table2.csv",
+    "issue_type": "inconsistency",
+    "locations": [
+      "row=1,column=Crop",
+      "row=4,column=Crop"
+    ],
+    "description": "Crop name uses inconsistent capitalisation: row 1 has 'wheat' (all lower), row 4 has 'WHEAT' (all upper). Standard is Title Case 'Wheat'. JOIN operations between table1 and table2 on the Crop column will fail to match these rows.",
+    "business_context": "Crop yield reference lookup. Inconsistent crop names break the join between field data and crop benchmarks, preventing yield gap analysis."
+  }
+]
