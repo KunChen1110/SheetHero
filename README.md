@@ -199,6 +199,13 @@ Useful CLI commands include:
 
 Leave `Base URL` blank and provide an OpenAI API key.
 
+Do not commit API keys to the repository. For local runs, either enter the key in
+the app configuration panel or provide it through an environment variable:
+
+```bash
+export SHEETHERO_API_KEY="your-api-key"
+```
+
 ### Offline Mode
 
 Start a local model server first, then set `Base URL` to the local OpenAI-compatible endpoint:
