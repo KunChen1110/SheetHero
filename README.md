@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <em>Personal GitHub archive of the Team 29 COMP2002 group project.</em>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React"/>
   <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
@@ -126,8 +130,8 @@ Typical QA examples include:
 ### Clone the Repository
 
 ```bash
-git clone --branch main https://projects.cs.nott.ac.uk/comp2002/2025-2026/team29_project.git
-cd team29_project
+git clone https://github.com/KunChen1110/SheetHero.git
+cd SheetHero
 ```
 
 ### Linux / macOS
@@ -225,7 +229,7 @@ http://localhost:11434/v1
 ## Project Structure
 
 ```text
-team29_project/
+SheetHero/
 ├── backend/              # Agent pipeline, service layer, prompts, skills, sandbox, validation
 ├── frontend/             # Electron + React user interface
 ├── dataset/              # Development, diagnosis, and system evaluation benchmark cases
