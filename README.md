@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Skill-Guided Natural Language Interface for Spreadsheet Automation</strong><br/>
-  <em>COMP2002 Group Project — Team 29</em>
+  <em>UoN COMP2002 Group Project — Team 29</em>
 </p>
 
 <p align="center">

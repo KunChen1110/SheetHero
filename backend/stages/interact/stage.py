@@ -71,8 +71,9 @@ class InteractStage(Stage):
         prompt_text = (
             "You are checking whether the uploaded spreadsheet files match the user's requested task.\n"
             "Do not solve the task. Do not infer missing files.\n\n"
-            "Return YES if the workbook summary contains the entities, columns, or tables needed to attempt the task.\n"
-            "Return NO if the request appears to refer to a different domain, different files, or required tables/columns are absent.\n"
+            "Return YES if at least some of the uploaded files contain entities, columns, or data relevant to the task.\n"
+            "Not all files need to be directly relevant — a multi-file task may include supporting or reference tables.\n"
+            "Return NO only if ALL uploaded files are clearly from a completely unrelated domain (e.g. the task asks about sales but files contain medical records).\n"
             "Cleaning problems inside otherwise relevant files should still be YES.\n\n"
             "Output only YES or NO.\n\n"
             f"User request:\n{user_message}\n\n"
