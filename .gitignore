@@ -12,6 +12,9 @@ venv/
 .venv/
 env/
 .env/
+.env
+.env.*
+!.env.example
 
 # Node.js logs
 node_modules/
