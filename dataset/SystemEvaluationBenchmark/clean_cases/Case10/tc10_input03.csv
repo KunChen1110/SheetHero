@@ -1,0 +1,6 @@
+Source,Target
+ModuleA,ModuleB
+ModuleA,ModuleC
+ModuleB,ModuleD
+ModuleC,ModuleD
+ModuleD,ModuleE

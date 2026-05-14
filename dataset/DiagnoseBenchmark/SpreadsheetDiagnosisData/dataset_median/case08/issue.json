@@ -1,0 +1,7 @@
+{
+  "issue_type": "inconsistency",
+  "table": "table2.csv",
+  "location": "row=5,column=Severity; row=18,column=Severity",
+  "description": "Severity uses inconsistent capitalisation: row 5 (PAT3005, Osteoporosis) has 'mild' (all lower) and row 18 (PAT3018, Arthritis) has 'SEVERE' (all upper), while all other rows use Title Case ('Mild','Moderate','Severe','Critical'). Triage priority filters will miss these two patients.",
+  "business_context": "Hospital EHR system. Severity label inconsistency corrupts automated triage prioritisation and clinical dashboard filtering."
+}

@@ -1,0 +1,9 @@
+Date,MeterID,Building,Meter_Reading_kWh,kWh_Consumed,Cost_USD
+2024-01-08,M01,Office Block A,15820.4,142.3,21.35
+2024-01-09,M01,Office Block A,15964.2,143.8,21.57
+2024-01-10,M01,Office Block A,16108.5,,
+2024-01-11,M01,Office Block A,16251.7,143.2,21.48
+2024-01-12,M01,Office Block A,16394.0,,
+2024-01-13,M01,Office Block A,16537.8,143.8,21.57
+2024-01-14,M01,Office Block A,16680.9,,
+2024-01-15,M01,Office Block A,16822.5,141.6,21.24

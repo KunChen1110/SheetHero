@@ -1,0 +1,335 @@
+[
+    {
+        "task_id": "Test 1",
+        "title": "Regional Product Sales Matrix",
+        "scenario": "Retail / sales performance analysis",
+        "category": "parse multi-header CSV; aggregate Q1-Q4 sales per region and product category; compute grand totals; rank regions; build Q4 leaderboard",
+        "spreadsheets": [
+            "Case01/tc01_input01.csv"
+        ],
+        "prompt": "Here is a sales matrix with two header rows: the first row labels three product categories (Electronics, Clothing, Home_Appliances) — each spanning four blank columns — and the second row gives quarterly sub-columns (Q1, Q2, Q3, Q4) under each category. There are 12 regional rows of data.\n\n1. Forward-fill the blank category headers so every quarterly column is associated with the correct category.\n2. Compute the total annual sales for each region and each product category.\n3. Identify which (region, product) combination achieved the highest Q4 sales.\n4. Rank all 12 regions by their overall grand total (all products, all quarters).\n5. Compute the category-level quarterly and annual totals across all regions.\n\nOutput the results in a new spreadsheet with three sheets: Annual_Sales (region totals), Q4_Leaders (sorted descending), and Category_Total.",
+        "answer": "Grand total ranking (top 5): Northeast 1789, Southwest 1716, Southeast 1539, Central 1500, North 1497. Category annual totals: Electronics 8739, Home_Appliances 5469, Clothing 3442. Electronics dominates at 50.3% of total sales.",
+        "expected_output_file": [
+            "Case01/tc01_output01.xlsx"
+        ],
+        "feedback": "The first two rows are headers, not data. Row 1 has category names with blank cells between them; row 2 has Q1-Q4 labels. Should I forward-fill the blank header cells to associate each quarterly column with the correct category?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "This CSV has two header rows for a sales matrix covering 12 regions and 3 product categories. Compute annual totals per region and product, rank regions by grand total, find the top Q4 combination, and add a category-level summary sheet."
+            },
+            {
+                "role": "assistant",
+                "content": "Row 1 has category names (Electronics, Clothing, Home_Appliances) followed by blank cells. Should I forward-fill those blank cells so every Q1-Q4 column is tagged to the correct category?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, forward-fill the category names across their four quarterly columns."
+            },
+            {
+                "role": "assistant",
+                "content": "Done. Grand total top 3: Northeast (1789), Southwest (1716), Southeast (1539). Electronics accounts for over half of all sales. Q4 leaderboard and category totals written to separate sheets."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 2",
+        "title": "Employee Performance Bonus Calculation",
+        "scenario": "HR / compensation analytics",
+        "category": "join employee and quarterly score tables on EmpID; compute average score; calculate bonus = BaseSalary × (AvgScore/100) × 0.15; flag high performers (avg ≥ 85); summarise by department",
+        "spreadsheets": [
+            "Case02/tc02_input01.csv",
+            "Case02/tc02_input02.csv"
+        ],
+        "prompt": "You have two tables: one lists 50 employees with their department and base salary, and the other records their performance scores for Q1–Q4.\n\n1. Join the two tables on EmpID.\n2. Compute each employee's average quarterly score.\n3. Calculate bonus = BaseSalary × (AvgScore / 100) × 0.15.\n4. Flag employees as 'High Performer' if their average score is ≥ 85.\n5. Sort the output by bonus descending.\n6. Add a department summary sheet showing headcount, average score, total bonus payout, and number of high performers per department.\n7. Add a Top 10 Earners sheet.\n\nOutput all results in a new Excel file.",
+        "answer": "Top 3 bonus earners: Grace Park (Engineering, $13,673.25), Eva Brown (Engineering, $13,584.75), Alice Chen (Engineering, $13,447.88). Finance and HR departments have the highest average scores (~81). Engineering leads in total bonus payout. 7 employees qualify as High Performers across 4 departments.",
+        "expected_output_file": [
+            "Case02/tc02_output01.xlsx"
+        ],
+        "feedback": "Should the bonus be rounded to 2 decimal places? Also, if an employee appears in the score table but not in the employee table (or vice versa), should I exclude them?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the 50-employee table with their quarterly scores, compute average score, calculate the bonus formula, flag high performers, sort by bonus, and add a department summary."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I round bonus amounts to 2 decimal places? And if an EmpID exists in one file but not the other, should I exclude that employee entirely?"
+            },
+            {
+                "role": "user",
+                "content": "Round to 2 decimal places. Exclude any EmpID that doesn't appear in both files."
+            },
+            {
+                "role": "assistant",
+                "content": "All 50 EmpIDs are present in both files. Top earner: Grace Park (Engineering) with $13,673.25 bonus. 7 high performers identified. Department summary and Top 10 Earners sheets added."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 3",
+        "title": "Monthly Climate Data Summary",
+        "scenario": "Environmental data analysis",
+        "category": "parse multi-header CSV; forward-fill city names; compute annual averages; find hottest and coldest months; identify driest month per city",
+        "spreadsheets": [
+            "Case03/tc03_input01.csv"
+        ],
+        "prompt": "This CSV has a two-row header. Row 1 contains city names (London, Paris, Berlin, Madrid, Rome, Amsterdam, Vienna, Barcelona, Prague, Lisbon), each spanning three columns. Row 2 gives the metric names (Temp_C, Rainfall_mm, Humidity_%) repeated for each city. Rows 3 to 14 are monthly data (Jan–Dec).\n\n1. Forward-fill the city names in row 1 so each metric column is correctly associated with its city.\n2. For each city compute: annual average temperature, hottest month, coldest month, total annual rainfall, average annual humidity.\n3. Add a second sheet with each city's summer average temperature (Jun–Aug).\n4. Add a third sheet showing the driest month and its rainfall for each city.\n\nOutput results in a new Excel file.",
+        "answer": "Annual avg temperatures: Madrid 18.8°C (hottest city), Prague 9.8°C (coldest). All 10 cities have July as hottest month and January as coldest. Total annual rainfall: Rome 740mm (wettest), Madrid 359mm (driest). Amsterdam highest average humidity (75.5%). Summer avg temps: Madrid 30.7°C, Barcelona 25.3°C lead.",
+        "expected_output_file": [
+            "Case03/tc03_output01.xlsx"
+        ],
+        "feedback": "Row 1 has city names with blank cells between them (each city spans 3 metric columns). Should I forward-fill those blank cells to associate Temp_C, Rainfall_mm, Humidity_% with the correct city?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "This climate CSV has two header rows with city names spanning 3 columns each. Parse it correctly, compute annual summaries for all 10 cities, and add sheets for summer temperatures and driest months."
+            },
+            {
+                "role": "assistant",
+                "content": "Row 1 has city names separated by blank cells — should I forward-fill those to tag Temp_C, Rainfall_mm, Humidity_% columns to the correct city?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, forward-fill city names across their 3 metric columns."
+            },
+            {
+                "role": "assistant",
+                "content": "Parsed successfully. Madrid is the hottest city (18.8°C annual avg), Prague the coolest (9.8°C). Rome has the highest annual rainfall (740mm). Summer temperature and driest month sheets added."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 4",
+        "title": "Hospital Admission Records Analysis",
+        "scenario": "Healthcare operations analytics",
+        "category": "join multi-sheet XLSX (Patients + Admissions); aggregate admissions per ward; compute avg length of stay; identify most common diagnosis; find repeat patients; summarise monthly trends",
+        "spreadsheets": [
+            "Case04/tc04_input01.xlsx"
+        ],
+        "prompt": "The Excel file has two sheets: 'Patients' (60 records: PatientID, Name, Age, Gender, BloodType) and 'Admissions' (100 records: AdmissionID, PatientID, Ward, AdmitDate, DischargeDate, Diagnosis, LOS_Days).\n\n1. For each ward, calculate: number of admissions, average length of stay (LOS_Days), and most common diagnosis.\n2. Identify patients who were admitted more than once and list the wards they visited.\n3. Build a monthly admissions summary (YYYY-MM) showing admission count and average LOS.\n\nOutput results in a new Excel file with three sheets: Ward_Summary, Repeat_Patients, Monthly_Admissions.",
+        "answer": "6 wards: Pediatrics (20 admissions, avg 6.2 days), Neurology (19, 6.0), Cardiology (17, 6.9), Orthopedics (16, 5.0), General (14, 4.6), Oncology (14, 4.9). 29 patients have repeat admissions. Monthly totals span Jan–Dec 2024.",
+        "expected_output_file": [
+            "Case04/tc04_output01.xlsx"
+        ],
+        "feedback": "Some patients have multiple admissions across different wards. Should the Repeat_Patients sheet list the wards as a comma-separated string, or use one row per ward per patient?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "The Excel file has a Patients sheet and an Admissions sheet. Summarise by ward, find repeat patients, and show monthly admission trends."
+            },
+            {
+                "role": "assistant",
+                "content": "For patients with multiple admissions across different wards, should I list all visited wards in a single comma-separated cell, or use one row per patient-ward combination?"
+            },
+            {
+                "role": "user",
+                "content": "Use a single cell with wards listed comma-separated."
+            },
+            {
+                "role": "assistant",
+                "content": "Ward summary: Pediatrics leads with 20 admissions (avg 6.2 days LOS). 29 patients have repeat admissions. Monthly trends show admissions spread across all 12 months of 2024."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 5",
+        "title": "Retail Inventory and Sales Profitability",
+        "scenario": "Retail operations and profitability analysis",
+        "category": "join product and sales tables on ProductID; aggregate revenue and COGS by category over 6 months; compute gross profit and margin; flag low-stock products; summarise monthly revenue",
+        "spreadsheets": [
+            "Case05/tc05_input01.csv",
+            "Case05/tc05_input02.csv"
+        ],
+        "prompt": "You have two tables: one describes 30 products (ProductID, ProductName, Category, StockQty, UnitCost_USD, ReorderLevel) and the other records monthly sales (ProductID, Month, UnitsSold, SalePrice_USD) over 6 months (Jan–Jun).\n\n1. Join on ProductID and compute for each category: total revenue, total COGS (UnitsSold × UnitCost), gross profit, and gross margin %.\n2. Identify products where remaining stock (StockQty − total units sold) falls below the ReorderLevel and list them sorted by remaining stock ascending.\n3. Build a monthly revenue summary showing total revenue and total units sold per month.\n\nOutput results in a new Excel file with three sheets: Category_Revenue, Low_Stock_Alert, Monthly_Revenue.",
+        "answer": "Category revenue: Electronics leads with $155,928 revenue, 35.3% margin. Furniture $47,647 (34.4%). All 30 products trigger the low-stock alert after 6 months of sales. Monthly revenue peaks in the final months as base quantities deplete. Total gross profit across all categories: ~$81,251.",
+        "expected_output_file": [
+            "Case05/tc05_output01.xlsx"
+        ],
+        "feedback": "Should remaining stock be calculated as StockQty minus total units sold across all 6 months combined? And should I flag items even if remaining stock is zero (not negative)?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join the 30-product inventory table with 6 months of sales data. Compute category-level profitability, flag low-stock products, and show monthly revenue totals."
+            },
+            {
+                "role": "assistant",
+                "content": "Should remaining stock be calculated as StockQty minus total units sold across all 6 months? And should products with remaining stock exactly equal to zero also be flagged as low-stock?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, sum sales across all 6 months. Flag any product where remaining stock is strictly less than the ReorderLevel."
+            },
+            {
+                "role": "assistant",
+                "content": "All 30 products fall below their reorder level after 6 months of sales. Electronics has the highest revenue ($155,928) and gross profit. Category margins range from 34.4% to 35.9%."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 6",
+        "title": "Student Exam Results and Failure Analysis",
+        "scenario": "Education / academic performance analysis",
+        "category": "compute average score and letter grade per student; flag failed subjects (score < 60); find top student per subject; compute subject-level statistics; summarise by class",
+        "spreadsheets": [
+            "Case06/tc06_input01.csv"
+        ],
+        "prompt": "A table lists 60 students across four classes (10A, 10B, 10C, 10D) with their scores in five subjects: Math, Physics, Chemistry, English, History (all out of 100).\n\n1. For each student compute: average score, letter grade (A≥90, B≥80, C≥70, D≥60, F<60), and whether they pass (all subjects ≥ 60).\n2. Find the top-scoring student for each subject.\n3. List all students who failed at least one subject, with which subjects they failed.\n4. Compute subject-level statistics: min, max, class average, and number of students below 60.\n5. Add a class summary sheet with headcount, average score, pass rate %, and top student per class.\n\nOutput results in an Excel file with five sheets: GPA_Report, Top_Per_Subject, Fail_Analysis, Subject_Stats, Class_Summary.",
+        "answer": "24 out of 60 students failed at least one subject. Top scorers: Math — Luca Ferrari (98), Physics — Aisha Patel (99), Chemistry — Jonas Ahmad (99), English — Aisha Patel (99), History — Umar Santos (99). Subject averages range from 71.5 (Physics) to 76.3 (Chemistry). Class pass rates vary across 10A–10D.",
+        "expected_output_file": [
+            "Case06/tc06_output01.xlsx"
+        ],
+        "feedback": "Should a student who scores exactly 60 in a subject be considered passing or failing? And should the pass flag require ALL five subjects to be ≥ 60?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Analyse 60 students across 4 classes. Compute grades, find top students per subject, list failures, compute subject stats, and add a class summary."
+            },
+            {
+                "role": "assistant",
+                "content": "Should a score of exactly 60 count as passing? And should the 'Pass' flag require all five subjects to be ≥ 60, or just an average ≥ 60?"
+            },
+            {
+                "role": "user",
+                "content": "Score of 60 is passing. A student passes only if all five subjects are ≥ 60."
+            },
+            {
+                "role": "assistant",
+                "content": "24 students failed at least one subject. Aisha Patel tops both Physics and English (99). Subject_Stats, Fail_Analysis, and Class_Summary sheets added."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 7",
+        "title": "Logistics Order Assignment and Cost Analysis",
+        "scenario": "Supply chain / logistics optimisation",
+        "category": "join three-sheet XLSX (Orders, Drivers, Routes); assign cheapest capable driver per order; compute distance, estimated time, and total cost; filter high-priority orders; summarise driver utilisation",
+        "spreadsheets": [
+            "Case07/tc07_input01.xlsx"
+        ],
+        "prompt": "The Excel file has three sheets: 'Orders' (40 orders with origin, destination, weight, priority), 'Drivers' (12 drivers with truck capacity and cost per km), and 'Routes' (distance and average speed between city pairs).\n\n1. For each order, look up the route distance and speed from the Routes sheet.\n2. Assign the cheapest driver whose truck capacity ≥ order weight. If no driver is capable, mark as UNASSIGNED.\n3. Compute estimated travel time (distance ÷ speed) and total cost (distance × driver cost per km).\n4. Add a High_Priority sheet listing only High-priority orders with their assigned driver and cost.\n5. Add a Driver_Utilisation sheet showing orders assigned, total distance, and total revenue per driver.\n\nOutput results in a new Excel file with three sheets: Order_Assignments, High_Priority, Driver_Utilisation.",
+        "answer": "40 orders processed. Total assignment cost: £7,041.95. 16 high-priority orders. Cheapest capable driver assigned to each order based on truck capacity ≥ weight. Driver utilisation spread across 12 drivers. Helen Nash (smallest capacity 300kg) handles only the lightest orders.",
+        "expected_output_file": [
+            "Case07/tc07_output01.xlsx"
+        ],
+        "feedback": "If two drivers have the same cost per km and both have sufficient capacity, which should I assign? Also, should estimated time be rounded to 2 decimal places?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join Orders, Drivers, and Routes sheets. Assign the cheapest capable driver to each order and compute total cost."
+            },
+            {
+                "role": "assistant",
+                "content": "If two drivers share the same minimum cost per km and are both capable, should I assign the one with smaller capacity (to preserve large trucks for heavy orders) or arbitrarily pick the first?"
+            },
+            {
+                "role": "user",
+                "content": "Pick the first match (lowest DriverID among equally cheap capable drivers)."
+            },
+            {
+                "role": "assistant",
+                "content": "40 orders assigned. Total cost: £7,041.95. 16 high-priority orders listed in the High_Priority sheet. Driver utilisation sheet shows how cost and distance are distributed across all 12 drivers."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 8",
+        "title": "Departmental Budget vs Actual Variance",
+        "scenario": "Financial management / budget control",
+        "category": "join budget and actual tables on CostCenter; compute variance and variance %; classify overspend status; aggregate by department; list over-budget items",
+        "spreadsheets": [
+            "Case08/tc08_input01.csv",
+            "Case08/tc08_input02.csv"
+        ],
+        "prompt": "Two tables list the same 60 cost centres across 10 departments: one contains budgeted amounts and the other contains actual spending for the year.\n\n1. Join the two tables on CostCenter and compute: Variance (Actual − Budget), Variance % = (Variance / Budget) × 100, and Status ('Over (>10%)' if Variance% > 10, 'Over' if > 0, 'Under' if < 0, else 'On Budget').\n2. Sort the detail table by Variance descending.\n3. Add a department summary sheet with total budget, total actual, total variance, and variance % per department.\n4. Add a sheet listing all over-budget cost centres with their overspend amount.\n\nOutput results in a new Excel file with three sheets: Variance_Detail, Dept_Summary, Over_Budget_Items.",
+        "answer": "60 cost centres across 10 departments. 40 cost centres are over budget. Marketing has the highest variance (+$109,000, +11.6% — over 10%). Facilities is the furthest under budget (−$69,000, −6.6%). Engineering and Sales are also slightly under budget. IT is roughly on budget (−$8,000, −0.7%).",
+        "expected_output_file": [
+            "Case08/tc08_output01.xlsx"
+        ],
+        "feedback": "Should the Variance % be calculated per cost centre individually, or as total-actual / total-budget for the department as a whole?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Join budget and actual tables for 60 cost centres across 10 departments. Compute variance details, department summaries, and list over-budget items."
+            },
+            {
+                "role": "assistant",
+                "content": "Should I calculate Variance % per individual cost centre, or aggregate at the department level for the Dept_Summary sheet?"
+            },
+            {
+                "role": "user",
+                "content": "Per cost centre for the detail sheet. For the department summary, compute from the department totals."
+            },
+            {
+                "role": "assistant",
+                "content": "40 of 60 cost centres are over budget. Marketing has the largest department overspend (+11.6%, triggering 'Over >10%'). Facilities is most under budget (−6.6%). All three sheets populated."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 9",
+        "title": "Supplier Price Comparison Matrix",
+        "scenario": "Procurement / supply chain analytics",
+        "category": "parse price matrix (products × suppliers); find min and max price per product with supplier names; compute average price, price range, and savings %; rank suppliers by times cheapest; extract top 5 savings opportunities",
+        "spreadsheets": [
+            "Case09/tc09_input01.csv"
+        ],
+        "prompt": "A matrix table lists quoted prices from 8 suppliers (SupplierA–SupplierH) for 25 products. Rows are products; columns are suppliers.\n\n1. For each product find: minimum price and best supplier, maximum price and worst supplier, average price, price range (max − min), and savings vs max price as a percentage.\n2. Rank the 8 suppliers by how often they offer the cheapest price, and how often they are most expensive.\n3. Extract the top 5 products with the largest absolute savings (max − min).\n\nOutput results in a new Excel file with three sheets: Price_Analysis, Supplier_Ranking, Top5_Savings.",
+        "answer": "25 products, 8 suppliers. Top savings: Carbon Fibre Sheet A4 (£25.38 saving, 25.1%), Aluminium Sheet 1m² (£15.01, 28.3%), Neoprene Sheet 1m² (£14.07, 23.7%). Best supplier overall: SupplierG (cheapest 5 times, most expensive only once, rank score +4). SupplierC is most expensive most often (7 times).",
+        "expected_output_file": [
+            "Case09/tc09_output01.xlsx"
+        ],
+        "feedback": "If two suppliers offer the same minimum price for a product, how should I pick 'Best Supplier'? Should I list both, or use the first alphabetically?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Analyse this 25-product × 8-supplier price matrix. Find the cheapest and most expensive supplier per product, rank suppliers overall, and list the top 5 savings opportunities."
+            },
+            {
+                "role": "assistant",
+                "content": "If two suppliers offer the same minimum price for a product, should I list both as 'Best Supplier' or pick the first alphabetically?"
+            },
+            {
+                "role": "user",
+                "content": "Pick the first alphabetically if there's a tie."
+            },
+            {
+                "role": "assistant",
+                "content": "SupplierG is the most consistently cheap (5 wins). SupplierC is most expensive most often (7 times). Largest saving: Carbon Fibre Sheet A4 at £25.38 per unit. All three sheets generated."
+            }
+        ]
+    },
+    {
+        "task_id": "Test 10",
+        "title": "Football League Table and Top Scorers",
+        "scenario": "Sports data analysis",
+        "category": "join three-sheet XLSX (Teams, Matches, Players); compute W/D/L from match results; calculate points, GD, league table ranking; list top scorers; identify top 4 for European competition",
+        "spreadsheets": [
+            "Case10/tc10_input01.xlsx"
+        ],
+        "prompt": "The Excel file has three sheets: 'Teams' (12 clubs with stadium info), 'Matches' (66 round-robin match results with home/away goals), and 'Players' (72 players with goals and assists per team).\n\n1. For each team, compute wins (W), draws (D), losses (L), goals for (GF), goals against (GA), goal difference (GD), and points (W×3 + D).\n2. Rank teams by points (desc), then GD (desc), then team name (asc).\n3. List the top 15 scorers (player name, team, position, goals, assists), sorted by goals then assists.\n4. Identify the top 4 teams and mark positions 1–2 as 'Champions League' and 3–4 as 'Europa League'.\n5. Add a team goal stats sheet showing each team's top scorer.\n\nOutput results in a new Excel file with four sheets: League_Table, Top_Scorers, Top4_Teams, Team_Goal_Stats.",
+        "answer": "League leaders: FC United (26 pts, GD +17), Wanderers (21 pts, GD +9), Athletic Club (21 pts, GD +3), Rovers FC (20 pts). Top scorer: Player_56 (Phoenix FC, FW, 14 goals, 12 assists). 66 matches played across 12 teams in a full round-robin.",
+        "expected_output_file": [
+            "Case10/tc10_output01.xlsx"
+        ],
+        "feedback": "When two teams have the same points and goal difference, should I use alphabetical team name as the tiebreaker?\n\n---",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "Build a league table from 66 match results across 12 teams, list the top 15 scorers, and identify the top 4 for European competition."
+            },
+            {
+                "role": "assistant",
+                "content": "When two teams have equal points and equal goal difference, should I use alphabetical team name as the final tiebreaker?"
+            },
+            {
+                "role": "user",
+                "content": "Yes, alphabetical name as the final tiebreaker."
+            },
+            {
+                "role": "assistant",
+                "content": "FC United leads the table with 26 points (GD +17). Wanderers and Athletic Club are tied on 21 points, separated by GD. Top scorer: Player_56 (Phoenix FC) with 14 goals. Champions League places: FC United and Wanderers."
+            }
+        ]
+    }
+]
