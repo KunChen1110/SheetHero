@@ -1561,10 +1561,9 @@ def build_relational_assignment_schedule_report(
         schedule_cols=schedule_cols,
     )
 
-    detail_data = [output_df.columns.tolist()] + output_df.fillna("").values.tolist()
     return {
         "output_df": output_df,
-        "detail_data": detail_data,
+        "detail_data": output_df,
         "row_count": int(len(output_df)),
         "entity_count": int(assignment_df[entity_col].nunique()),
         "resource_count": int(output_df[resource_col].nunique()),
@@ -4280,14 +4279,13 @@ def compute_feature_correlations(
         correlation_map[feature] = corr_value
         correlation_row.append(corr_value)
 
-    detail_data = [actual_feature_cols, correlation_row]
     output_df = pd.DataFrame([correlation_row], columns=actual_feature_cols)
     return {
         "target_col": actual_target_col,
         "feature_cols": actual_feature_cols,
         "correlations": correlation_map,
         "output_df": output_df,
-        "detail_data": detail_data,
+        "detail_data": output_df,
     }
 
 
@@ -4602,9 +4600,7 @@ def build_dependency_schedule(
         raise ValueError("Dependency graph contains a cycle or unresolved task IDs.")
 
     current_minutes = _parse_start_time_minutes(start_time)
-    detail_data: List[List[Any]] = [
-        [task_id_col, task_name_col, priority_col, "Start Time", "End Time"]
-    ]
+    rows: List[List[Any]] = []
     total_duration_hours = 0.0
     for task_id in schedule_order:
         record = task_by_id[task_id]
@@ -4613,7 +4609,7 @@ def build_dependency_schedule(
         start_text = _format_hhmm(current_minutes)
         end_minutes = current_minutes + duration_minutes
         end_text = _format_hhmm(end_minutes)
-        detail_data.append(
+        rows.append(
             [
                 task_id,
                 record[task_name_actual],
@@ -4624,6 +4620,9 @@ def build_dependency_schedule(
         )
         current_minutes = end_minutes
         total_duration_hours += duration_hours
+
+    import pandas as _pd
+    detail_data = _pd.DataFrame(rows, columns=[task_id_col, task_name_col, priority_col, "Start Time", "End Time"])
 
     return {
         "task_id_set": task_id_set,
