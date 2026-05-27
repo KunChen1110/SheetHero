@@ -2,7 +2,6 @@
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from openai import OpenAI
 import openpyxl
 import pandas as pd
 import numpy as np
@@ -13,6 +12,7 @@ from ...config.settings import Config
 from ...environment import Sandbox
 from ...environment.spreadsheet.world import SpreadsheetWorld
 from ...log.progress_logger import ProgressLogger
+from ...llm import build_langchain_or_openai_client
 from ...stages.execution.stage import ExecutionStage
 from ...stages.final_response.stage import FinalResponseStage
 from ...stages.qa.stage import QualityAssuranceStage
@@ -104,18 +104,16 @@ class SheetHero:
 
         # OpenAI-compatible local servers still require a non-empty api_key field.
         # Use a harmless placeholder when caller chooses base_url-only mode.
-        client_kwargs = {
-            "api_key": api_key or "local-key",
-            "timeout": _resolve_openai_timeout(
+        self.client = build_langchain_or_openai_client(
+            api_key=api_key or "local-key",
+            base_url=base_url or None,
+            timeout=_resolve_openai_timeout(
                 self.config.timeout,
                 base_url,
                 _resolve_client_timeout_model(self.config),
             ),
-            "max_retries": max(0, int(self.config.max_retries)),
-        }
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        self.client = OpenAI(**client_kwargs)
+            max_retries=max(0, int(self.config.max_retries)),
+        )
         self.prompt_profile = self._resolve_prompt_profile()
         
         # initialize the sandbox

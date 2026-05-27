@@ -8,6 +8,7 @@ from ....skills import (
     build_execution_strict_rules, build_loop_breaker, build_skill_hint,
     build_compact_skill_workflow,
     build_fallback_strategy,
+    retrieve_skill_context,
 )
 from ....skills.prompt_builders import format_plan_log
 from ....skills import compose_skill_plan
@@ -131,6 +132,10 @@ class ExecutionSkillPromptAdvisor:
                 f"{schema_snapshot}\n"
                 "Use these real headers for all select/merge operations. Do not invent columns."
             )
+
+        retrieved_skill_context = retrieve_skill_context(user_question)
+        if retrieved_skill_context:
+            user_content += f"\n\n{retrieved_skill_context}"
 
         all_matched_skills = detect_skills(user_question)
         skill = all_matched_skills[0] if all_matched_skills else None

@@ -34,6 +34,14 @@ The current pipeline supports multi-file joins, grouped summaries, dependency sc
 
 SheetHero uses a layered architecture: the React/Electron frontend sends turns to a service layer, which drives the backend agent through a fixed spreadsheet pipeline. The execution stage combines skill detection, helper functions, prompt building, sandboxed code execution, and validation to reduce unsupported LLM behaviour.
 
+The LLM layer uses a LangChain-backed chat adapter while preserving the
+project's deterministic stage boundaries. SheetHero also includes a lightweight
+retrieval layer for semantic skill routing: workbook requests are compared
+against a capability catalog of spreadsheet skills, helpers, and strategy
+descriptions, then the retrieved context is injected into the execution prompt.
+This is a domain-specific RAG pattern for spreadsheet workflows rather than a
+generic document chatbot.
+
 <p align="center">
   <img src="assets/README/system_architecture.png" alt="SheetHero system architecture diagram" width="900"/>
   <br/><em>Figure 1 — System architecture overview</em>
@@ -49,6 +57,7 @@ SheetHero uses a layered architecture: the React/Electron frontend sends turns t
 | **Multi-file Workflows**     | Join, merge, aggregate, schedule, and analyse one or more spreadsheet files using natural language                       |
 | **Interactive QA**           | Detect data issues such as missing values or implausible numeric values and ask the user how to resolve them             |
 | **Skill + Helper Execution** | Route each request to spreadsheet skills, selected helpers, runtime plans, and preflight guardrails                      |
+| **Semantic Skill Retrieval** | Use LangChain-oriented retrieval context to match requests against skill/helper capability descriptions                  |
 | **Statistical Analysis**     | Compute regression and correlation outputs using full-table reads, pairwise missing-value handling, and encoded features |
 | **Stop Thinking**            | Interrupt an active frontend request and clear the current waiting state from the UI                                    |
 | **Execution Logging**        | Save structured Markdown traces under `artifacts/loggers/` for debugging and auditability                               |

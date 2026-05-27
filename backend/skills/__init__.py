@@ -3,13 +3,14 @@
 Skills are abstract operation categories (merge, aggregate, statistical, etc.).
 Each skill carries a strategy_doc injected into LLM prompts and owns a list of helpers.
 
-Detection:  keyword-based rule matching (no embedding).
-Helper selection: keyword sub-detectors on the user question; schema grounding
-    happens downstream in the execution stage.
+Detection: hybrid rule matching plus conservative semantic retrieval.
+Helper selection: rule sub-detectors first, semantic helper retrieval as a
+    fallback; schema grounding happens downstream in the execution stage.
 """
 
 from .models import HelperSpec, SkillSpec
 from .registry import all_skills, detect_skill, detect_skills, select_helper
+from .semantic_router import retrieve_skill_context, semantic_detect_skills
 from .runtime_plan import RuntimeExecutionPlan, parse_plan_summary, WorkflowStep, compose_skill_plan
 from .prompt_builders import (
     build_skill_hint,
@@ -52,6 +53,8 @@ __all__ = [
     "detect_skill",
     "detect_skills",
     "select_helper",
+    "retrieve_skill_context",
+    "semantic_detect_skills",
     "RuntimeExecutionPlan",
     "parse_plan_summary",
     "WorkflowStep",

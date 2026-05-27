@@ -239,6 +239,10 @@ def detect_skill(user_question: str) -> Optional[SkillSpec]:
 def detect_skills(user_question: str) -> list[SkillSpec]:
     """Return all matching skills. A question may belong to multiple skills."""
     matched = [skill for skill in all_skills() if skill.detector(user_question)]
+    if not matched:
+        from .semantic_router import semantic_detect_skills
+
+        matched = [match.skill for match in semantic_detect_skills(user_question)]
     return sorted(matched, key=lambda skill: _SKILL_PRIORITY.get(skill.name, -1), reverse=True)
 
 
@@ -331,4 +335,8 @@ def _select_helper_with_reason(skill: SkillSpec, user_question: str) -> tuple[Op
 
 def select_helper(skill: SkillSpec, user_question: str) -> Optional[HelperSpec]:
     helper, _ = _select_helper_with_reason(skill, user_question)
+    if helper is None:
+        from .semantic_router import semantic_select_helper
+
+        helper = semantic_select_helper(skill, user_question)
     return helper
