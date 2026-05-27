@@ -10,14 +10,22 @@
 </p>
 
 <p align="center">
-  <em>Personal GitHub archive of the Team 29 COMP2002 group project.</em>
+  <em>Personal GitHub archive of the Team 29 COMP2002 group project, extended with LangChain-backed retrieval and controlled agent workflows.</em>
 </p>
 
 <p align="center">
+  <a href="README.zh-CN.md">中文 README</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React"/>
   <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS"/>
+  <img src="https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square" alt="LangChain"/>
+  <img src="https://img.shields.io/badge/OpenAI_API-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI API"/>
+  <img src="https://img.shields.io/badge/RAG-Retrieval--Augmented-0F766E?style=flat-square" alt="Retrieval-Augmented Generation"/>
 </p>
 
 ---
