@@ -43,8 +43,26 @@ This is a domain-specific RAG pattern for spreadsheet workflows rather than a
 generic document chatbot.
 
 <p align="center">
-  <img src="assets/README/system_architecture.png" alt="SheetHero system architecture diagram" width="900"/>
-  <br/><em>Figure 1 — System architecture overview</em>
+  <img src="assets/README/system_architecture_langchain.png" alt="SheetHero system architecture with LangChain adapter and retrieval-augmented skill context" width="900"/>
+  <br/><em>Figure 1 — SheetHero system architecture with LangChain-backed model abstraction and retrieval-augmented skill context.</em>
+</p>
+
+### Retrieval-Augmented Skill Routing
+
+SheetHero combines deterministic rule detectors with semantic retrieval over a capability catalog of skills, helpers, strategy documents, and routing examples. Rules preserve precision for high-risk spreadsheet operations, while retrieval improves recall for ambiguous requests.
+
+<p align="center">
+  <img src="assets/README/retrieval_skill_routing.png" alt="Retrieval-augmented skill routing diagram" width="900"/>
+  <br/><em>Figure 2 — Hybrid skill routing: deterministic rule detectors preserve precision while semantic retrieval improves recall for ambiguous spreadsheet requests.</em>
+</p>
+
+### Controlled Execution and Validation
+
+The LLM proposes actions, but execution is constrained by helper-first guardrails, runtime schema grounding, sandboxed spreadsheet operations, progress logging, and validation feedback.
+
+<p align="center">
+  <img src="assets/README/controlled_execution_validation.png" alt="Controlled execution and validation loop diagram" width="900"/>
+  <br/><em>Figure 3 — Controlled execution loop: LLM-generated actions are constrained by helper-first guardrails, sandbox execution, logging, and validation.</em>
 </p>
 
 ---
@@ -72,7 +90,7 @@ generic document chatbot.
 
 <p align="center">
   <img src="assets/README/preview_file_upload.png" alt="Upload interface, file picker with configurable output directory" width="300"/>
-  <br/><em>Figure 2 — File upload and export directory configuration</em>
+  <br/><em>Figure 4 — File upload and export directory configuration</em>
 </p>
 
 ---
@@ -83,7 +101,7 @@ generic document chatbot.
 
 <p align="center">
   <img src="assets/README/preview_settings.png" alt="Configuration panel showing API key, model deployment, max turns, and base URL fields" width="300"/>
-  <br/><em>Figure 3 — Model configuration panel</em>
+  <br/><em>Figure 5 — Model configuration panel</em>
 </p>
 
 ---
@@ -94,7 +112,7 @@ generic document chatbot.
 
 <p align="center">
   <img src="assets/README/preview_main.png" alt="Prompt interface showing query input, agent execution, and output/log access" width="800"/>
-  <br/><em>Figure 4 — Prompt submission and agent execution</em>
+  <br/><em>Figure 6 — Prompt submission and agent execution</em>
 </p>
 
 ---
@@ -111,7 +129,7 @@ Typical QA examples include:
 
 <p align="center">
   <img src="assets/README/preview_qa.png" alt="Interactive QA prompt showing a detected spreadsheet data issue and structured resolution controls" width="800"/>
-  <br/><em>Figure 5 — Interactive QA for resolving detected spreadsheet data issues</em>
+  <br/><em>Figure 7 — Interactive QA for resolving detected spreadsheet data issues</em>
 </p>
 
 ---
@@ -122,7 +140,7 @@ Typical QA examples include:
 
 <p align="center">
   <img src="assets/README/preview_log.png" alt="Sample execution log showing agent reasoning steps and tool invocations" width="680"/>
-  <br/><em>Figure 6 — Auto-generated execution log</em>
+  <br/><em>Figure 8 — Auto-generated execution log</em>
 </p>
 
 ---
